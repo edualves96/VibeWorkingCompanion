@@ -1,0 +1,8 @@
+# Save files created when the scripts run outside the plugin (for example while testing).
+scripts/state.json
+scripts/state.lock
+scripts/state.*.tmp
+scripts/state.bad-*.json
+scripts/backups/
+scripts/debug
+scripts/debug.log

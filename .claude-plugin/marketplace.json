@@ -1,0 +1,14 @@
+{
+  "name": "vibeworkcompanion",
+  "description": "VibeWorkCompanion: an idle RPG hero for the Claude Code status line",
+  "owner": {
+    "name": "Eduardo Alves"
+  },
+  "plugins": [
+    {
+      "name": "vwc",
+      "source": "./",
+      "description": "An idle RPG hero in your status line that levels up while Claude works"
+    }
+  ]
+}
