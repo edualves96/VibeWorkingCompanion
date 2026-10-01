@@ -481,12 +481,13 @@ function status(now) {
   return lines.join('\n');
 }
 
-// ---------- display (cli.js: hide / show) ----------
+// ---------- display (cli.js: hide / show / stats) ----------
 
 const PARTS = { bar: 'status bar', companion: 'companion' };
+const STATS_PLACES = ['above', 'below'];
 
 function display(root) {
-  return { bar: true, companion: true, ...(root.display || {}) };
+  return { bar: true, companion: true, stats: 'above', ...(root.display || {}) };
 }
 
 function partKey(name) {
@@ -521,6 +522,27 @@ function setVisible(part, visible, now) {
     }
     if (!d.bar && !d.companion && parts.length === 1 && !visible) {
       text += `\nBoth are hidden now, so the status line is empty. ${COMMAND_PREFIX}show all brings everything back.`;
+    }
+  });
+  return saved ? text : 'The save file is busy right now. Try again in a moment.';
+}
+
+function placeKey(name) {
+  const key = String(name || '').trim().split(/\s+/)[0].toLowerCase();
+  return STATS_PLACES.includes(key) ? key : null;
+}
+
+// Puts the hero's stats row above or below the map. With no place it switches to the other one.
+function setStatsPlace(place, now) {
+  let text = '';
+  const { saved } = update(now, 3000, root => {
+    const d = display(root);
+    const to = place || (d.stats === 'below' ? 'above' : 'below');
+    text = d.stats === to ? `The stats row is already ${to} the map.` : `The stats row is now ${to} the map.`;
+    d.stats = to;
+    root.display = d;
+    if (!d.companion) {
+      text += ` The companion is hidden; ${COMMAND_PREFIX}show companion brings it back.`;
     }
   });
   return saved ? text : 'The save file is busy right now. Try again in a moment.';
@@ -845,16 +867,22 @@ function pickerRows(cols) {
 
 function render(root, now, cols) {
   const h = activeHero(root);
+  let rows;
   if (!h) {
-    return pickerRows(cols).map(row => alignRight(row, cols));
+    rows = pickerRows(cols);
+  } else {
+    const active = anyActive(root, now);
+    rows = [statsRow(root, h, now, active, cols), worldRow(h, active, cols), floorRow(h.heroX, cols)];
   }
-  const active = anyActive(root, now);
-  return [statsRow(root, h, now, active, cols), worldRow(h, active, cols), floorRow(h.heroX, cols)].map(row => alignRight(row, cols));
+  // /vwc:stats below moves the text row (stats, or the picker's title) under the map.
+  const [text, ...map] = rows;
+  const ordered = display(root).stats === 'below' ? [...map, text] : rows;
+  return ordered.map(row => alignRight(row, cols));
 }
 
 module.exports = {
   DIR, COMMAND_PREFIX, CLASSES, classKey, chooseClass, createCharacter, status,
-  display, partKey, setVisible, load,
+  display, partKey, setVisible, placeKey, setStatsPlace, load,
   onHookEvent, onStatusLine, render, displayWidth,
   newRoot, newHero, migrate, step, xpNeed, attackOf, weaponOf,
 };
