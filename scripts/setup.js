@@ -1,18 +1,18 @@
 'use strict';
 // /vwc:setup: points the Claude Code status line at the companion. Plugins can't set the
-// status line themselves, so this edits the user's settings.json once.
+// status line themselves, so this edits the user's settings.json.
 //   node setup.js <data dir>          turn the companion on (an existing status line stays on top)
 //   node setup.js <data dir> remove   put back the status line from before setup
-// Always exits 0: a non-zero exit would abort the slash command before Claude can reply.
+// hook.js also calls autoSetup() at session start, which turns the companion on by itself the
+// first time, but only for users who have no status line at all.
+// The command line always exits 0: a non-zero exit would abort the slash command.
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const [dataDir, action] = process.argv.slice(2);
 const ROOT = path.resolve(__dirname, '..');
-const CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
-const SETTINGS = path.join(CONFIG_DIR, 'settings.json');
+const AUTO_MARKER = 'auto-setup.json';
 
 // The plugin folder moves on every update, so the status line runs this small launcher from
 // the data folder instead, and it loads whichever plugin version the hooks last reported.
@@ -36,42 +36,62 @@ if (script && fs.existsSync(script)) {
 
 const slash = p => p.replace(/\\/g, '/');
 
+function settingsFile() {
+  return path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'), 'settings.json');
+}
+
 function readSettings() {
+  const file = settingsFile();
   let raw;
   try {
-    raw = fs.readFileSync(SETTINGS, 'utf8');
+    raw = fs.readFileSync(file, 'utf8');
   } catch (e) {
     if (e.code === 'ENOENT') {
       return {};
     }
-    throw new Error(`Can't read ${SETTINGS}: ${e.message}`);
+    throw new Error(`Can't read ${file}: ${e.message}`);
   }
   try {
     return JSON.parse(raw);
   } catch (e) {
-    throw new Error(`${SETTINGS} isn't valid JSON (${e.message}), so it was left untouched. Fix it and run setup again.`);
+    throw new Error(`${file} isn't valid JSON (${e.message}), so it was left untouched. Fix it and run setup again.`);
   }
 }
 
-function writeSettings(settings) {
-  if (fs.existsSync(SETTINGS)) {
+function writeSettings(dataDir, settings) {
+  const file = settingsFile();
+  if (fs.existsSync(file)) {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    fs.copyFileSync(SETTINGS, path.join(dataDir, `settings.backup-${stamp}.json`));
+    fs.copyFileSync(file, path.join(dataDir, `settings.backup-${stamp}.json`));
   }
-  fs.mkdirSync(CONFIG_DIR, { recursive: true });
-  const tmp = `${SETTINGS}.vwc.tmp`;
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.vwc.tmp`;
   fs.writeFileSync(tmp, `${JSON.stringify(settings, null, 2)}\n`);
-  fs.renameSync(tmp, SETTINGS);
+  fs.renameSync(tmp, file);
 }
 
 // A status line that already runs the companion, either from this plugin or from a manual
 // install, is never saved as the "previous" one.
-function isCompanion(statusLine) {
+function isCompanion(dataDir, statusLine) {
   const cmd = slash(String((statusLine && statusLine.command) || ''));
   return cmd.includes(slash(dataDir)) || /companion\/statusline\.js/.test(cmd);
 }
 
-function install() {
+function hasHero(dataDir) {
+  try {
+    return Boolean(JSON.parse(fs.readFileSync(path.join(dataDir, 'state.json'), 'utf8')).active);
+  } catch {
+    return false;
+  }
+}
+
+// Running setup or remove by hand means the user has decided, so the automatic first-run
+// setup must never act after that.
+function markAutoSetupDone(dataDir, result) {
+  fs.writeFileSync(path.join(dataDir, AUTO_MARKER), JSON.stringify({ at: new Date().toISOString(), result }, null, 2));
+}
+
+function install(dataDir) {
   fs.mkdirSync(dataDir, { recursive: true });
   fs.writeFileSync(path.join(dataDir, 'plugin-root.txt'), slash(ROOT));
   const launcher = path.join(dataDir, 'statusline.js');
@@ -80,25 +100,30 @@ function install() {
   const settings = readSettings();
   const current = settings.statusLine;
   const lines = [];
-  if (current && current.command && !isCompanion(current)) {
+  if (current && current.command && !isCompanion(dataDir, current)) {
     fs.writeFileSync(path.join(dataDir, 'previous-statusline.json'), JSON.stringify(current, null, 2));
     lines.push(`Your existing status line (${current.command}) was kept: it shows on top, with the companion under it.`);
   }
-  const wasOn = isCompanion(current);
+  const wasOn = isCompanion(dataDir, current);
   settings.statusLine = { type: 'command', command: `node "${slash(launcher)}"`, refreshInterval: 1 };
-  writeSettings(settings);
+  writeSettings(dataDir, settings);
+  markAutoSetupDone(dataDir, 'installed');
 
   lines.unshift(wasOn
     ? 'VibeWorkCompanion was already set up; the status line launcher has been refreshed.'
     : 'VibeWorkCompanion is on. The status line updates within a second.');
-  lines.push('Choose your hero with /vwc:chooseclass mage, warrior or archer.');
+  if (!hasHero(dataDir)) {
+    lines.push('Choose your hero with /vwc:chooseclass mage, warrior or archer.');
+  }
   lines.push(`A backup of your settings is in ${slash(dataDir)}.`);
   return lines.join('\n');
 }
 
-function remove() {
+function remove(dataDir) {
+  fs.mkdirSync(dataDir, { recursive: true });
   const settings = readSettings();
-  if (!isCompanion(settings.statusLine)) {
+  markAutoSetupDone(dataDir, 'removed');
+  if (!isCompanion(dataDir, settings.statusLine)) {
     return 'The status line isn\'t using VibeWorkCompanion, so there was nothing to undo.';
   }
   let previous = null;
@@ -110,7 +135,7 @@ function remove() {
   } else {
     delete settings.statusLine;
   }
-  writeSettings(settings);
+  writeSettings(dataDir, settings);
   return [
     previous ? `Your previous status line is back (${previous.command}).` : 'The status line setting was removed.',
     'To remove the plugin too, run: /plugin uninstall vwc@vibeworkcompanion',
@@ -118,12 +143,39 @@ function remove() {
   ].join('\n');
 }
 
-try {
-  if (!dataDir) {
-    throw new Error('Missing the data folder argument. Run this through /vwc:setup.');
+// First session after installing: users with no status line at all get the companion right
+// away. Anyone who already has a status line keeps it untouched and can opt in with
+// /vwc:setup. Runs at most once, and never after setup or remove was run by hand.
+function autoSetup(dataDir) {
+  if (!dataDir || fs.existsSync(path.join(dataDir, AUTO_MARKER))) {
+    return;
   }
-  const mode = String(action || '').trim().toLowerCase();
-  console.log(mode === 'remove' ? remove() : install());
-} catch (e) {
-  console.log(`VibeWorkCompanion setup failed: ${e.message}`);
+  fs.mkdirSync(dataDir, { recursive: true });
+  let settings;
+  try {
+    settings = readSettings();
+  } catch {
+    markAutoSetupDone(dataDir, 'skipped: settings.json could not be read');
+    return;
+  }
+  if (settings.statusLine) {
+    markAutoSetupDone(dataDir, 'skipped: a status line was already set');
+    return;
+  }
+  install(dataDir);
+}
+
+module.exports = { install, remove, autoSetup };
+
+if (require.main === module) {
+  const [dataDir, action] = process.argv.slice(2);
+  try {
+    if (!dataDir) {
+      throw new Error('Missing the data folder argument. Run this through /vwc:setup.');
+    }
+    const mode = String(action || '').trim().toLowerCase();
+    console.log(mode === 'remove' ? remove(dataDir) : install(dataDir));
+  } catch (e) {
+    console.log(`VibeWorkCompanion setup failed: ${e.message}`);
+  }
 }

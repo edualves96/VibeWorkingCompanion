@@ -40,6 +40,11 @@ process.stdin.on('end', () => {
   } catch {
     return;
   }
+  if (ev.hook_event_name === 'SessionStart') {
+    try {
+      require('./setup').autoSetup(process.env.CLAUDE_PLUGIN_DATA);
+    } catch {}
+  }
   // Only the main conversation moves the hero; subagent events would wake it while you're being asked something.
   if (!ev.session_id || ev.agent_id) {
     return;

@@ -32,13 +32,16 @@ and a recent Claude Code (built and tested with 2.1.286).
 
 2. Restart Claude Code, so the plugin's hooks start running.
 
-3. Turn the status line on (plugins can't set the status line by themselves, so this does it once):
+   - **If you don't have a status line yet,** the companion turns it on by itself at this first
+     start, and the class picker appears at the bottom right.
+   - **If you already have a status line,** nothing is changed until you ask. Run this once to
+     add the companion; your status line stays on top with the companion under it:
 
-   ```
-   /vwc:setup
-   ```
+     ```
+     /vwc:setup
+     ```
 
-4. Pick your hero:
+3. Pick your hero:
 
    ```
    /vwc:chooseclass archer
@@ -48,8 +51,8 @@ and a recent Claude Code (built and tested with 2.1.286).
 
 | Command | What it does |
 |---------|--------------|
-| `/vwc:setup` | Points your status line at the companion. Your previous status line is saved and shown on top. Safe to run again. |
-| `/vwc:setup remove` | Puts back the status line you had before setup. |
+| `/vwc:setup` | Points your status line at the companion. Your previous status line is saved and shown on top. Only needed if you already had a status line; safe to run again. |
+| `/vwc:setup remove` | Turns the companion's status line off and puts back the one you had before (if any). It won't come back by itself. |
 | `/vwc:chooseclass <mage\|warrior\|archer>` | Switch class. The first time creates that hero; after that you resume its save. With no class, lists your heroes. |
 | `/vwc:createchar <mage\|warrior\|archer>` | Start over with a new level 1 hero of that class. The old one is backed up first. |
 
@@ -240,6 +243,7 @@ plugin updates:
 | `statusline.js` | Small launcher that your status line runs; it finds the current plugin version. |
 | `previous-statusline.json` | The status line you had before setup. |
 | `settings.backup-*.json` | Copies of your `settings.json` from before each setup change. |
+| `auto-setup.json` | Records that the first-start check ran and what it did, so it only ever runs once. |
 
 ## Debugging and testing
 
@@ -258,8 +262,8 @@ plugin updates:
 
 ## Troubleshooting
 
-- **No companion in the status line:** run `/vwc:setup`, then restart Claude Code if the hero
-  still doesn't move.
+- **No companion in the status line:** run `/vwc:setup`. If you had no `settings.json` file at
+  all before installing, Claude Code may only notice the new status line after one more restart.
 - **"VibeWorkCompanion: plugin not found":** the plugin was removed or moved. Reinstall it, or run
   `/vwc:setup remove` to restore your old status line.
 - **The hero never moves:** the hooks aren't running. Restart Claude Code after installing, and
