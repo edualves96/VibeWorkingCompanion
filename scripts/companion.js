@@ -35,6 +35,15 @@ const RANKS = {
   elder: { hp: 8, xp: 16, prefix: 'Elder', news: '👑 A boss appears' },
 };
 const KILL_XP = 1.6;             // longer fights mean fewer kills, so each kill is worth more
+// The mini boss or boss of every 5th level drops a random skill; a hero holds this many.
+const MAX_SKILLS = 2;
+// Rarity multiplies a skill's strength. A boss of a 10th level rolls twice and keeps the better.
+const RARITIES = [
+  { name: 'common', chance: 0.55, power: 1 },
+  { name: 'rare', chance: 0.3, power: 1.25 },
+  { name: 'epic', chance: 0.12, power: 1.55 },
+  { name: 'legendary', chance: 0.03, power: 2 },
+];
 const ZONE_LENGTH = 600;          // tiles per zone; with the fights, about 15 minutes of work
 const VIEW_AHEAD = 40;
 const WORLD_TILES = 24;           // world strip width; each tile is 2 columns
@@ -45,6 +54,7 @@ const UPDATE_MSG_MS = 30000;      // the "updated" notice stays longer than othe
 // to /vwc:commands instead.
 const WHATS_NEW = {
   '1.3.0': 'enemies have life now, and every 5th level summons a boss',
+  '1.4.0': `skills are random now, dropped by level bosses: ${COMMAND_PREFIX}skills`,
 };
 
 // floor: background and mark colors plus the ASCII marks scattered on about 1 cell in 3
@@ -68,8 +78,9 @@ const BIOMES = [
 
 // range: how many tiles ahead the hero starts fighting. atk: [base, per level].
 // crit: chance of a double-damage hit. hit: icon of a basic attack.
-// Weapons unlock at `lvl` and add `atk`; powers unlock at `lvl`, hit for `mult` x damage
-// and can be used again `cd` steps later.
+// Weapons unlock at `lvl` and add `atk`. Skills are rolled at random (see rollSkill): their
+// name is one of `parts` (which also gives the icon) plus one of `forms`, and `power` scales
+// their strength.
 const CLASSES = {
   mage: {
     name: 'Mage', icon: '🧙', blurb: 'casts from 3 tiles, weak hits, strong spells',
@@ -83,13 +94,12 @@ const CLASSES = {
       { lvl: 26, icon: '💎', name: 'Gem Staff', atk: 20 },
       { lvl: 35, icon: '🌟', name: 'Star Staff', atk: 28 },
     ],
-    powers: [
-      { lvl: 3, icon: '🔥', name: 'Fireball', mult: 4, cd: 6 },
-      { lvl: 6, icon: '⚡', name: 'Lightning', mult: 5.5, cd: 10 },
-      { lvl: 10, icon: '🧊', name: 'Frost', mult: 7, cd: 14 },
-      { lvl: 16, icon: '🌊', name: 'Tidal Wave', mult: 10, cd: 20 },
-      { lvl: 23, icon: '💫', name: 'Meteor', mult: 14.5, cd: 26 },
-    ],
+    // Spells make up for the weak hits, so mage skills roll stronger.
+    skills: {
+      power: 1.5,
+      parts: [['🔥', 'Fire'], ['⚡', 'Storm'], ['🧊', 'Frost'], ['🌊', 'Tide'], ['💫', 'Star'], ['🌑', 'Shadow']],
+      forms: ['Bolt', 'Lance', 'Nova', 'Burst', 'Orb', 'Ray'],
+    },
   },
   warrior: {
     name: 'Warrior', icon: '🤺', blurb: 'melee, heavy hits, combat skills',
@@ -103,13 +113,12 @@ const CLASSES = {
       { lvl: 26, icon: '🪝', name: 'Hookblade', atk: 20 },
       { lvl: 35, icon: '🌟', name: 'Star Blade', atk: 28 },
     ],
-    powers: [
-      { lvl: 3, icon: '💪', name: 'Power Strike', mult: 2.5, cd: 7 },
-      { lvl: 6, icon: '🌀', name: 'Whirlwind', mult: 3.5, cd: 11 },
-      { lvl: 10, icon: '💢', name: 'Berserk', mult: 4.5, cd: 15 },
-      { lvl: 16, icon: '🩸', name: 'Rend', mult: 6, cd: 21 },
-      { lvl: 23, icon: '🌋', name: 'Earthshaker', mult: 8, cd: 28 },
-    ],
+    // The hardest basic hits, so warrior skills roll a little weaker.
+    skills: {
+      power: 0.85,
+      parts: [['💪', 'Mighty'], ['🌀', 'Whirling'], ['💢', 'Raging'], ['🩸', 'Blood'], ['🌋', 'Quake'], ['🔥', 'Blazing']],
+      forms: ['Strike', 'Cleave', 'Slam', 'Smash', 'Rend', 'Charge'],
+    },
   },
   archer: {
     name: 'Archer', icon: '🧝', blurb: 'shoots from 5 tiles, critical shots',
@@ -123,13 +132,11 @@ const CLASSES = {
       { lvl: 26, icon: '💘', name: 'Heartseeker', atk: 20 },
       { lvl: 35, icon: '🌟', name: 'Star Bow', atk: 28 },
     ],
-    powers: [
-      { lvl: 3, icon: '🎯', name: 'Aimed Shot', mult: 3, cd: 7 },
-      { lvl: 6, icon: '🍃', name: 'Wind Arrow', mult: 4, cd: 11 },
-      { lvl: 10, icon: '🦅', name: 'Eagle Strike', mult: 5.5, cd: 15 },
-      { lvl: 16, icon: '💨', name: 'Volley', mult: 7, cd: 21 },
-      { lvl: 23, icon: '🌠', name: 'Starfall', mult: 9, cd: 28 },
-    ],
+    skills: {
+      power: 1,
+      parts: [['🎯', 'Aimed'], ['🍃', 'Wind'], ['🦅', 'Eagle'], ['💨', 'Swift'], ['🌠', 'Star'], ['🔥', 'Fire']],
+      forms: ['Shot', 'Arrow', 'Volley', 'Rain', 'Barrage', 'Bolt'],
+    },
   },
 };
 
@@ -159,7 +166,8 @@ function newHero(cls, now) {
     nextSpawnX: 8,
     bossZone: 0,
     enemies: [],
-    cooldowns: {},
+    skills: [],
+    cooldowns: {},   // unused now; read by older versions that may still run in another window
     fx: null,
     msg: { text: `${c.icon} A new ${c.name.toLowerCase()} awakens`, at: now },
   };
@@ -168,11 +176,25 @@ function newHero(cls, now) {
 // Version 1 kept a single hero at the top level. It already looked like a mage (🧙,
 // elemental powers), so it becomes the mage save with its progress intact.
 function migrate(s) {
-  if (s.v === 2) {
-    return s;
+  if (s.v !== 2) {
+    const { v, lastTick, sessions, ...hero } = s;
+    s = { v: 2, active: 'mage', heroes: { mage: { ...hero, cls: 'mage' } }, lastTick, sessions };
   }
-  const { v, lastTick, sessions, ...hero } = s;
-  return { v: 2, active: 'mage', heroes: { mage: { ...hero, cls: 'mage' } }, lastTick, sessions };
+  for (const h of Object.values(s.heroes)) {
+    if (!h.skills) {
+      grantMissedSkills(h);
+    }
+  }
+  return s;
+}
+
+// Heroes from before skills had fixed powers instead. They get the skill drop of every
+// milestone they already passed, so nobody starts over without any.
+function grantMissedSkills(h) {
+  h.skills = [];
+  for (let level = 5; level <= h.level; level += 5) {
+    learnSkill(h, rollSkill(h.cls, level, level % 10 === 0));
+  }
 }
 
 function load(now) {
@@ -182,13 +204,17 @@ function load(now) {
   } catch {
     return newRoot(now);
   }
+  let parsed;
   try {
-    return migrate(JSON.parse(raw));
+    parsed = JSON.parse(raw);
   } catch {
     // Keep the broken save for inspection instead of silently losing the heroes.
     try { fs.copyFileSync(STATE_FILE, path.join(DIR, `state.bad-${now}.json`)); } catch {}
     return newRoot(now);
   }
+  // Only an unreadable file counts as broken. If migrate() fails, that's a bug in the code: the
+  // error goes up and nothing is saved, instead of replacing the heroes with an empty save.
+  return migrate(parsed);
 }
 
 function save(s) {
@@ -476,7 +502,8 @@ function describe(h) {
   const c = CLASSES[h.cls];
   const zone = zoneOf(h.heroX);
   const b = biomeOf(zone);
-  return `${c.icon} ${c.name} Lv ${h.level} · ${weaponOf(h).icon} ${weaponOf(h).name} · ${h.kills} kills · ${b.icon} ${b.name}${cycleSuffix(zone)}`;
+  const skills = h.skills.length > 0 ? ` · ${h.skills.map(s => s.icon).join('')}` : '';
+  return `${c.icon} ${c.name} Lv ${h.level} · ${weaponOf(h).icon} ${weaponOf(h).name}${skills} · ${h.kills} kills · ${b.icon} ${b.name}${cycleSuffix(zone)}`;
 }
 
 // Switches the active class, creating that hero on first use. Returns a message for the user.
@@ -520,13 +547,59 @@ function createCharacter(cls, now) {
   return saved ? text : 'The save file is busy right now. Try again in a moment.';
 }
 
+// For commands that only read: loading migrates an old save (rolling its skills), so save that
+// right away instead of showing skills that the next tick would roll differently.
+function loadSaved(now) {
+  return update(now, 3000, () => {}).root;
+}
+
 function status(now) {
-  const root = load(now);
+  const root = loadSaved(now);
   const lines = Object.keys(CLASSES).map(cls => {
     const h = root.heroes[cls];
     const marker = root.active === cls ? '▶' : ' ';
     return `${marker} ${h ? describe(h) : `${CLASSES[cls].icon} ${CLASSES[cls].name}: no hero yet (${CLASSES[cls].blurb})`}`;
   });
+  return lines.join('\n');
+}
+
+const BONUS_NAMES = { damage: 'damage', crit: 'critical chance' };
+
+function skillLine(s) {
+  const what = `x${s.mult} damage every ${s.cd} s, +${s.bonus.pct}% ${BONUS_NAMES[s.bonus.kind]}`;
+  return `${s.icon} ${s.name.padEnd(16)} ${s.rarity.padEnd(10)}power ${String(skillPower(s)).padStart(3)}   ${what}`;
+}
+
+function nextSkill(h) {
+  const boss = h.enemies.find(e => e.drop);
+  if (boss) {
+    return `defeat the ${boss.icon} ${boss.name} ahead`;
+  }
+  const level = (Math.floor(h.level / 5) + 1) * 5;
+  return `from the ${level % 10 === 0 ? 'boss' : 'mini boss'} at level ${level}`;
+}
+
+// /vwc:skills: every hero's skills with their stats, and where the next one comes from.
+function skillsReport(now) {
+  const root = loadSaved(now);
+  const lines = [];
+  for (const cls of Object.keys(CLASSES)) {
+    const h = root.heroes[cls];
+    if (!h) {
+      continue;
+    }
+    const c = CLASSES[cls];
+    lines.push(`${root.active === cls ? '▶' : ' '} ${c.icon} ${c.name} Lv ${h.level} · ${h.skills.length} of ${MAX_SKILLS} skills`);
+    for (const s of h.skills) {
+      lines.push(`    ${skillLine(s)}`);
+    }
+    lines.push(`    Next skill: ${nextSkill(h)}`, '');
+  }
+  if (lines.length === 0) {
+    return `No heroes yet. Pick one with ${COMMAND_PREFIX}chooseclass.`;
+  }
+  lines.push('The mini boss or boss of every 5th level drops a random skill. It takes a free slot,',
+    'or replaces your weaker skill if its power is higher.');
   return lines.join('\n');
 }
 
@@ -655,8 +728,9 @@ function spawnAhead(h) {
   }
 }
 
-// A level milestone's boss appears on the first free tile just beyond the hero's range. Enemies
-// stay sorted by position, since the hero fights the first one in range.
+// A level milestone's boss appears on the first free tile just beyond the hero's range, carrying
+// that level's skill drop. Enemies stay sorted by position, since the hero fights the first one
+// in range.
 function summon(h, rank, now) {
   const zoneBossX = (h.bossZone + 1) * ZONE_LENGTH;
   let x = h.heroX + CLASSES[h.cls].range + 3;
@@ -664,12 +738,93 @@ function summon(h, rank, now) {
     x++;
   }
   const foe = makeEnemy(x, zoneOf(x), rank);
+  foe.drop = h.level;
   h.enemies.push(foe);
   h.enemies.sort((a, b) => a.x - b.x);
   if (x >= h.nextSpawnX) {
     h.nextSpawnX = x + randInt(5, 12);
   }
   setMsg(h, `${RANKS[rank].news}: ${foe.icon} ${foe.name}`, now);
+}
+
+// ---------- skills ----------
+
+function pick(list) {
+  return list[randInt(0, list.length - 1)];
+}
+
+function rollRarity() {
+  let r = Math.random();
+  for (const rarity of RARITIES) {
+    if (r < rarity.chance) {
+      return rarity;
+    }
+    r -= rarity.chance;
+  }
+  return RARITIES[0];
+}
+
+// A random skill found at `level`: a special attack that hits for `mult` x damage every `cd`
+// steps, plus a passive bonus to all damage or to the critical chance. Skills found later roll
+// stronger, so they can replace old ones. A longer cooldown comes with a bigger multiplier.
+function rollSkill(cls, level, lucky) {
+  const c = CLASSES[cls].skills;
+  const [icon, first] = pick(c.parts);
+  let rarity = rollRarity();
+  if (lucky) {
+    const again = rollRarity();
+    rarity = RARITIES.indexOf(again) > RARITIES.indexOf(rarity) ? again : rarity;
+  }
+  const spread = () => 0.85 + Math.random() * 0.3;
+  const cd = randInt(6, 16);
+  const strength = (1 + 0.75 * Math.sqrt(level)) * rarity.power * c.power * spread();
+  return {
+    icon,
+    name: `${first} ${pick(c.forms)}`,
+    rarity: rarity.name,
+    level,
+    mult: Math.round((1 + (strength * cd) / 10) * 10) / 10,
+    cd,
+    bonus: { kind: Math.random() < 0.5 ? 'damage' : 'crit', pct: Math.round((2 + 1.2 * Math.sqrt(level)) * rarity.power * spread()) },
+    readyAt: 0,
+  };
+}
+
+// One number to compare skills by: the extra damage the attack adds per step, plus the bonus.
+function skillPower(s) {
+  return Math.round(((s.mult - 1) / s.cd + s.bonus.pct / 100) * 100);
+}
+
+function skillBonus(h, kind) {
+  return h.skills.reduce((sum, s) => sum + (s.bonus.kind === kind ? s.bonus.pct : 0), 0);
+}
+
+// A new skill fills a free slot, or replaces the weaker skill if its power is higher.
+function learnSkill(h, s) {
+  if (h.skills.length < MAX_SKILLS) {
+    h.skills.push(s);
+    return { kept: true };
+  }
+  const weakest = h.skills.reduce((a, b) => (skillPower(b) < skillPower(a) ? b : a));
+  if (skillPower(s) <= skillPower(weakest)) {
+    return { kept: false };
+  }
+  h.skills[h.skills.indexOf(weakest)] = s;
+  return { kept: true, replaced: weakest };
+}
+
+// What the boss of milestone `level` drops; a boss of a 10th level is lucky with rarity.
+function dropSkill(h, level, now) {
+  const s = rollSkill(h.cls, level, level % 10 === 0);
+  const { kept, replaced } = learnSkill(h, s);
+  const found = `${s.icon} ${s.name} (${s.rarity})`;
+  if (replaced) {
+    setMsg(h, `🎁 ${found} replaces ${replaced.icon} ${replaced.name}`, now);
+  } else if (kept) {
+    setMsg(h, `🎁 New skill: ${found}`, now);
+  } else {
+    setMsg(h, `🎁 Found ${found}, weaker than your skills`, now);
+  }
 }
 
 function setMsg(h, text, now) {
@@ -695,10 +850,6 @@ function gainXp(h, xp, now) {
     const w = c.weapons.find(x => x.lvl === h.level);
     if (w) {
       setMsg(h, `New weapon: ${w.icon} ${w.name}`, now);
-    }
-    const p = c.powers.find(x => x.lvl === h.level);
-    if (p) {
-      setMsg(h, `New power: ${p.icon} ${p.name}`, now);
     }
     if (h.level % 5 === 0) {
       summon(h, h.level % 10 === 0 ? 'elder' : 'mini', now);
@@ -727,15 +878,16 @@ function step(h, now) {
     return;
   }
 
-  let dmg = attackOf(h);
+  let dmg = attackOf(h) * (1 + skillBonus(h, 'damage') / 100);
   let icon = c.hit;
-  const ready = c.powers.filter(p => h.level >= p.lvl && (h.cooldowns[p.name] || 0) <= h.step).pop();
+  // The strongest skill that is off cooldown fires instead of a basic attack.
+  const ready = h.skills.filter(sk => sk.readyAt <= h.step).sort((a, b) => b.mult - a.mult)[0];
   if (ready) {
     dmg *= ready.mult;
     icon = ready.icon;
-    h.cooldowns[ready.name] = h.step + ready.cd;
+    ready.readyAt = h.step + ready.cd;
   }
-  const crit = Math.random() < c.crit;
+  const crit = Math.random() < c.crit + skillBonus(h, 'crit') / 100;
   if (crit) {
     dmg *= 2;
   }
@@ -750,6 +902,9 @@ function step(h, now) {
     h.fx = { icon: '✨', x: foe.x, step: h.step };
     if (foe.boss) {
       setMsg(h, `🏆 Defeated ${foe.icon} ${foe.name}!`, now);
+    }
+    if (foe.drop) {
+      dropSkill(h, foe.drop, now);
     }
     gainXp(h, foe.xp, now);
   }
@@ -849,7 +1004,7 @@ function statsRow(root, h, now, active, cols) {
   const filled = Math.min(10, Math.floor((h.xp / need) * 10));
   const bar = '▰'.repeat(filled) + '▱'.repeat(10 - filled);
   const w = weaponOf(h);
-  const powers = c.powers.filter(p => h.level >= p.lvl).map(p => p.icon).join('');
+  const skills = h.skills.map(s => s.icon).join('');
   const zone = zoneOf(h.heroX);
   const b = biomeOf(zone);
 
@@ -871,7 +1026,7 @@ function statsRow(root, h, now, active, cols) {
   const parts = [
     [`${c.icon} ${c.name} ${color(GOLD, `Lv ${h.level}`)} ${color('38;2;167;139;250', bar)} ${h.xp}/${need} XP`, 6],
     [`${w.icon} ${w.name}`, 4],
-    [powers, 1],
+    [skills, 1],
     [color(b.color, `${b.icon} ${b.name}${cycleSuffix(zone)}`), 3],
     [`💀 ${h.kills}`, 2],
     [targetText(h, active), 4.5],
@@ -983,7 +1138,7 @@ function render(root, now, cols) {
 
 module.exports = {
   DIR, COMMAND_PREFIX, CLASSES, classKey, chooseClass, createCharacter, status,
-  display, partKey, setVisible, placeKey, setStatsPlace, load, pluginVersion,
+  display, partKey, setVisible, placeKey, setStatsPlace, load, loadSaved, pluginVersion, skillsReport,
   onHookEvent, onStatusLine, render, displayWidth,
-  newRoot, newHero, migrate, step, xpNeed, attackOf, weaponOf,
+  newRoot, newHero, migrate, step, xpNeed, attackOf, weaponOf, rollSkill, skillPower, learnSkill,
 };

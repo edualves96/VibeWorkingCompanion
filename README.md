@@ -2,17 +2,19 @@
 
 An idle RPG hero that lives in the bottom-right corner of your Claude Code status line.
 While Claude works, your hero walks through the world, fights monsters, gains XP, levels up and
-unlocks weapons and powers. When Claude stops and waits for you, the hero waits too (💤).
+unlocks weapons and finds random skills. When Claude stops and waits for you, the hero waits too (💤).
 
 ```
 ⚠️ Opus 5.5 | my-project | main | ▰▰▰▰▰▰▱▱▱▱ 63% (634 200 / 1 000 000) | ⏳ 1h59m (42%)
-                      🧝 Archer Lv 12 ▰▰▰▰▱▱▱▱▱▱ 812/2429 XP · 🏹 Bow · 🎯🍃🦅 · 🌴 Coast · 💀 431
+                      🧝 Archer Lv 12 ▰▰▰▰▱▱▱▱▱▱ 812/2429 XP · 🏹 Bow · 🎯🍃 · 🌴 Coast · 💀 431
                                                  .   🧝  . 🔸  🦀  🌴      🐚    . .         🌴
                                                  ~      ~   ~         ~    ~      ~    ~
 ```
 
 - **Work time is game time:** a 2m45s task is 2m45s of adventure, and the tokens Claude uses give bonus XP.
-- **Three classes:** 🧙 Mage, 🤺 Warrior and 🧝 Archer, each with its own save, weapons and powers.
+- **Three classes:** 🧙 Mage, 🤺 Warrior and 🧝 Archer, each with its own save, weapons and skills.
+- **Random skills:** the bosses of levels 5, 10, 15… drop a randomly rolled skill. A hero holds two,
+  and a better find replaces the weaker one.
 - **Seven biomes,** each with its own floor, enemies and a boss every ~15 minutes of work:
   🌼 Meadow, 🌲 Dark Forest, 💎 Caves, 🌴 Coast, 🌵 Desert, 🪦 Graveyard, 🌋 Volcano. After the
   Volcano the world loops back to the Meadow, "II", with tougher enemies.
@@ -81,6 +83,7 @@ data folder, which updates don't touch.
 | `/vwc:createchar <mage\|warrior\|archer>` | Start over with a new level 1 hero of that class. The old one is backed up first. |
 | `/vwc:hide <bar\|companion\|all>` | Hide the status bar (the info row on top), the companion (the hero rows), or both. A hidden hero keeps adventuring in the background. The choice is remembered across restarts. |
 | `/vwc:show <bar\|companion\|all>` | Show them again. |
+| `/vwc:skills` | Every hero's skills with their rarity, power and stats, and which boss drops the next one. |
 | `/vwc:stats <above\|below>` | Put the hero's stats row (level, XP, weapon, zone, kills) above the map, where it starts, or below it. With no argument it switches to the other place. The choice is remembered across restarts. |
 | `/vwc:commands` | List every command, your heroes, and what is currently shown or hidden. |
 
@@ -89,16 +92,49 @@ result, so they are quick and cheap. Claude never runs them on its own.
 
 ## Classes
 
-| Class | Hero | Fights from | Basic attack | Weapons | Powers |
+| Class | Hero | Fights from | Basic attack | Weapons | Skills |
 |-------|------|-------------|--------------|---------|--------|
-| Mage | 🧙 | 3 tiles | 🔹 magic missile | 🪵 📜 🪄 📖 🔮 💎 🌟 | 🔥 ⚡ 🧊 🌊 💫 |
-| Warrior | 🤺 | 2 tiles (melee) | 💥 | 🔪 🏏 🪓 🔨 🔱 🪝 🌟 | 💪 🌀 💢 🩸 🌋 |
-| Archer | 🧝 | 5 tiles | 🔸 arrow that flies across the gap | 🪨 🪃 🏹 🪶 🌙 💘 🌟 | 🎯 🍃 🦅 💨 🌠 |
+| Mage | 🧙 | 3 tiles | 🔹 magic missile | 🪵 📜 🪄 📖 🔮 💎 🌟 | 🔥 ⚡ 🧊 🌊 💫 🌑 spells |
+| Warrior | 🤺 | 2 tiles (melee) | 💥 | 🔪 🏏 🪓 🔨 🔱 🪝 🌟 | 💪 🌀 💢 🩸 🌋 🔥 strikes |
+| Archer | 🧝 | 5 tiles | 🔸 arrow that flies across the gap | 🪨 🪃 🏹 🪶 🌙 💘 🌟 | 🎯 🍃 🦅 💨 🌠 🔥 shots |
 
-The mage hits weakly but has the strongest and most frequent spells, the warrior hits hardest, and
-the archer lands double-damage critical shots 20% of the time. All three level up at the same pace
-(within one level of each other up to 30 hours of work, checked by simulation), so the choice is
-about style. Only the active class's hero moves; the others wait where you left them.
+The mage hits weakly but rolls the strongest skills, the warrior hits hardest (its skills roll a
+little weaker), and the archer lands double-damage critical shots 20% of the time. On average all
+three level up at the same pace (within one level of each other up to 30 hours of work, checked by
+simulation), so the choice is about style. Skills are random, so luck can put a hero a level or
+two ahead or behind. Only the active class's hero moves; the others wait where you left them.
+
+## Skills
+
+Every hero starts with no skills. Reaching levels 5, 15, 25… summons a mini boss and levels 10, 20,
+30… a boss; defeating it drops a random skill:
+
+```
+🏆 Defeated 🦖 Elder Sand Rex! · 🎁 New skill: ⚡ Storm Lance (rare)
+🏆 Defeated 🦅 Giant Vulture! · 🎁 💫 Star Ray (epic) replaces 🌑 Shadow Bolt
+```
+
+- **What a skill does:** it's a special attack that fires every few seconds for several times the
+  damage (its icon flies across the map), plus a passive bonus that is always on: extra damage or
+  extra critical chance.
+- **What's rolled:** the name (from the class's parts, like 🧊 Frost + Lance), the rarity (common
+  55%, rare 30%, epic 12%, legendary 3%, which multiplies the strength), the cooldown (6 to 16 s,
+  with a bigger multiplier the longer it is) and the bonus. Skills found at higher levels roll
+  stronger, and the bosses of levels 10, 20, 30… roll the rarity twice and keep the better result.
+- **Two slots:** a new skill takes a free slot. Once both are full, it replaces the weaker skill if
+  its **power** is higher, and is discarded otherwise. Power is the extra damage per second the
+  attack adds plus the bonus, as one number to compare by.
+- `/vwc:skills` shows each skill's rarity, power and stats, and which boss drops the next one:
+
+  ```
+  ▶ 🧝 Archer Lv 10 · 2 of 2 skills
+      🦅 Eagle Bolt       legendary power  61   x5.6 damage every 9 s, +10% critical chance
+      🍃 Wind Barrage     rare      power  44   x5.4 damage every 12 s, +7% damage
+      Next skill: from the mini boss at level 15
+  ```
+
+Heroes from before 1.4.0 had fixed powers. When they first load in 1.4.0 they get a rolled skill
+for every milestone they had already passed, keeping the best two.
 
 ## How it works
 
@@ -121,8 +157,8 @@ The hero takes one step per second of **working time**. Hooks tell it when Claud
   command (a 15-minute build, say) pauses the hero after 10 minutes until it finishes.
 
 Enemies have life, which grows with the zone. Each hit does the class's base damage plus its
-per-level damage times your level, plus the weapon's bonus; a power that is ready multiplies it,
-and a critical hit doubles it. For a hero on pace, a normal enemy takes about 5 hits, a mini boss
+per-level damage times your level, plus the weapon's bonus and the skills' damage bonuses; a
+skill that is off cooldown multiplies it, and a critical hit doubles it. For a hero on pace, a normal enemy takes about 5 hits, a mini boss
 about 15, a zone boss about 35 and a level boss about 50; a hero ahead of the curve kills faster.
 While you fight, the stats row shows the enemy's life and the damage of each hit:
 
@@ -190,13 +226,15 @@ Everything below is in `scripts/companion.js`.
 | `ENEMY_HP` | `[20, 60, 0.7]` | Enemy life: `20 + 60 * zone^0.7`, give or take 20%. Raise it for longer fights. |
 | `RANKS` | | Life and XP of mini bosses (`2.5`, `5`), zone bosses (`5`, `10`) and level bosses (`8`, `16`), as multiples of a normal enemy's. |
 | `KILL_XP` | `1.6` | Multiplier on the XP of every kill (and of tokens). Raise it to level faster. |
+| `MAX_SKILLS` | `2` | How many skills a hero holds. |
+| `RARITIES` | | Each rarity's chance and how much it multiplies a skill's strength. |
 | `WORLD_TILES` | `24` | Width of the world in tiles (each tile is 2 columns). |
 | `MSG_MS` | `10000` | How long messages like "🎉 Level 5!" stay visible. |
 | `MAX_GAP_MS` | `30000` | Gaps between refreshes longer than this are ignored. |
 | `SESSION_STALE_MS` | `60000` | A session silent for this long no longer counts as working. |
 
-Difficulty lives in `xpNeed()` (the level curve), `makeEnemy()` (enemy HP and XP) and `attackOf()`
-(hero damage, from the class's `atk`). If you make fights longer or shorter, change `KILL_XP` the
+Difficulty lives in `xpNeed()` (the level curve), `makeEnemy()` (enemy HP and XP), `attackOf()`
+(hero damage, from the class's `atk`) and `rollSkill()` (how strong skills roll at each level). If you make fights longer or shorter, change `KILL_XP` the
 opposite way, or levelling slows down or speeds up with them.
 
 ### Add a biome
@@ -216,11 +254,11 @@ in 3. Marks must be plain ASCII, exactly 1 column wide, so the floor stays under
 
 ### Change a class, or add one
 
-Each entry in `CLASSES` has its own stats, weapons and powers:
+Each entry in `CLASSES` has its own stats, weapons and skill parts:
 
 ```js
 paladin: {
-  name: 'Paladin', icon: '💂', blurb: 'melee, steady hits, holy powers',
+  name: 'Paladin', icon: '💂', blurb: 'melee, steady hits, holy skills',
   range: 2,          // starts fighting when an enemy is this many tiles ahead
   atk: [3, 1.1],     // damage = 3 + 1.1 x level, plus the weapon's atk
   crit: 0.1,         // 10% chance of a double-damage hit
@@ -229,10 +267,11 @@ paladin: {
     { lvl: 1, icon: '🔨', name: 'Mace', atk: 0 },
     // ...
   ],
-  powers: [          // unlocked at `lvl`, hit for `mult` x damage, usable every `cd` steps
-    { lvl: 3, icon: '🌟', name: 'Smite', mult: 3, cd: 8 },
-    // ...
-  ],
+  skills: {          // random skills are named "<part> <form>", e.g. "Holy Smite"
+    power: 1,        // scales how strong this class's skills roll
+    parts: [['🌟', 'Holy'], ['🔥', 'Burning'], /* ... */],   // the part also gives the icon
+    forms: ['Smite', 'Strike', /* ... */],
+  },
 },
 ```
 
@@ -263,7 +302,7 @@ as was done for ⚡ ✨ ⏳.
 - **Width budget:** `scripts/statusline.js` uses `COLUMNS - 6`. Claude Code passes the terminal
   width in `COLUMNS`, pads the status line by 2 columns on each side, and cuts off anything wider.
   If the right edge is cut off in your terminal, increase the `6`.
-- **Narrow terminals:** when the stats row doesn't fit, parts are dropped in priority order (powers
+- **Narrow terminals:** when the stats row doesn't fit, parts are dropped in priority order (skills
   first, then kills, zone and weapon). See the numbers in `statsRow()`.
 
 ### The info row (row 1)
@@ -278,11 +317,11 @@ If you had a status line before `/vwc:setup`, it runs and is shown on top. Other
 | `.claude-plugin/plugin.json` | Plugin manifest (name `vwc`, version). |
 | `.claude-plugin/marketplace.json` | Makes this repository its own marketplace (`vibeworkcompanion`). |
 | `hooks/hooks.json` | The hooks that tell the companion when Claude is working. |
-| `skills/` | The `/vwc:` commands: `setup`, `chooseclass`, `createchar`, `hide`, `show`, `stats` and `commands`. |
+| `skills/` | The `/vwc:` commands: `setup`, `chooseclass`, `createchar`, `hide`, `show`, `stats`, `skills` and `commands`. |
 | `scripts/companion.js` | The engine: save file, classes, biomes, game rules, rendering. |
 | `scripts/statusline.js` | What the status line runs: info row plus the three companion rows. |
 | `scripts/hook.js` | What the hooks run. |
-| `scripts/cli.js` | Class switching, new characters, hide/show, the stats row's place, and the command list. |
+| `scripts/cli.js` | Class switching, new characters, hide/show, the stats row's place, the skills list, and the command list. |
 | `scripts/setup.js` | Turns the status line on and off in your `settings.json`. |
 
 Your saves live in the plugin's data folder, `~/.claude/plugins/data/<plugin id>/`, which survives
@@ -290,7 +329,7 @@ plugin updates:
 
 | File | What it is |
 |------|------------|
-| `state.json` | One hero per class, which one is active, what `/vwc:hide` has hidden, where `/vwc:stats` put the stats row, and the last plugin version it saw (for the update notice). Delete it to start everything over. |
+| `state.json` | One hero per class (with its skills), which one is active, what `/vwc:hide` has hidden, where `/vwc:stats` put the stats row, and the last plugin version it saw (for the update notice). Delete it to start everything over. |
 | `backups/` | Heroes replaced by `/vwc:createchar`. To restore one, copy it into `state.json` under `heroes.<class>`. |
 | `statusline.js` | Small launcher that your status line runs; it finds the current plugin version. |
 | `previous-statusline.json` | The status line you had before setup. |

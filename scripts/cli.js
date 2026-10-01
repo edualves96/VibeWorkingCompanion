@@ -6,6 +6,7 @@
 //   node cli.js --data <dir> hide <bar|companion|all>      stop drawing a part of the status line
 //   node cli.js --data <dir> show <bar|companion|all>      draw it again
 //   node cli.js --data <dir> stats [above|below]           put the stats row above or below the map (no place: switch)
+//   node cli.js --data <dir> skills                        every hero's skills and their stats
 //   node cli.js --data <dir> commands                    list every command, plus the current state
 // --data is the plugin's data folder, where the save lives. Skills don't get it as an
 // environment variable, so they pass it here.
@@ -32,6 +33,7 @@ const COMMANDS = [
   ['hide <bar|companion|all>', 'hide the status bar, the companion, or both'],
   ['show <bar|companion|all>', 'show them again'],
   ['stats <above|below>', 'put the hero\'s stats row above or below the map (no place: switch)'],
+  ['skills', 'your heroes\' skills, their stats, and where the next one comes from'],
   ['setup', 'turn the companion status line on (an existing status line stays on top)'],
   ['setup remove', 'turn it off and put back your previous status line'],
   ['commands', 'this list'],
@@ -40,7 +42,7 @@ const COMMANDS = [
 function commands() {
   const width = Math.max(...COMMANDS.map(([c]) => c.length)) + p.length + 2;
   const list = COMMANDS.map(([c, what]) => `  ${(p + c).padEnd(width)}${what}`);
-  const shown = companion.display(companion.load(now));
+  const shown = companion.display(companion.loadSaved(now));
   const state = `status bar ${shown.bar ? 'shown' : 'hidden'} · companion ${shown.companion ? 'shown' : 'hidden'} · stats ${shown.stats} the map`;
   const version = companion.pluginVersion();
   const title = version ? `VibeWorkCompanion ${version} commands` : 'VibeWorkCompanion commands';
@@ -50,6 +52,9 @@ function commands() {
 function run() {
   if (command === 'status') {
     return companion.status(now);
+  }
+  if (command === 'skills') {
+    return companion.skillsReport(now);
   }
   if (command === 'commands') {
     return commands();
