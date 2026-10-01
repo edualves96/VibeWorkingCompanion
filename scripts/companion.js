@@ -23,10 +23,29 @@ const SESSION_STALE_MS = 60000;   // a session silent this long no longer counts
 const IDLE_CAP_MS = 10 * 60 * 1000;
 const SESSION_PRUNE_MS = 86400000;
 const TOKENS_PER_KILL = 2000;    // tokens worth one kill's XP in the current zone
-const ZONE_LENGTH = 600;          // steps per zone, about 10 minutes of work
+// Enemy life grows about as fast as a hero on pace gets stronger, so a normal enemy takes
+// around 5 hits and a zone boss around 35 all game long.
+const ENEMY_HP = [20, 60, 0.7];   // hp = 20 + 60 x zone^0.7, give or take 20%
+// Life and XP of each kind of enemy, as multiples of a normal one's. A boss waits at the end of
+// every zone; reaching every 10th level summons an elder boss, and every other 5th level a mini boss.
+const RANKS = {
+  normal: { hp: 1, xp: 1 },
+  mini: { hp: 2.5, xp: 5, prefix: 'Giant', news: '⭐ A mini boss appears' },
+  boss: { hp: 5, xp: 10 },
+  elder: { hp: 8, xp: 16, prefix: 'Elder', news: '👑 A boss appears' },
+};
+const KILL_XP = 1.6;             // longer fights mean fewer kills, so each kill is worth more
+const ZONE_LENGTH = 600;          // tiles per zone; with the fights, about 15 minutes of work
 const VIEW_AHEAD = 40;
 const WORLD_TILES = 24;           // world strip width; each tile is 2 columns
 const MSG_MS = 10000;
+const UPDATE_MSG_MS = 30000;      // the "updated" notice stays longer than other messages
+
+// Shown once after an update to that version. A version without a line here gets a pointer
+// to /vwc:commands instead.
+const WHATS_NEW = {
+  '1.3.0': 'enemies have life now, and every 5th level summons a boss',
+};
 
 // floor: background and mark colors plus the ASCII marks scattered on about 1 cell in 3
 // (1 column each, so the floor lines up under the 2-column world tiles in every font).
@@ -65,16 +84,16 @@ const CLASSES = {
       { lvl: 35, icon: '🌟', name: 'Star Staff', atk: 28 },
     ],
     powers: [
-      { lvl: 3, icon: '🔥', name: 'Fireball', mult: 3, cd: 6 },
-      { lvl: 6, icon: '⚡', name: 'Lightning', mult: 4, cd: 10 },
-      { lvl: 10, icon: '🧊', name: 'Frost', mult: 5, cd: 14 },
-      { lvl: 16, icon: '🌊', name: 'Tidal Wave', mult: 7, cd: 20 },
-      { lvl: 23, icon: '💫', name: 'Meteor', mult: 10, cd: 26 },
+      { lvl: 3, icon: '🔥', name: 'Fireball', mult: 4, cd: 6 },
+      { lvl: 6, icon: '⚡', name: 'Lightning', mult: 5.5, cd: 10 },
+      { lvl: 10, icon: '🧊', name: 'Frost', mult: 7, cd: 14 },
+      { lvl: 16, icon: '🌊', name: 'Tidal Wave', mult: 10, cd: 20 },
+      { lvl: 23, icon: '💫', name: 'Meteor', mult: 14.5, cd: 26 },
     ],
   },
   warrior: {
     name: 'Warrior', icon: '🤺', blurb: 'melee, heavy hits, combat skills',
-    range: 2, atk: [3, 1.2], crit: 0, hit: '💥',
+    range: 2, atk: [3, 1.5], crit: 0, hit: '💥',
     weapons: [
       { lvl: 1, icon: '🔪', name: 'Knife', atk: 0 },
       { lvl: 4, icon: '🏏', name: 'Club', atk: 2 },
@@ -121,7 +140,8 @@ const WAIT_EVENTS = new Set(['Stop', 'StopFailure', 'PermissionRequest', 'PreToo
 
 // The save holds one hero per class; only the `active` one moves.
 function newRoot(now) {
-  return { v: 2, active: null, heroes: {}, lastTick: now, sessions: {} };
+  // A new save starts on the current version, so it never shows an "updated" notice.
+  return { v: 2, active: null, heroes: {}, lastTick: now, sessions: {}, seenVersion: pluginVersion() };
 }
 
 function newHero(cls, now) {
@@ -368,7 +388,7 @@ function ingestTranscript(root, ss, transcriptPath, now) {
     const kills = Math.floor(h.tokenCarry / TOKENS_PER_KILL);
     h.tokenCarry -= kills * TOKENS_PER_KILL;
     const zone = zoneOf(h.heroX);
-    gainXp(h, kills * (3 + zone + Math.floor(zone / 2)), now);
+    gainXp(h, kills * killXp(zone, Math.floor(zone / 2)), now);
   }
 }
 
@@ -411,9 +431,38 @@ function onStatusLine(data, now) {
     }
     settle(root, now);
     prune(root, now);
+    noticeUpdate(root, now);
     const h = activeHero(root);
     debug(`tick cols=${process.env.COLUMNS} active=${anyActive(root, now)} class=${root.active} step=${h ? h.step : '-'}`);
   }).root;
+}
+
+let versionCache;
+
+function pluginVersion() {
+  if (versionCache === undefined) {
+    try {
+      versionCache = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '.claude-plugin', 'plugin.json'), 'utf8')).version || null;
+    } catch {
+      versionCache = null;
+    }
+  }
+  return versionCache;
+}
+
+// The first tick on a new plugin version tells the player it was updated and what's new.
+// A fresh install has no heroes yet, so it only records the version.
+function noticeUpdate(root, now) {
+  const version = pluginVersion();
+  if (!version || root.seenVersion === version) {
+    return;
+  }
+  const h = activeHero(root);
+  if (h) {
+    const news = WHATS_NEW[version] || `${COMMAND_PREFIX}commands lists every command`;
+    h.msg = { text: `🆕 Updated to ${version} · ${news}`, at: now, ms: UPDATE_MSG_MS };
+  }
+  root.seenVersion = version;
 }
 
 // ---------- character commands (cli.js) ----------
@@ -575,27 +624,52 @@ function attackOf(h) {
   return Math.round(base + perLevel * h.level) + weaponOf(h).atk;
 }
 
-function makeEnemy(x, zone, boss) {
+// XP for one kill in `zone`; `roll` is 0..zone, and token XP uses the average, zone / 2.
+function killXp(zone, roll) {
+  return Math.round((3 + zone + roll) * KILL_XP);
+}
+
+// Bosses and elder bosses are the biome's boss; normal enemies and mini bosses one of its enemies.
+// `boss` marks every kind but normal, for the "Defeated" message.
+function makeEnemy(x, zone, rank = 'normal') {
   const b = biomeOf(zone);
-  const [icon, name] = boss ? b.boss : b.enemies[randInt(0, b.enemies.length - 1)];
-  const base = 10 + 5 * zone;
-  const hp = boss ? base * 8 : Math.round(base * (0.8 + Math.random() * 0.5));
-  const xp = (3 + zone + randInt(0, zone)) * (boss ? 10 : 1);
-  return { x, icon, name, hp, max: hp, xp, boss };
+  const r = RANKS[rank];
+  const [icon, name] = rank === 'boss' || rank === 'elder' ? b.boss : b.enemies[randInt(0, b.enemies.length - 1)];
+  const base = ENEMY_HP[0] + ENEMY_HP[1] * Math.pow(zone, ENEMY_HP[2]);
+  const hp = Math.round(base * r.hp * (rank === 'normal' ? 0.8 + Math.random() * 0.4 : 1));
+  const xp = killXp(zone, randInt(0, zone)) * r.xp;
+  return { x, icon, name: r.prefix ? `${r.prefix} ${name}` : name, hp, max: hp, xp, boss: rank !== 'normal' };
 }
 
 function spawnAhead(h) {
   while (h.nextSpawnX <= h.heroX + VIEW_AHEAD) {
     const bossX = (h.bossZone + 1) * ZONE_LENGTH;
     if (h.nextSpawnX >= bossX - 3) {
-      h.enemies.push(makeEnemy(bossX, h.bossZone, true));
+      h.enemies.push(makeEnemy(bossX, h.bossZone, 'boss'));
       h.bossZone++;
       h.nextSpawnX = bossX + randInt(6, 12);
     } else {
-      h.enemies.push(makeEnemy(h.nextSpawnX, h.bossZone, false));
+      h.enemies.push(makeEnemy(h.nextSpawnX, h.bossZone));
       h.nextSpawnX += randInt(5, 12);
     }
   }
+}
+
+// A level milestone's boss appears on the first free tile just beyond the hero's range. Enemies
+// stay sorted by position, since the hero fights the first one in range.
+function summon(h, rank, now) {
+  const zoneBossX = (h.bossZone + 1) * ZONE_LENGTH;
+  let x = h.heroX + CLASSES[h.cls].range + 3;
+  while (x === zoneBossX || h.enemies.some(e => e.x === x)) {
+    x++;
+  }
+  const foe = makeEnemy(x, zoneOf(x), rank);
+  h.enemies.push(foe);
+  h.enemies.sort((a, b) => a.x - b.x);
+  if (x >= h.nextSpawnX) {
+    h.nextSpawnX = x + randInt(5, 12);
+  }
+  setMsg(h, `${RANKS[rank].news}: ${foe.icon} ${foe.name}`, now);
 }
 
 function setMsg(h, text, now) {
@@ -626,7 +700,15 @@ function gainXp(h, xp, now) {
     if (p) {
       setMsg(h, `New power: ${p.icon} ${p.name}`, now);
     }
+    if (h.level % 5 === 0) {
+      summon(h, h.level % 10 === 0 ? 'elder' : 'mini', now);
+    }
   }
+}
+
+// The nearest enemy within the class's range, which the hero is fighting.
+function targetOf(h) {
+  return h.enemies.find(e => e.x > h.heroX && e.x <= h.heroX + CLASSES[h.cls].range);
 }
 
 // One second of work: walk, or attack the nearest enemy within the class's range.
@@ -634,7 +716,7 @@ function step(h, now) {
   const c = CLASSES[h.cls];
   h.step++;
   spawnAhead(h);
-  const foe = h.enemies.find(e => e.x > h.heroX && e.x <= h.heroX + c.range);
+  const foe = targetOf(h);
   if (!foe) {
     h.heroX++;
     if (h.heroX % ZONE_LENGTH === 0) {
@@ -653,13 +735,15 @@ function step(h, now) {
     icon = ready.icon;
     h.cooldowns[ready.name] = h.step + ready.cd;
   }
-  if (Math.random() < c.crit) {
+  const crit = Math.random() < c.crit;
+  if (crit) {
     dmg *= 2;
   }
-  foe.hp -= Math.round(dmg);
+  dmg = Math.round(dmg);
+  foe.hp -= dmg;
   // The attack travels across the gap one tile per step, so ranged shots visibly fly.
   const gap = foe.x - h.heroX - 1;
-  h.fx = { icon, x: h.heroX + 1 + (h.step % Math.max(1, gap)), step: h.step };
+  h.fx = { icon, x: h.heroX + 1 + (h.step % Math.max(1, gap)), step: h.step, dmg, crit };
   if (foe.hp <= 0) {
     h.kills++;
     h.enemies = h.enemies.filter(e => e !== foe);
@@ -676,6 +760,7 @@ function step(h, now) {
 const ESC = '\x1b[';
 const RESET = `${ESC}0m`;
 const GOLD = '38;2;250;204;21';
+const ENEMY_RED = '38;2;248;113;113';
 
 function color(code, text) {
   return `${ESC}${code}m${text}${RESET}`;
@@ -743,6 +828,21 @@ function lastTurn(root) {
     .sort((a, b) => b.end - a.end)[0];
 }
 
+// The enemy being fought, its life, and while working the damage of the hit that just landed
+// (with a "!" on a critical hit). Null while walking.
+function targetText(h, active) {
+  const foe = targetOf(h);
+  if (!foe) {
+    return null;
+  }
+  const filled = Math.max(1, Math.ceil((foe.hp / foe.max) * 10));
+  const life = color(ENEMY_RED, '▰'.repeat(filled) + '▱'.repeat(10 - filled));
+  // Padded so the row doesn't shift by a column as the number shrinks.
+  const hp = String(foe.hp).padStart(String(foe.max).length);
+  const hit = active && h.fx && h.fx.step === h.step && h.fx.dmg ? ` ${color(ENEMY_RED, `-${h.fx.dmg}${h.fx.crit ? '!' : ''}`)}` : '';
+  return `${foe.icon} ${foe.name} ${life} ${hp}/${foe.max}${hit}`;
+}
+
 function statsRow(root, h, now, active, cols) {
   const c = CLASSES[h.cls];
   const need = xpNeed(h.level);
@@ -754,7 +854,7 @@ function statsRow(root, h, now, active, cols) {
   const b = biomeOf(zone);
 
   let status = null;
-  if (h.msg && now - h.msg.at < MSG_MS) {
+  if (h.msg && now - h.msg.at < (h.msg.ms || MSG_MS)) {
     status = color(GOLD, h.msg.text);
   } else if (!active) {
     const t = lastTurn(root);
@@ -774,6 +874,7 @@ function statsRow(root, h, now, active, cols) {
     [powers, 1],
     [color(b.color, `${b.icon} ${b.name}${cycleSuffix(zone)}`), 3],
     [`💀 ${h.kills}`, 2],
+    [targetText(h, active), 4.5],
     [status, 5],
   ].filter(p => p[0]);
 
@@ -882,7 +983,7 @@ function render(root, now, cols) {
 
 module.exports = {
   DIR, COMMAND_PREFIX, CLASSES, classKey, chooseClass, createCharacter, status,
-  display, partKey, setVisible, placeKey, setStatsPlace, load,
+  display, partKey, setVisible, placeKey, setStatsPlace, load, pluginVersion,
   onHookEvent, onStatusLine, render, displayWidth,
   newRoot, newHero, migrate, step, xpNeed, attackOf, weaponOf,
 };

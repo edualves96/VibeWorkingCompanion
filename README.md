@@ -13,9 +13,12 @@ unlocks weapons and powers. When Claude stops and waits for you, the hero waits 
 
 - **Work time is game time:** a 2m45s task is 2m45s of adventure, and the tokens Claude uses give bonus XP.
 - **Three classes:** 🧙 Mage, 🤺 Warrior and 🧝 Archer, each with its own save, weapons and powers.
-- **Seven biomes,** each with its own floor, enemies and a boss every ~10 minutes of work:
+- **Seven biomes,** each with its own floor, enemies and a boss every ~15 minutes of work:
   🌼 Meadow, 🌲 Dark Forest, 💎 Caves, 🌴 Coast, 🌵 Desert, 🪦 Graveyard, 🌋 Volcano. After the
   Volcano the world loops back to the Meadow, "II", with tougher enemies.
+- **Level milestones bring bosses:** a ⭐ mini boss (a "Giant" version of a zone enemy) at levels
+  5, 15, 25…, and a 👑 boss (an "Elder" version of the zone's boss, tougher than the one at the
+  end of the zone) at levels 10, 20, 30…
 - **Keeps your status line:** if you already have one, it stays on top and the companion goes under it.
 
 ## Install
@@ -48,6 +51,25 @@ and a recent Claude Code (built and tested with 2.1.286).
    ```
 
 Run `/vwc:commands` any time to see every command.
+
+## Updating
+
+Claude Code only updates plugins by itself for Anthropic's own marketplaces, so new versions of
+this one don't arrive until you turn that on or update by hand:
+
+- **Automatic (recommended):** `/plugin` → Marketplaces → `vibeworkcompanion` → Enable
+  auto-update. Claude Code then checks for a new version shortly after you start a session and
+  tells you when one is installed; run `/reload-plugins` to switch to it.
+- **By hand:**
+
+  ```
+  /plugin marketplace update vibeworkcompanion
+  /reload-plugins
+  ```
+
+After an update the stats row says `🆕 Updated to <version>` and what's new, for 30 seconds.
+`/vwc:commands` shows which version you have. Your heroes are kept: they live in the plugin's
+data folder, which updates don't touch.
 
 ## Commands
 
@@ -98,7 +120,17 @@ The hero takes one step per second of **working time**. Hooks tell it when Claud
   written nothing to its transcript for 10 minutes counts as waiting. One very long silent
   command (a 15-minute build, say) pauses the hero after 10 minutes until it finishes.
 
-XP comes from kills (`3 + zone + random(0..zone)`, bosses x10) and from tokens: every 2,000 tokens
+Enemies have life, which grows with the zone. Each hit does the class's base damage plus its
+per-level damage times your level, plus the weapon's bonus; a power that is ready multiplies it,
+and a critical hit doubles it. For a hero on pace, a normal enemy takes about 5 hits, a mini boss
+about 15, a zone boss about 35 and a level boss about 50; a hero ahead of the curve kills faster.
+While you fight, the stats row shows the enemy's life and the damage of each hit:
+
+```
+🧝 Archer Lv 13 ▰▱▱▱▱▱▱▱▱▱ 371/3086 XP · 🪶 Fletched Bow · 🌲 Dark Forest II · 💀 587 · 🐺 Wolf ▰▰▰▰▰▱▱▱▱▱ 136/304 -72
+```
+
+XP comes from kills (`1.6 * (3 + zone + random(0..zone))`, bosses x10) and from tokens: every 2,000 tokens
 Claude uses (input + cache writes + output, not cache reads) is worth one kill. Going from level
 `L` to `L+1` takes `10 + 1.4 * L^3` XP. Rough pacing: level 3 after 2 minutes of work, level 9 after
 an hour, level 15 after 3 hours, the last weapon after about 25 hours.
@@ -139,6 +171,11 @@ To share your version, push it to your fork; others install it with
 `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`, and the `/vwc:` prefix used in
 `scripts/companion.js` (`COMMAND_PREFIX`) and in `scripts/setup.js`.
 
+For every release, bump `version` in `.claude-plugin/plugin.json`. Claude Code compares it to
+decide whether there is an update, so changes pushed without a new version never reach anyone.
+Add a line for the new version to `WHATS_NEW` in `scripts/companion.js` to say what's new in the
+update notice.
+
 ## Customize
 
 Everything below is in `scripts/companion.js`.
@@ -148,15 +185,19 @@ Everything below is in `scripts/companion.js`.
 | Constant | Default | Meaning |
 |----------|---------|---------|
 | `STEP_MS` | `1000` | Working time per game step. Lower it to make the hero faster. |
-| `ZONE_LENGTH` | `600` | Steps per zone. A boss waits at the end of each zone. |
+| `ZONE_LENGTH` | `600` | Tiles per zone. A boss waits at the end of each zone. |
 | `TOKENS_PER_KILL` | `2000` | Tokens worth one kill's XP. Lower it for more token XP. |
+| `ENEMY_HP` | `[20, 60, 0.7]` | Enemy life: `20 + 60 * zone^0.7`, give or take 20%. Raise it for longer fights. |
+| `RANKS` | | Life and XP of mini bosses (`2.5`, `5`), zone bosses (`5`, `10`) and level bosses (`8`, `16`), as multiples of a normal enemy's. |
+| `KILL_XP` | `1.6` | Multiplier on the XP of every kill (and of tokens). Raise it to level faster. |
 | `WORLD_TILES` | `24` | Width of the world in tiles (each tile is 2 columns). |
 | `MSG_MS` | `10000` | How long messages like "🎉 Level 5!" stay visible. |
 | `MAX_GAP_MS` | `30000` | Gaps between refreshes longer than this are ignored. |
 | `SESSION_STALE_MS` | `60000` | A session silent for this long no longer counts as working. |
 
 Difficulty lives in `xpNeed()` (the level curve), `makeEnemy()` (enemy HP and XP) and `attackOf()`
-(hero damage, from the class's `atk`).
+(hero damage, from the class's `atk`). If you make fights longer or shorter, change `KILL_XP` the
+opposite way, or levelling slows down or speeds up with them.
 
 ### Add a biome
 
@@ -249,7 +290,7 @@ plugin updates:
 
 | File | What it is |
 |------|------------|
-| `state.json` | One hero per class, which one is active, what `/vwc:hide` has hidden, and where `/vwc:stats` put the stats row. Delete it to start everything over. |
+| `state.json` | One hero per class, which one is active, what `/vwc:hide` has hidden, where `/vwc:stats` put the stats row, and the last plugin version it saw (for the update notice). Delete it to start everything over. |
 | `backups/` | Heroes replaced by `/vwc:createchar`. To restore one, copy it into `state.json` under `heroes.<class>`. |
 | `statusline.js` | Small launcher that your status line runs; it finds the current plugin version. |
 | `previous-statusline.json` | The status line you had before setup. |

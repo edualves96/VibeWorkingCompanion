@@ -42,7 +42,9 @@ function commands() {
   const list = COMMANDS.map(([c, what]) => `  ${(p + c).padEnd(width)}${what}`);
   const shown = companion.display(companion.load(now));
   const state = `status bar ${shown.bar ? 'shown' : 'hidden'} · companion ${shown.companion ? 'shown' : 'hidden'} · stats ${shown.stats} the map`;
-  return ['VibeWorkCompanion commands', ...list, '', 'Your heroes:', companion.status(now), '', `Display: ${state}`].join('\n');
+  const version = companion.pluginVersion();
+  const title = version ? `VibeWorkCompanion ${version} commands` : 'VibeWorkCompanion commands';
+  return [title, ...list, '', 'Your heroes:', companion.status(now), '', `Display: ${state}`].join('\n');
 }
 
 function run() {
