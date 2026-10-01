@@ -93,6 +93,9 @@ The hero takes one step per second of **working time**. Hooks tell it when Claud
 - **One hero for all your windows:** it walks while at least one Claude Code session is working.
 - **Subagents don't count:** only the main conversation moves the hero.
 - **Sleep doesn't count:** gaps longer than 30 s (a sleeping laptop, a closed terminal) are ignored.
+- **A missed "finished" event can't keep it walking:** a session that has sent no hook event and
+  written nothing to its transcript for 10 minutes counts as waiting. One very long silent
+  command (a 15-minute build, say) pauses the hero after 10 minutes until it finishes.
 
 XP comes from kills (`3 + zone + random(0..zone)`, bosses x10) and from tokens: every 2,000 tokens
 Claude uses (input + cache writes + output, not cache reads) is worth one kill. Going from level

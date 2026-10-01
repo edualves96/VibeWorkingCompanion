@@ -17,6 +17,10 @@ const BACKUP_DIR = path.join(DIR, 'backups');
 const STEP_MS = 1000;             // one game step per second of active work
 const MAX_GAP_MS = 30000;         // longer gaps mean sleep or a closed CLI, not work
 const SESSION_STALE_MS = 60000;   // a session silent this long no longer counts as working
+// A session still marked working after this long with no hook event and no transcript
+// activity missed its "Claude finished" event (hooks not loaded yet, a crashed hook, an
+// undetected Esc), so it stops counting as working instead of moving the hero forever.
+const IDLE_CAP_MS = 10 * 60 * 1000;
 const SESSION_PRUNE_MS = 86400000;
 const TOKENS_PER_KILL = 2000;    // tokens worth one kill's XP in the current zone
 const ZONE_LENGTH = 600;          // steps per zone, about 10 minutes of work
@@ -244,7 +248,9 @@ function session(root, id, now) {
 }
 
 function anyActive(root, now) {
-  return Object.values(root.sessions).some(ss => ss.active && now - ss.lastSeen < SESSION_STALE_MS);
+  return Object.values(root.sessions).some(ss => ss.active
+    && now - ss.lastSeen < SESSION_STALE_MS
+    && now - Math.max(ss.eventAt || 0, ss.lastActivity || 0) < IDLE_CAP_MS);
 }
 
 // Advances the active hero by the working time since the last settle.
@@ -289,7 +295,7 @@ function isInterrupt(o) {
 
 // Reads transcript lines added since the last call: new API usage becomes XP,
 // and a user interrupt (Esc) pauses the hero, since no Stop hook fires for it.
-function ingestTranscript(root, ss, transcriptPath) {
+function ingestTranscript(root, ss, transcriptPath, now) {
   if (!transcriptPath) {
     return;
   }
@@ -322,6 +328,7 @@ function ingestTranscript(root, ss, transcriptPath) {
     return;
   }
   ss.cursor += lastNl + 1;
+  ss.lastActivity = now;
 
   let tokens = 0;
   for (const line of buf.toString('utf8', 0, lastNl).split('\n')) {
@@ -361,7 +368,7 @@ function ingestTranscript(root, ss, transcriptPath) {
     const kills = Math.floor(h.tokenCarry / TOKENS_PER_KILL);
     h.tokenCarry -= kills * TOKENS_PER_KILL;
     const zone = zoneOf(h.heroX);
-    gainXp(h, kills * (3 + zone + Math.floor(zone / 2)), Date.now());
+    gainXp(h, kills * (3 + zone + Math.floor(zone / 2)), now);
   }
 }
 
@@ -374,7 +381,7 @@ function onHookEvent(ev, at) {
       return;
     }
     const ss = session(root, ev.session_id, at);
-    ingestTranscript(root, ss, ev.transcript_path);
+    ingestTranscript(root, ss, ev.transcript_path, at);
     if (name === 'UserPromptSubmit') {
       const h = activeHero(root);
       ss.turn = { start: at, end: null, tokens: 0, cls: root.active, xp0: h ? h.totalXp : 0 };
@@ -400,7 +407,7 @@ function onStatusLine(data, now) {
   return update(now, 150, root => {
     if (data.session_id) {
       const ss = session(root, data.session_id, now);
-      ingestTranscript(root, ss, data.transcript_path);
+      ingestTranscript(root, ss, data.transcript_path, now);
     }
     settle(root, now);
     prune(root, now);
