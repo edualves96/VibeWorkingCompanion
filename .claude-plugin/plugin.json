@@ -1,7 +1,7 @@
 {
   "name": "vwc",
   "displayName": "VibeWorkCompanion",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "An idle RPG hero in your Claude Code status line. It fights, levels up and finds loot while Claude works, and waits while Claude waits on you.",
   "author": {
     "name": "Eduardo Alves"

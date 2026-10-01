@@ -47,6 +47,8 @@ and a recent Claude Code (built and tested with 2.1.286).
    /vwc:chooseclass archer
    ```
 
+Run `/vwc:commands` any time to see every command.
+
 ## Commands
 
 | Command | What it does |
@@ -55,6 +57,9 @@ and a recent Claude Code (built and tested with 2.1.286).
 | `/vwc:setup remove` | Turns the companion's status line off and puts back the one you had before (if any). It won't come back by itself. |
 | `/vwc:chooseclass <mage\|warrior\|archer>` | Switch class. The first time creates that hero; after that you resume its save. With no class, lists your heroes. |
 | `/vwc:createchar <mage\|warrior\|archer>` | Start over with a new level 1 hero of that class. The old one is backed up first. |
+| `/vwc:hide <bar\|companion\|all>` | Hide the status bar (the info row on top), the companion (the hero rows), or both. A hidden hero keeps adventuring in the background. The choice is remembered across restarts. |
+| `/vwc:show <bar\|companion\|all>` | Show them again. |
+| `/vwc:commands` | List every command, your heroes, and what is currently shown or hidden. |
 
 The commands run a small script before Claude sees anything, and then use Haiku to repeat the
 result, so they are quick and cheap. Claude never runs them on its own.
@@ -226,11 +231,11 @@ If you had a status line before `/vwc:setup`, it runs and is shown on top. Other
 | `.claude-plugin/plugin.json` | Plugin manifest (name `vwc`, version). |
 | `.claude-plugin/marketplace.json` | Makes this repository its own marketplace (`vibeworkcompanion`). |
 | `hooks/hooks.json` | The hooks that tell the companion when Claude is working. |
-| `skills/` | The `/vwc:setup`, `/vwc:chooseclass` and `/vwc:createchar` commands. |
+| `skills/` | The `/vwc:` commands: `setup`, `chooseclass`, `createchar`, `hide`, `show` and `commands`. |
 | `scripts/companion.js` | The engine: save file, classes, biomes, game rules, rendering. |
 | `scripts/statusline.js` | What the status line runs: info row plus the three companion rows. |
 | `scripts/hook.js` | What the hooks run. |
-| `scripts/cli.js` | Class switching and new characters. |
+| `scripts/cli.js` | Class switching, new characters, hide/show, and the command list. |
 | `scripts/setup.js` | Turns the status line on and off in your `settings.json`. |
 
 Your saves live in the plugin's data folder, `~/.claude/plugins/data/<plugin id>/`, which survives
@@ -238,7 +243,7 @@ plugin updates:
 
 | File | What it is |
 |------|------------|
-| `state.json` | One hero per class, plus which one is active. Delete it to start everything over. |
+| `state.json` | One hero per class, which one is active, and what `/vwc:hide` has hidden. Delete it to start everything over. |
 | `backups/` | Heroes replaced by `/vwc:createchar`. To restore one, copy it into `state.json` under `heroes.<class>`. |
 | `statusline.js` | Small launcher that your status line runs; it finds the current plugin version. |
 | `previous-statusline.json` | The status line you had before setup. |

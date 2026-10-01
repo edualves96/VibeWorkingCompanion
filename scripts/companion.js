@@ -474,6 +474,51 @@ function status(now) {
   return lines.join('\n');
 }
 
+// ---------- display (cli.js: hide / show) ----------
+
+const PARTS = { bar: 'status bar', companion: 'companion' };
+
+function display(root) {
+  return { bar: true, companion: true, ...(root.display || {}) };
+}
+
+function partKey(name) {
+  const key = String(name || '').trim().split(/\s+/)[0].toLowerCase();
+  return key === 'all' || PARTS[key] ? key : null;
+}
+
+// Hides or shows the status bar row, the companion rows, or both ('all'). Only what's drawn
+// changes: a hidden hero keeps adventuring in the background.
+function setVisible(part, visible, now) {
+  const parts = part === 'all' ? Object.keys(PARTS) : [part];
+  let text = '';
+  const { saved } = update(now, 3000, root => {
+    const d = display(root);
+    const changed = parts.some(p => d[p] !== visible);
+    for (const p of parts) {
+      d[p] = visible;
+    }
+    root.display = d;
+    const label = parts.length > 1 ? 'The status bar and the companion' : `The ${PARTS[part]}`;
+    const verb = parts.length > 1 ? 'are' : 'is';
+    if (!changed) {
+      text = `${label} ${verb} already ${visible ? 'visible' : 'hidden'}.`;
+    } else if (visible) {
+      text = `${label} ${verb} visible again.`;
+    } else {
+      text = `${label} ${verb} hidden.`;
+      if (parts.includes('companion')) {
+        text += ' Your hero keeps adventuring in the background.';
+      }
+      text += ` Bring ${parts.length > 1 ? 'them' : 'it'} back with ${COMMAND_PREFIX}show ${part}.`;
+    }
+    if (!d.bar && !d.companion && parts.length === 1 && !visible) {
+      text += `\nBoth are hidden now, so the status line is empty. ${COMMAND_PREFIX}show all brings everything back.`;
+    }
+  });
+  return saved ? text : 'The save file is busy right now. Try again in a moment.';
+}
+
 // ---------- game ----------
 
 function randInt(min, max) {
@@ -802,6 +847,7 @@ function render(root, now, cols) {
 
 module.exports = {
   DIR, COMMAND_PREFIX, CLASSES, classKey, chooseClass, createCharacter, status,
+  display, partKey, setVisible, load,
   onHookEvent, onStatusLine, render, displayWidth,
   newRoot, newHero, migrate, step, xpNeed, attackOf, weaponOf,
 };

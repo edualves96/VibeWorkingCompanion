@@ -157,16 +157,33 @@ process.stdin.on('end', () => {
   } catch {
     return;
   }
-  const rows = previousRows(raw) || [infoRow(data)];
+  const now = Date.now();
+  let root = null;
+  let error = null;
   try {
-    const now = Date.now();
-    // Claude Code pads the footer by 2 columns each side; 2 more stay spare so the right edge is never truncated.
-    const cols = (Number(process.env.COLUMNS) || 120) - 6;
-    const s = companion.onStatusLine(data, now);
-    rows.push(...companion.render(s, now, cols));
+    // Runs even when the companion is hidden, so the hero keeps adventuring in the background.
+    root = companion.onStatusLine(data, now);
   } catch (e) {
-    // A companion bug must never blank the info row.
-    rows.push(`${ESC}2mcompanion error: ${e.message}${RESET}`);
+    error = e;
+  }
+  // /vwc:hide and /vwc:show choose what is drawn. Both hidden prints nothing, which leaves the status line empty.
+  const show = root ? companion.display(root) : { bar: true, companion: true };
+  const rows = [];
+  if (show.bar) {
+    rows.push(...(previousRows(raw) || [infoRow(data)]));
+  }
+  if (show.companion) {
+    try {
+      if (error) {
+        throw error;
+      }
+      // Claude Code pads the footer by 2 columns each side; 2 more stay spare so the right edge is never truncated.
+      const cols = (Number(process.env.COLUMNS) || 120) - 6;
+      rows.push(...companion.render(root, now, cols));
+    } catch (e) {
+      // A companion bug must never blank the info row.
+      rows.push(`${ESC}2mcompanion error: ${e.message}${RESET}`);
+    }
   }
   process.stdout.write(rows.join('\n'));
 });
