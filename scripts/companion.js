@@ -61,6 +61,18 @@ const GROUP_SIZES = [0.6, 0.2, 0.12, 0.08];
 const GROUP_GAP = 3;
 // A group's enemies are weaker than one alone: GROUP_MEMBER of its life, damage and XP.
 const GROUP_MEMBER = 0.65;
+// Elite enemies: ELITE_CHANCE of the normal enemies (twice that at night) roll one of the TRAITS,
+// shown before their name in gold. They have ELITE.hp times the life and give ELITE.xp times the
+// XP, drop a piece of gear ELITE.gear of the time (with the rarity rolled twice, like a boss's),
+// and drop potions ELITE.potion times as often.
+const ELITE_CHANCE = 0.05;
+const ELITE = { hp: 2.5, xp: 3, gear: 0.25, potion: 3 };
+const TRAITS = {
+  swift: { name: 'Swift', what: 'dodges 1 hit in 4', dodge: 0.25 },
+  armored: { name: 'Armored', what: 'takes 40% less damage', armor: 0.4 },
+  vampiric: { name: 'Vampiric', what: 'heals by half the damage it deals', drain: 0.5 },
+  explosive: { name: 'Explosive', what: 'explodes when defeated, for 15% of the hero\'s life', blast: 0.15 },
+};
 // Area skills hit the target and every enemy up to AREA tiles behind it, adding AREA_MULT of the
 // extra damage a single-target skill of the same strength would.
 const AREA = 3;
@@ -110,6 +122,40 @@ const ALLY_KINDS = [
   { icon: '🧚', name: 'Fairy', a: 'A fairy', hit: '🌸' },
   { icon: '🦄', name: 'Unicorn', a: 'A unicorn', hit: '🌈' },
 ];
+// Rested XP: a break from work longer than RESTED_AFTER fills the hero's rested pool with
+// RESTED_RATE of the rest of the break, up to RESTED_MAX. While the pool lasts, each second of
+// work spends a second of it, and kills give RESTED_XP more XP (+100%).
+const RESTED_AFTER = 5 * 60 * 1000;
+const RESTED_RATE = 0.5;
+const RESTED_MAX = 60 * 60 * 1000;
+const RESTED_XP = 1;
+const RESTED_PURPLE = '38;2;167;139;250';  // the color of the XP bar
+// Day and night follow the local clock: night runs from NIGHT_FROM to NIGHT_TO o'clock, with an
+// hour of dusk before it and of dawn after. At night the floor is NIGHT_LIGHT as bright, and
+// bluer, and each biome's night creature (`night` in BIOMES) comes out with the other enemies.
+const NIGHT_FROM = 20;
+const NIGHT_TO = 6;
+const NIGHT_LIGHT = 0.45;
+// Seasonal events, by month (0 is January), from the 1st to the last day. A season adds its decor
+// to a third of every biome's and is announced on its first day (`news`). At Halloween, enemies
+// drop 🍬 candy CANDY_DROP of the time, which heals CANDY_HEAL of the hero's life as it walks over
+// it, and GHOST_WAVE of the groups are a `wave` of ghosts. In Winter, `enemy` is SEASON_ENEMY of
+// the enemies and `snow` covers the floor, except in a `hot` biome.
+const SEASONS = {
+  9: {
+    name: 'Halloween', icon: '🎃', decor: '🎃', candy: true, wave: ['👻', 'Ghost', '🟣'],
+    news: '🎃 Halloween: pumpkins, 🍬 candy and 👻 ghost waves until the 31st',
+  },
+  11: {
+    name: 'Winter', icon: '🎄', decor: '🎄', enemy: ['⛄', 'Snowman', '⚪'],
+    snow: { fg: '38;2;241;245;249', marks: ['*', '*', '.'] },
+    news: '🎄 Winter: trees, ⛄ snowmen and snow until the 31st',
+  },
+};
+const CANDY_DROP = 0.08;
+const CANDY_HEAL = 0.2;
+const GHOST_WAVE = 0.15;
+const SEASON_ENEMY = 0.12;
 // /vwc:journal: each hero keeps its last JOURNAL_SIZE notable moments, and the journal shows the
 // last JOURNAL_SHOWN lines of all heroes together.
 const JOURNAL_SIZE = 100;
@@ -125,6 +171,26 @@ const UPDATE_MSG_MS = 30000;      // the "updated" notice stays longer than othe
 const WHATS_NEW = {
   '1.3.0': 'enemies have life now, and every 5th level summons a boss',
   '1.4.0': `skills are random now, dropped by level bosses: ${COMMAND_PREFIX}skills`,
+  '1.17.0': root => (olderThan(root.seenVersion, '1.16.0')
+    ? `📇 ${COMMAND_PREFIX}card to share your hero, and ${COMMAND_PREFIX}journal ${root.active || 'archer'} for one hero's journal`
+    : `📜 ${COMMAND_PREFIX}journal ${root.active || 'archer'} shows one hero's journal, ${COMMAND_PREFIX}journal all everything kept`),
+  '1.16.0': root => (olderThan(root.seenVersion, '1.15.0')
+    ? `📇 ${COMMAND_PREFIX}card to share your hero, 💠 elite enemies, 🎃 seasonal events`
+    : `📇 ${COMMAND_PREFIX}card: a card of your hero to paste in Slack or a PR`),
+  '1.15.0': root => (olderThan(root.seenVersion, '1.14.0')
+    ? `💠 elite enemies, 🎃 seasonal events${olderThan(root.seenVersion, '1.13.0') ? ', 🌙 day and night' : ''}`
+    : '💠 elite enemies: Swift, Armored, Vampiric or Explosive, with better loot'),
+  '1.14.0': root => {
+    const s = season(Date.now());
+    const what = s ? s.news : '🎃 seasonal events: Halloween in October, Winter in December';
+    return olderThan(root.seenVersion, '1.13.0') ? `🌙 day and night · ${what}` : what;
+  },
+  '1.13.0': root => (olderThan(root.seenVersion, '1.12.0')
+    ? `🌙 day and night, 💤 rested XP after breaks, 🦊 subagent allies, ${COMMAND_PREFIX}journal`
+    : '🌙 day and night: the floor follows your clock, and night creatures come out'),
+  '1.12.0': root => (olderThan(root.seenVersion, '1.11.0')
+    ? `💤 rested XP after breaks, 🦊 subagent allies, 🔩 reforges, ${COMMAND_PREFIX}journal`
+    : '💤 take a break: you come back rested, with double XP from kills'),
   '1.11.0': root => (olderThan(root.seenVersion, '1.10.0')
     ? `🦊 subagent allies, 🔩 reforges, ${COMMAND_PREFIX}journal, ${COMMAND_PREFIX}statistics`
     : `🦊 subagents fight beside you, 🔩 gear reforges, ${COMMAND_PREFIX}journal`),
@@ -156,6 +222,8 @@ const ACHIEVEMENT_GROUPS = {
     { id: 'crowd-control', name: 'Crowd Control', what: 'hit 4 enemies with one area skill', of: 'areaHits', goal: 4 },
     { id: 'pack-hunter', name: 'Pack Hunter', what: 'defeat 500 groups of enemies', of: 'groups', goal: 500 },
     { id: 'fellowship', name: 'Fellowship', what: 'be joined by an ally (a subagent)', of: 'allies', goal: 1 },
+    { id: 'elite-hunter', name: 'Elite Hunter', what: 'defeat 100 elite enemies', of: 'elites', goal: 100 },
+    { id: 'night-stalker', name: 'Night Stalker', what: 'defeat 50 creatures of the night', of: 'nightKills', goal: 50 },
     { id: 'better-together', name: 'Better Together', what: 'defeat 100 enemies with an ally at your side', of: 'allyKills', goal: 100 },
   ],
   Bosses: [
@@ -199,12 +267,17 @@ const ACHIEVEMENT_GROUPS = {
     { id: 'tinkerer', name: 'Tinkerer', what: 'reforge a piece of gear', of: 'forged', goal: 1 },
     { id: 'master-smith', name: 'Master Smith', what: 'reforge gear 50 times', of: 'forged', goal: 50 },
   ],
+  Seasons: [
+    { id: 'trick-or-treat', name: 'Trick or Treat', what: 'eat 31 pieces of 🍬 candy at Halloween', of: 'candy', goal: 31 },
+    { id: 'snowball-fight', name: 'Snowball Fight', what: 'defeat 100 ⛄ snowmen in December', of: 'snowmen', goal: 100 },
+  ],
   Work: [
     { id: 'clocked-in', name: 'Clocked In', what: 'work for 1 hour', of: 'workHours', goal: 1 },
     { id: 'full-shift', name: 'Full Shift', what: 'work for 8 hours', of: 'workHours', goal: 8 },
     { id: 'work-week', name: 'Work Week', what: 'work for 40 hours', of: 'workHours', goal: 40 },
     { id: 'token-burner', name: 'Token Burner', what: 'use 1 million tokens', of: 'tokens', goal: 1e6 },
     { id: 'token-furnace', name: 'Token Furnace', what: 'use 10 million tokens', of: 'tokens', goal: 1e7 },
+    { id: 'well-rested', name: 'Well Rested', what: 'come back to a full hour of rested XP', of: 'fullRests', goal: 1 },
     { id: 'deep-work', name: 'Deep Work', what: 'a single Claude turn that runs for 30 minutes', of: 'longestTurn', goal: 30 },
     { id: 'night-owl', name: 'Night Owl', what: 'work between midnight and 5 a.m.', of: 'night', goal: 1, secret: true },
     { id: 'weekend-warrior', name: 'Weekend Warrior', what: 'work on a Saturday or Sunday', of: 'weekend', goal: 1, secret: true },
@@ -213,23 +286,23 @@ const ACHIEVEMENT_GROUPS = {
 const ACHIEVEMENTS = Object.entries(ACHIEVEMENT_GROUPS).flatMap(([group, list]) => list.map(a => ({ ...a, group })));
 
 // enemies and boss: [icon, name], plus the icon of what it shoots for an enemy that attacks from
-// SHOT_RANGE tiles instead of walking up to the hero.
+// SHOT_RANGE tiles instead of walking up to the hero. night: the enemy that joins them at night.
 // floor: background and mark colors plus the ASCII marks scattered on about 1 cell in 3
 // (1 column each, so the floor lines up under the 2-column world tiles in every font).
 const BIOMES = [
-  { name: 'Meadow', icon: '🌼', color: '38;2;134;239;172', decor: ['🌼', '🌳', '🌾'], enemies: [['🐀', 'Rat'], ['🐍', 'Snake', '🟢'], ['🐗', 'Boar']], boss: ['🐻', 'Bear'],
+  { name: 'Meadow', icon: '🌼', color: '38;2;134;239;172', decor: ['🌼', '🌳', '🌾'], enemies: [['🐀', 'Rat'], ['🐍', 'Snake', '🟢'], ['🐗', 'Boar']], night: ['🐺', 'Wolf'], boss: ['🐻', 'Bear'],
     floor: { bg: '48;2;46;125;50', fg: '38;2;163;230;53', marks: [',', '"', '\''] } },
-  { name: 'Dark Forest', icon: '🌲', color: '38;2;74;222;128', decor: ['🌲', '🍄', '🌲'], enemies: [['🐺', 'Wolf'], ['🦇', 'Bat', '🟣'], ['🐗', 'Boar']], boss: ['🦍', 'Ape King'],
+  { name: 'Dark Forest', icon: '🌲', color: '38;2;74;222;128', decor: ['🌲', '🍄', '🌲'], enemies: [['🐺', 'Wolf'], ['🦇', 'Bat', '🟣'], ['🐗', 'Boar']], night: ['👻', 'Wisp', '🟣'], boss: ['🦍', 'Ape King'],
     floor: { bg: '48;2;20;61;34', fg: '38;2;101;163;13', marks: ['"', ','] } },
-  { name: 'Caves', icon: '💎', color: '38;2;148;163;184', decor: ['🪨', '💎', '🦴'], enemies: [['🦇', 'Bat', '🟣'], ['👺', 'Goblin', '🟤'], ['🐛', 'Crawler']], boss: ['👹', 'Ogre'],
+  { name: 'Caves', icon: '💎', color: '38;2;148;163;184', decor: ['🪨', '💎', '🦴'], enemies: [['🦇', 'Bat', '🟣'], ['👺', 'Goblin', '🟤'], ['🐛', 'Crawler']], night: ['🧟', 'Ghoul'], boss: ['👹', 'Ogre'],
     floor: { bg: '48;2;64;64;72', fg: '38;2;148;163;184', marks: ['.', '_', ':'] } },
-  { name: 'Coast', icon: '🌴', color: '38;2;56;189;248', decor: ['🌴', '🐚', '🌴'], enemies: [['🦀', 'Crab'], ['🦑', 'Squid', '💧'], ['🦈', 'Shark']], boss: ['🐙', 'Kraken', '💧'],
+  { name: 'Coast', icon: '🌴', color: '38;2;56;189;248', decor: ['🌴', '🐚', '🌴'], enemies: [['🦀', 'Crab'], ['🦑', 'Squid', '💧'], ['🦈', 'Shark']], night: ['🧜', 'Siren', '🎵'], boss: ['🐙', 'Kraken', '💧'],
     floor: { bg: '48;2;14;90;130', fg: '38;2;125;211;252', marks: ['~'] } },
-  { name: 'Desert', icon: '🌵', color: '38;2;250;204;21', decor: ['🌵', '🦴', '🐪'], enemies: [['🦂', 'Scorpion'], ['🐍', 'Viper', '🟢'], ['🦅', 'Vulture']], boss: ['🦖', 'Sand Rex'],
+  { name: 'Desert', icon: '🌵', color: '38;2;250;204;21', decor: ['🌵', '🦴', '🐪'], enemies: [['🦂', 'Scorpion'], ['🐍', 'Viper', '🟢'], ['🦅', 'Vulture']], night: ['🪲', 'Scarab'], boss: ['🦖', 'Sand Rex'],
     floor: { bg: '48;2;180;130;40', fg: '38;2;253;230;138', marks: ['.', ':'] } },
-  { name: 'Graveyard', icon: '🪦', color: '38;2;192;132;252', decor: ['🪦', '🦴', '🌑'], enemies: [['💀', 'Skeleton'], ['🧟', 'Zombie'], ['👻', 'Ghost', '🟣']], boss: ['🧛', 'Vampire'],
+  { name: 'Graveyard', icon: '🪦', color: '38;2;192;132;252', decor: ['🪦', '🦴', '🌑'], enemies: [['💀', 'Skeleton'], ['🧟', 'Zombie'], ['👻', 'Ghost', '🟣']], night: ['🦇', 'Vampire Bat', '🟣'], boss: ['🧛', 'Vampire'],
     floor: { bg: '48;2;46;30;66', fg: '38;2;120;100;140', marks: ['.', ',', '+'] } },
-  { name: 'Volcano', icon: '🌋', color: '38;2;248;113;113', decor: ['🌋', '🔥', '🪨'], enemies: [['👹', 'Demon'], ['🦎', 'Salamander'], ['🐲', 'Drake', '🔴']], boss: ['🐉', 'Dragon', '🔴'],
+  { name: 'Volcano', icon: '🌋', color: '38;2;248;113;113', hot: true, decor: ['🌋', '🔥', '🪨'], enemies: [['👹', 'Demon'], ['🦎', 'Salamander'], ['🐲', 'Drake', '🔴']], night: ['🧞', 'Ifrit', '🔴'], boss: ['🐉', 'Dragon', '🔴'],
     floor: { bg: '48;2;100;20;20', fg: '38;2;251;146;60', marks: ['^', '~'] } },
 ];
 
@@ -322,7 +395,10 @@ function newStats() {
 // skills and `gear` pieces of gear by rarity, `left` the gear left behind, `closeCalls` wins with
 // under 10% life left, `potions` the potions drunk, `maxAreaHits` the most enemies one area skill
 // hit, `groups` the groups of enemies defeated, `allies` the allies that joined, `allyKills` the
-// enemies defeated with an ally at the hero's side and `forged` the reforges.
+// enemies defeated with an ally at the hero's side, `forged` the reforges, `restedXp` the extra
+// XP that rested kills gave and `fullRests` the times the hero came back to a full rested pool and `nightKills` the night
+// creatures defeated, `candy` the candy eaten, `snowmen` the snowmen defeated and `elites` the
+// elite enemies defeated.
 // For /vwc:statistics: `tokens` used while the hero was active, and the Claude turns played with
 // it: how many, their total time (ms) and tokens, the longest and shortest (ms, null before the
 // first) and the most tokens in one. Heroes from before 1.10.0 count these from `countedFrom` on.
@@ -330,7 +406,7 @@ function newTally() {
   const byRarity = () => ({ common: 0, rare: 0, epic: 0, legendary: 0 });
   return {
     maxHit: 0, skillCrits: 0, minis: 0, elders: 0, replaced: 0, found: byRarity(), gear: byRarity(), left: 0,
-    knockouts: 0, closeCalls: 0, potions: 0, maxAreaHits: 0, groups: 0, allies: 0, allyKills: 0, forged: 0,
+    knockouts: 0, closeCalls: 0, potions: 0, maxAreaHits: 0, groups: 0, allies: 0, allyKills: 0, forged: 0, restedXp: 0, fullRests: 0, nightKills: 0, candy: 0, snowmen: 0, elites: 0,
     tokens: 0, turns: 0, turnMs: 0, turnTokens: 0, longestTurn: 0, shortestTurn: null, mostTokens: 0,
   };
 }
@@ -360,6 +436,8 @@ function newHero(cls, now) {
     gear: {},        // slot -> the piece worn there
     loot: [],        // what salvaged gear left on the ground, until it scrolls out of view
     shards: 0,       // from salvaged gear, until there are enough for a reforge
+    rested: 0,       // ms of rested XP left (see RESTED_MAX)
+    lastWorked: null, // when the hero last worked, so a break can be measured
     tally: newTally(),
     cooldowns: {},   // unused now; read by older versions that may still run in another window
     fx: null,
@@ -404,6 +482,11 @@ function migrate(s, now = Date.now()) {
     }
     if (!h.journal) {
       h.journal = [];
+    }
+    // Rested XP starts counting at the first break after 1.12.0.
+    if (h.rested == null) {
+      h.rested = 0;
+      h.lastWorked = null;
     }
     // Gear left behind before 1.11.0 is salvaged too, as common pieces, and reforged right away.
     // Only the journal says so, leaving the stats row to the update notice.
@@ -571,6 +654,7 @@ function settle(root, now) {
   if (!h || gap > MAX_GAP_MS || !anyActive(root, now)) {
     return 0;
   }
+  comeBack(h, now);
   h.carryMs += gap;
   const allies = fightingAllies(root, now);
   let steps = 0;
@@ -593,6 +677,33 @@ function prune(root, now) {
       leave(root, id);
     }
   }
+}
+
+// ---------- rested XP ----------
+
+// The hero's rested pool (ms) at `now`: what's left of it, plus what the break since the hero
+// last worked adds. A hero that never worked yet has had no break.
+function restedPool(h, now) {
+  const rest = h.lastWorked ? now - h.lastWorked - RESTED_AFTER : 0;
+  return Math.max(h.rested, Math.min(RESTED_MAX, h.rested + Math.max(0, rest) * RESTED_RATE));
+}
+
+// Work is going on: a break that just ended goes into the rested pool.
+function comeBack(h, now) {
+  const pool = restedPool(h, now);
+  if (pool > h.rested) {
+    h.rested = pool;
+    if (pool >= RESTED_MAX) {
+      h.tally.fullRests++;
+    }
+    setMsg(h, `💤 Rested: +${RESTED_XP * 100}% XP from kills for ${restedText(pool)}`, now);
+  }
+  h.lastWorked = now;
+}
+
+// "12m", rounded up so a pool that's nearly gone still shows.
+function restedText(ms) {
+  return `${Math.ceil(ms / 60000)}m`;
 }
 
 // ---------- allies ----------
@@ -838,23 +949,30 @@ function onStatusLine(data, now) {
     prune(root, now);
     // Before the update notice, which reports what a save from an older version already earned.
     checkAchievements(root, now, worked);
+    noticeNightfall(root, now);
+    noticeSeason(root, now);
     noticeUpdate(root, now);
     const h = activeHero(root);
     debug(`tick cols=${process.env.COLUMNS} active=${anyActive(root, now)} class=${root.active} step=${h ? h.step : '-'}`);
   }).root;
 }
 
-let versionCache;
+let manifestCache;
 
-function pluginVersion() {
-  if (versionCache === undefined) {
+// The plugin's .claude-plugin/plugin.json, or {} if it can't be read.
+function manifest() {
+  if (manifestCache === undefined) {
     try {
-      versionCache = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '.claude-plugin', 'plugin.json'), 'utf8')).version || null;
+      manifestCache = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '.claude-plugin', 'plugin.json'), 'utf8'));
     } catch {
-      versionCache = null;
+      manifestCache = {};
     }
   }
-  return versionCache;
+  return manifestCache;
+}
+
+function pluginVersion() {
+  return manifest().version || null;
 }
 
 // Whether version `a` (missing on saves from before update notices) comes before `b`.
@@ -1131,14 +1249,14 @@ function heroStatistics(h) {
     ['Work time', h.step > 0 ? formatDuration(h.step * 1000) : 'none yet'],
     ['Tokens', `${shortNumber(t.tokens)}${perTurn}${since}`],
     ['Turns', `${turns}${since}`],
-    ['XP', `${shortNumber(h.totalXp)}${perHour(h.totalXp, h.step)}`],
-    ['Kills', `${shortNumber(h.kills)} · ${plural(t.groups, 'group')}${perHour(h.kills, h.step)}`],
+    ['XP', `${shortNumber(h.totalXp)}${perHour(h.totalXp, h.step)}${t.restedXp > 0 ? ` · ${shortNumber(t.restedXp)} from rested kills` : ''}`],
+    ['Kills', `${shortNumber(h.kills)} · ${plural(t.groups, 'group')} · ${plural(t.elites, 'elite')}${perHour(h.kills, h.step)}`],
     // A zone's boss must be beaten to leave it, so the zone is also how many zone bosses fell.
     ['Bosses', `${plural(zoneOf(h.heroX), 'zone boss', 'zone bosses')} · ${plural(t.minis, 'mini boss', 'mini bosses')} · ${plural(t.elders, 'Elder boss', 'Elder bosses')}`],
     ['Hits', `biggest ${shortNumber(t.maxHit)} · ${plural(t.skillCrits, 'critical skill hit')}`],
     ['Skills found', `${foundText(t.found)} · ${shortNumber(t.replaced)} replaced`],
     ['Gear found', `${foundText(t.gear)} · ${shortNumber(t.left)} salvaged · ${plural(t.forged, 'reforge')}`],
-    ['Survival', `${plural(t.potions, 'potion')} drunk · ${plural(t.knockouts, 'knockout')} · ${plural(t.closeCalls, 'close call')}`],
+    ['Survival', `${plural(t.potions, 'potion')} drunk · ${plural(t.knockouts, 'knockout')} · ${plural(t.closeCalls, 'close call')}${t.candy > 0 ? ` · ${plural(t.candy, 'candy', 'candies')} eaten` : ''}`],
     ['Allies', `${plural(t.allies, 'ally', 'allies')} joined · ${plural(t.allyKills, 'kill')} together`],
   ];
   return rows.map(([label, value]) => `    ${label.padEnd(14)}${value}`);
@@ -1179,6 +1297,68 @@ function statisticsReport(now) {
   return lines.join('\n');
 }
 
+// /vwc:card: one hero (the active one, a class, or "all") as a short card to paste in a chat or a
+// PR. It has no right border: emoji widths differ between apps, so a right edge would be jagged.
+function cardReport(arg, now) {
+  const root = loadSaved(now);
+  const word = String(arg || '').trim().toLowerCase();
+  const usage = `Usage: ${COMMAND_PREFIX}card, ${COMMAND_PREFIX}card <${Object.keys(CLASSES).join(' | ')}> or ${COMMAND_PREFIX}card all`;
+  if (Object.keys(root.heroes).length === 0) {
+    return `No heroes yet. Pick one with ${COMMAND_PREFIX}chooseclass.`;
+  }
+  let classes;
+  if (!word) {
+    classes = [root.active];
+  } else if (word === 'all') {
+    classes = Object.keys(CLASSES).filter(k => root.heroes[k]);
+  } else if (classKey(word)) {
+    classes = [classKey(word)];
+  } else {
+    return `"${arg.trim()}" is not a class. ${usage}`;
+  }
+  const missing = classes.find(k => !root.heroes[k]);
+  if (missing) {
+    return `No ${CLASSES[missing].icon} ${CLASSES[missing].name} yet. ${usage}`;
+  }
+  return classes.map(k => heroCard(root, root.heroes[k])).join('\n\n');
+}
+
+function heroCard(root, h) {
+  const c = CLASSES[h.cls];
+  const t = h.tally;
+  const w = weaponOf(h);
+  const title = `${c.icon} ${c.name} · Level ${h.level}`;
+  const skills = h.skills.map(s => `${s.icon} ${s.name} (${s.rarity})`);
+  const bosses = zoneOf(h.heroX) + t.minis + t.elders;
+  const fights = [whereText(h), `💀 ${plural(h.kills, 'kill')}`, `🏆 ${plural(bosses, 'boss', 'bosses')}`];
+  if (t.maxHit > 0) {
+    fights.push(`💥 biggest hit ${shortNumber(t.maxHit)}`);
+  }
+  const worn = Object.values(h.gear);
+  let gear = 'no gear yet';
+  if (worn.length > 0) {
+    const best = worn.reduce((a, b) => (gearPower(b) > gearPower(a) ? b : a));
+    const total = {};
+    for (const k of Object.keys(GEAR_STATS)) {
+      if (gearBonus(h, k) > 0) {
+        total[k] = gearBonus(h, k);
+      }
+    }
+    gear = `${best.icon} ${gearName(best)} (${best.rarity}) · ${worn.length} of ${Object.keys(GEAR_SLOTS).length} gear slots · ${statsText(total)}`;
+  }
+  const work = [`⏳ ${formatDuration(h.step * 1000)} of work`];
+  if (t.tokens > 0) {
+    work.push(`${shortNumber(t.tokens)} tokens`);
+  }
+  work.push(`🏅 ${earnedCount(root)} of ${ACHIEVEMENTS.length} achievements`);
+  const link = String(manifest().homepage || '').replace(/^https?:\/\//, '');
+  const footer = ['VibeWorkCompanion', pluginVersion(), link && `· ${link}`].filter(Boolean).join(' ');
+  const lines = [[`${w.icon} ${w.name}`, ...skills].join(' · '), fights.join(' · '), gear, work.join(' · ')];
+  const width = Math.max(displayWidth(title), displayWidth(footer)) + 6;
+  const rule = text => `─ ${text} ${'─'.repeat(Math.max(3, width - displayWidth(text)))}`;
+  return [`╭${rule(title)}`, ...lines.map(l => `│ ${l}`), `╰${rule(footer)}`].join('\n');
+}
+
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 function localTime(at) {
@@ -1187,15 +1367,28 @@ function localTime(at) {
 }
 
 // /vwc:journal: every hero's notable moments by day, oldest first, so the newest end up right
-// above your prompt. A hero's moments from the same minute share a line.
-function journalReport(now) {
+// above your prompt. A hero's moments from the same minute share a line. `arg` can name a class
+// for that hero's moments only, and say "all" for everything kept instead of the last
+// JOURNAL_SHOWN lines.
+function journalReport(arg, now) {
   const root = loadSaved(now);
   if (Object.keys(root.heroes).length === 0) {
     return `No heroes yet. Pick one with ${COMMAND_PREFIX}chooseclass.`;
   }
+  const usage = `Usage: ${COMMAND_PREFIX}journal, ${COMMAND_PREFIX}journal <${Object.keys(CLASSES).join(' | ')}>, ${COMMAND_PREFIX}journal all, or a class and all`;
+  const words = String(arg || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const unknown = words.find(w => w !== 'all' && !classKey(w));
+  if (unknown) {
+    return `"${unknown}" is not a class or "all". ${usage}`;
+  }
+  const all = words.includes('all');
+  const only = words.map(classKey).find(Boolean) || null;
+  if (only && !root.heroes[only]) {
+    return `No ${CLASSES[only].icon} ${CLASSES[only].name} yet. ${usage}`;
+  }
   const minute = at => `${localDate(at)} ${localTime(at)}`;
   const moments = [];
-  for (const [cls, h] of Object.entries(root.heroes)) {
+  for (const [cls, h] of Object.entries(root.heroes).filter(([cls]) => !only || cls === only)) {
     let last = null;
     for (const e of h.journal) {
       if (last && minute(last.at) === minute(e.at)) {
@@ -1208,14 +1401,15 @@ function journalReport(now) {
   }
   const what = 'Level ups, new weapons and biomes, bosses, skills, gear worn, epic and legendary gear salvaged,'
     + '\nreforges, knockouts and achievements';
+  const whose = only ? ` · ${CLASSES[only].icon} ${CLASSES[only].name}` : '';
   if (moments.length === 0) {
-    return `📜 Journal · nothing written yet\n\n${what} are written down as they happen.`;
+    return `📜 Journal${whose} · nothing written yet\n\n${what} are written down as they happen.`;
   }
   // A stable sort, so each hero's moments keep their order.
   moments.sort((a, b) => a.at - b.at);
-  const shown = moments.slice(-JOURNAL_SHOWN);
+  const shown = all ? moments : moments.slice(-JOURNAL_SHOWN);
   const count = shown.length < moments.length ? `the last ${shown.length} of ${moments.length} moments` : plural(moments.length, 'moment');
-  const lines = [`📜 Journal · ${count}`];
+  const lines = [`📜 Journal${whose} · ${count}`];
   let day = null;
   for (const m of shown) {
     if (localDate(m.at) !== day) {
@@ -1225,6 +1419,16 @@ function journalReport(now) {
     lines.push(`  ${localTime(m.at)} ${CLASSES[m.cls].icon} ${m.texts.join(' · ')}`);
   }
   lines.push('', `${what} are written down as they happen. Each hero keeps its last ${JOURNAL_SIZE}.`);
+  const tips = [];
+  if (!only && Object.keys(root.heroes).length > 1) {
+    tips.push(`${COMMAND_PREFIX}journal <class> shows one hero`);
+  }
+  if (shown.length < moments.length) {
+    tips.push(`${COMMAND_PREFIX}journal ${only ? `${only} ` : ''}all shows all ${moments.length}`);
+  }
+  if (tips.length > 0) {
+    lines.push(`${tips.join(', and ')}.`);
+  }
   return lines.join('\n');
 }
 
@@ -1374,19 +1578,55 @@ function killXp(zone, roll) {
   return Math.round((3 + zone + roll) * KILL_XP);
 }
 
-// Bosses and elder bosses are the biome's boss; normal enemies and mini bosses one of its enemies.
-// `boss` marks every kind but normal, for the "Defeated" message.
-function makeEnemy(x, zone, rank = 'normal') {
+// Bosses and elder bosses are the biome's boss; normal enemies and mini bosses one of its enemies,
+// or at night its night creature too (marked `night`), and in season the season's enemy. `forced`
+// picks the kind instead (a ghost wave's ghosts). `boss` marks every kind but normal, for the
+// "Defeated" message.
+function makeEnemy(x, zone, rank = 'normal', now = Date.now(), forced = null) {
   const b = biomeOf(zone);
   const r = RANKS[rank];
-  const [icon, name, shot] = rank === 'boss' || rank === 'elder' ? b.boss : b.enemies[randInt(0, b.enemies.length - 1)];
+  const s = season(now);
+  const bossy = rank === 'boss' || rank === 'elder';
+  const seasonal = s && s.enemy && !b.hot && Math.random() < SEASON_ENEMY;
+  const kind = forced || (bossy ? b.boss : seasonal ? s.enemy : pick(isNight(now) ? [...b.enemies, b.night] : b.enemies));
+  const [icon, name, shot] = kind;
   const hp = Math.round(baseLife(zone) * r.hp * (rank === 'normal' ? 0.8 + Math.random() * 0.4 : 1));
   const xp = killXp(zone, randInt(0, zone)) * r.xp;
   const foe = { x, icon, name: r.prefix ? `${r.prefix} ${name}` : name, hp, max: hp, xp, boss: rank !== 'normal', ...enemyAttack(zone, rank) };
   if (shot) {
     foe.shot = shot;
   }
+  if (kind === b.night) {
+    foe.night = true;
+  }
+  if (s && kind === s.enemy) {
+    foe.snowman = true;
+  }
+  if (rank === 'normal' && Math.random() < ELITE_CHANCE * (isNight(now) ? 2 : 1)) {
+    makeElite(foe);
+  }
   return foe;
+}
+
+function makeElite(foe) {
+  const trait = pick(Object.keys(TRAITS));
+  foe.trait = trait;
+  foe.elite = true;
+  foe.name = `${TRAITS[trait].name} ${foe.name}`;
+  foe.hp = foe.max = Math.round(foe.max * ELITE.hp);
+  foe.xp = Math.round(foe.xp * ELITE.xp);
+}
+
+// Deals `dmg` to `e`: less to an armored elite, and nothing if a swift one dodges. Returns the
+// damage dealt, or null for a dodge.
+function strike(e, dmg) {
+  const t = TRAITS[e.trait];
+  if (t && t.dodge && Math.random() < t.dodge) {
+    return null;
+  }
+  const dealt = t && t.armor ? Math.max(1, Math.round(dmg * (1 - t.armor))) : dmg;
+  e.hp -= dealt;
+  return dealt;
 }
 
 // A normal enemy's life in `zone`, before the 20% spread.
@@ -1403,18 +1643,20 @@ function maxLife(h) {
   return Math.round((base + perLevel * Math.pow(h.level, power)) * CLASSES[h.cls].life * (1 + gearBonus(h, 'life') / 100));
 }
 
-function spawnAhead(h) {
+function spawnAhead(h, now) {
   while (h.nextSpawnX <= h.heroX + VIEW_AHEAD) {
     const bossX = (h.bossZone + 1) * ZONE_LENGTH;
     if (h.nextSpawnX >= bossX - 3) {
-      h.enemies.push(makeEnemy(bossX, h.bossZone, 'boss'));
+      h.enemies.push(makeEnemy(bossX, h.bossZone, 'boss', now));
       h.bossZone++;
       h.nextSpawnX = bossX + randInt(6, 12);
     } else {
       // A group's enemies share `group` (where it spawned), so they fight together.
       const size = Math.min(groupSize(), bossX - 1 - h.nextSpawnX);
+      const s = season(now);
+      const wave = size > 1 && s && s.wave && Math.random() < GHOST_WAVE ? s.wave : null;
       for (let i = 0; i < size; i++) {
-        const foe = makeEnemy(h.nextSpawnX + i, h.bossZone);
+        const foe = makeEnemy(h.nextSpawnX + i, h.bossZone, 'normal', now, wave);
         if (size > 1) {
           foe.group = h.nextSpawnX;
           foe.hp = foe.max = Math.max(1, Math.round(foe.max * GROUP_MEMBER));
@@ -1453,7 +1695,7 @@ function summon(h, rank, now) {
   while (x === zoneBossX || h.enemies.some(e => e.x === x)) {
     x++;
   }
-  const foe = makeEnemy(x, zoneOf(x), rank);
+  const foe = makeEnemy(x, zoneOf(x), rank, now);
   foe.drop = h.level;
   h.enemies.push(foe);
   h.enemies.sort((a, b) => a.x - b.x);
@@ -1687,6 +1929,11 @@ function counts(h) {
     allies: t.allies,
     allyKills: t.allyKills,
     forged: t.forged,
+    fullRests: t.fullRests,
+    nightKills: t.nightKills,
+    candy: t.candy,
+    snowmen: t.snowmen,
+    elites: t.elites,
   };
 }
 
@@ -1770,9 +2017,10 @@ function news(h, text, now) {
   record(h, text, now);
 }
 
+// Returns the XP gained, with the gear's XP bonus.
 function gainXp(h, xp, now) {
   if (xp <= 0) {
-    return;
+    return 0;
   }
   const c = CLASSES[h.cls];
   xp = Math.round(xp * (1 + gearBonus(h, 'xp') / 100));
@@ -1795,6 +2043,7 @@ function gainXp(h, xp, now) {
   if (h.level > before && !h.down) {
     h.life = maxLife(h);
   }
+  return xp;
 }
 
 // The nearest enemy within the class's range, which the hero is fighting.
@@ -1814,26 +2063,27 @@ function reachOf(foe) {
 
 // One second of work: the hero walks, or attacks the nearest enemy within its range (and its
 // `allies` with it); then the nearest enemy closes in or strikes back. Out of combat, life comes
-// back. A knocked out hero only rests.
+// back. A knocked out hero only rests. Every step spends a second of rested XP.
 function step(h, now, allies = []) {
   h.step++;
-  spawnAhead(h);
+  spawnAhead(h, now);
   if (h.down > 0) {
     h.down--;
     if (h.down === 0) {
       h.life = maxLife(h);
       setMsg(h, `💪 Back on your feet, +${Math.round(h.rally * RALLY * 100)}% damage until the next win`, now);
     }
-    return;
+  } else {
+    const attacked = heroTurn(h, now, allies.length > 0);
+    if (attacked && allies.length > 0) {
+      allyTurn(h, allies, now);
+    }
+    const fought = enemyTurn(h, now) || attacked;
+    if (!fought) {
+      h.life = Math.min(maxLife(h), h.life + Math.ceil(maxLife(h) * REGEN));
+    }
   }
-  const attacked = heroTurn(h, now, allies.length > 0);
-  if (attacked && allies.length > 0) {
-    allyTurn(h, allies, now);
-  }
-  const fought = enemyTurn(h, now) || attacked;
-  if (!fought) {
-    h.life = Math.min(maxLife(h), h.life + Math.ceil(maxLife(h) * REGEN));
-  }
+  h.rested = Math.max(0, h.rested - STEP_MS);
 }
 
 // The hero's half of a step. Returns whether it attacked. `allied`: an ally is at its side.
@@ -1848,6 +2098,14 @@ function heroTurn(h, now, allied) {
     }
     h.enemies = h.enemies.filter(e => e.x > h.heroX - 10);
     h.loot = h.loot.filter(l => l.x > h.heroX - 10);
+    const candy = h.loot.find(l => l.candy && l.x === h.heroX);
+    if (candy) {
+      h.loot.splice(h.loot.indexOf(candy), 1);
+      const before = h.life;
+      h.life = Math.min(maxLife(h), h.life + Math.round(maxLife(h) * CANDY_HEAL));
+      h.healed = { step: h.step, amount: h.life - before };
+      h.tally.candy++;
+    }
     return false;
   }
 
@@ -1873,16 +2131,15 @@ function heroTurn(h, now, allied) {
   dmg = Math.round(dmg);
   h.tally.maxHit = Math.max(h.tally.maxHit, dmg);
   const hit = ready && ready.area ? inArea : [foe];
-  for (const e of hit) {
-    e.hp -= dmg;
-  }
+  const dealt = hit.map(e => strike(e, dmg));
+  const onTarget = dealt[hit.indexOf(foe)];
   if (ready && ready.area) {
     h.tally.maxAreaHits = Math.max(h.tally.maxAreaHits, hit.length);
   }
   // A basic attack or a single-target skill travels across the gap one tile per step, so ranged
   // shots visibly fly; an area skill lands on every enemy it hits.
   const gap = foe.x - h.heroX - 1;
-  h.fx = { icon, x: h.heroX + 1 + (h.step % Math.max(1, gap)), step: h.step, dmg, crit, count: hit.length };
+  h.fx = { icon, x: h.heroX + 1 + (h.step % Math.max(1, gap)), step: h.step, dmg: onTarget || 0, miss: onTarget === null, crit, count: dealt.filter(d => d !== null).length };
   if (ready && ready.area) {
     h.fx.hits = hit.map(e => e.x);
   }
@@ -1916,7 +2173,7 @@ function allyTurn(h, allies, now) {
     if (!foe) {
       return;
     }
-    foe.hp -= dmg;
+    strike(foe, dmg);
     const gap = foe.x - h.heroX - 1;
     shots.push({ icon: a.hit, x: h.heroX + 1 + ((h.step + 1 + i) % Math.max(1, gap)) });
     if (foe.hp <= 0) {
@@ -1934,6 +2191,16 @@ function defeat(h, foe, now, allied = false) {
   if (allied) {
     h.tally.allyKills++;
   }
+  if (foe.night) {
+    h.tally.nightKills++;
+  }
+  if (foe.snowman) {
+    h.tally.snowmen++;
+  }
+  const s = season(now);
+  if (s && s.candy && Math.random() < CANDY_DROP) {
+    h.loot.push({ x: foe.x, icon: '🍬', candy: true });
+  }
   h.enemies = h.enemies.filter(e => e !== foe);
   h.rally = 0;
   if (foe.group != null && !h.enemies.some(e => e.group === foe.group)) {
@@ -1946,13 +2213,27 @@ function defeat(h, foe, now, allied = false) {
     h.tally[foe.drop % 10 === 0 ? 'elders' : 'minis']++;
     dropSkill(h, foe.drop, now);
   }
-  if (foe.boss || Math.random() < GEAR_DROP) {
-    dropGear(h, foe.x, foe.boss, now);
+  if (foe.elite) {
+    h.tally.elites++;
   }
-  if (h.potions < MAX_POTIONS && (foe.boss || Math.random() < POTION_DROP)) {
+  // An explosive elite's blast hurts but can't knock the hero out.
+  const t = TRAITS[foe.trait];
+  if (t && t.blast) {
+    const blast = Math.round(maxLife(h) * t.blast);
+    h.life = Math.max(1, h.life - blast);
+    h.hurt = { step: h.step, dmg: blast };
+    h.fx = { icon: '💥', x: foe.x, step: h.step };
+  }
+  if (foe.boss || Math.random() < (foe.elite ? ELITE.gear : GEAR_DROP)) {
+    dropGear(h, foe.x, foe.boss || foe.elite, now);
+  }
+  if (h.potions < MAX_POTIONS && (foe.boss || Math.random() < POTION_DROP * (foe.elite ? ELITE.potion : 1))) {
     h.potions++;
   }
   gainXp(h, foe.xp, now);
+  if (h.rested > 0) {
+    h.tally.restedXp += gainXp(h, foe.xp * RESTED_XP, now);
+  }
 }
 
 // The enemy's half of a step: the nearest enemy ahead, with the rest of its group, notices the
@@ -1981,7 +2262,12 @@ function enemyTurn(h, now) {
     if (h.step % foe.every !== 0) {
       continue;
     }
-    taken += Math.max(1, Math.round(foe.atk * (0.85 + Math.random() * 0.3)));
+    const dealt = Math.max(1, Math.round(foe.atk * (0.85 + Math.random() * 0.3)));
+    taken += dealt;
+    const t = TRAITS[foe.trait];
+    if (t && t.drain) {
+      foe.hp = Math.min(foe.max, foe.hp + Math.round(dealt * t.drain));
+    }
     // A shot travels toward the hero one tile per step, like the hero's own.
     if (foe.shot) {
       shots.push({ icon: foe.shot, x: foe.x - 1 - (h.step % Math.max(1, d - 1)) });
@@ -2017,6 +2303,76 @@ function knockOut(h, group, now) {
   news(h, `😵 Knocked out by ${group[0].icon} ${group[0].name}${more}! Resting for ${KO_STEPS} s`, now);
 }
 
+// ---------- day and night ----------
+
+// The hour of the day at `now`, local time, as a number: 20.5 is 20:30.
+function hourOf(now) {
+  const d = new Date(now);
+  return d.getHours() + d.getMinutes() / 60;
+}
+
+function isNight(now) {
+  const hour = hourOf(now);
+  return hour >= NIGHT_FROM || hour < NIGHT_TO;
+}
+
+// How bright it is: 1 by day, NIGHT_LIGHT at night, and in between during the hour of dusk
+// (before NIGHT_FROM) and of dawn (after NIGHT_TO).
+function daylight(now) {
+  const hour = hourOf(now);
+  let dark = 0;
+  if (isNight(now)) {
+    dark = 1;
+  } else if (hour >= NIGHT_FROM - 1) {
+    dark = hour - (NIGHT_FROM - 1);
+  } else if (hour < NIGHT_TO + 1) {
+    dark = NIGHT_TO + 1 - hour;
+  }
+  return 1 - dark * (1 - NIGHT_LIGHT);
+}
+
+// A floor color ('48;2;R;G;B' or '38;2;R;G;B') at `light`: darker, and bluer as it gets dark.
+function shade(code, light) {
+  if (light >= 1) {
+    return code;
+  }
+  const [kind, mode, r, g, b] = code.split(';').map(Number);
+  const blue = 1 + (1 - light) * 0.5;
+  return [kind, mode, Math.round(r * light), Math.round(g * light), Math.min(255, Math.round(b * light * blue))].join(';');
+}
+
+// Says so on the stats row when night falls or the day breaks (not on a save's first tick).
+function noticeNightfall(root, now) {
+  const night = isNight(now);
+  const h = activeHero(root);
+  if (h && root.night != null && root.night !== night) {
+    const b = biomeOf(zoneOf(h.heroX));
+    setMsg(h, night ? `🌙 Night falls, and creatures of the night come out: ${b.night[0]} ${b.night[1]}` : '🌅 The day breaks', now);
+  }
+  root.night = night;
+}
+
+// ---------- seasons ----------
+
+// The seasonal event at `now` (local time), or null.
+function season(now) {
+  return SEASONS[new Date(now).getMonth()] || null;
+}
+
+// A season's first tick with a hero says so on the stats row and in the journal, once a year.
+function noticeSeason(root, now) {
+  const s = season(now);
+  const key = s ? `${s.name} ${new Date(now).getFullYear()}` : null;
+  const h = activeHero(root);
+  if (key && !h) {
+    return;
+  }
+  if (key && root.season !== key) {
+    news(h, s.news, now);
+  }
+  root.season = key;
+}
+
 // ---------- rendering ----------
 
 const ESC = '\x1b[';
@@ -2032,8 +2388,8 @@ function color(code, text) {
 
 // Columns a string takes on screen. Every emoji used here is a double-width
 // Emoji_Presentation character, so this simple rule is exact for our output.
-// The ones below U+1F000: ⚡ ✨ ⏳ ⭐ ✅ ⬜.
-const WIDE_BELOW_1F000 = new Set([0x26a1, 0x2728, 0x23f3, 0x2b50, 0x2705, 0x2b1c]);
+// The ones below U+1F000: ⚡ ✨ ⏳ ⭐ ✅ ⬜ ⛄ ⚪.
+const WIDE_BELOW_1F000 = new Set([0x26a1, 0x2728, 0x23f3, 0x2b50, 0x2705, 0x2b1c, 0x26c4, 0x26aa]);
 
 function displayWidth(str) {
   let w = 0;
@@ -2071,13 +2427,17 @@ function roman(n) {
   return out;
 }
 
-function scenery(x) {
+function scenery(x, now) {
   if (x < 0) {
     return '  ';
   }
   const h = hash(x);
   if (h % 7 === 0) {
     const b = biomeOf(zoneOf(x));
+    const s = season(now);
+    if (s && (h >>> 16) % 3 === 0) {
+      return s.decor;
+    }
     return b.decor[(h >>> 8) % b.decor.length];
   }
   if (h % 3 === 0) {
@@ -2122,9 +2482,11 @@ function targetText(h, active) {
   const life = color(ENEMY_RED, '▰'.repeat(filled) + '▱'.repeat(10 - filled));
   // Padded so the row doesn't shift by a column as the number shrinks.
   const hp = String(foe.hp).padStart(String(foe.max).length);
-  const fx = active && h.fx && h.fx.step === h.step && h.fx.dmg ? h.fx : null;
-  const hit = fx ? ` ${color(ENEMY_RED, `-${fx.dmg}${fx.crit ? '!' : ''}${fx.count > 1 ? ` x${fx.count}` : ''}`)}` : '';
-  return `${foe.icon} ${foe.name}${others > 0 ? ` +${others}` : ''} ${life} ${hp}/${foe.max}${hit}`;
+  const fx = active && h.fx && h.fx.step === h.step && (h.fx.dmg || h.fx.miss) ? h.fx : null;
+  const hit = !fx ? '' : fx.miss ? ` ${color('2', 'miss')}`
+    : ` ${color(ENEMY_RED, `-${fx.dmg}${fx.crit ? '!' : ''}${fx.count > 1 ? ` x${fx.count}` : ''}`)}`;
+  const name = foe.elite ? color(GOLD, foe.name) : foe.name;
+  return `${foe.icon} ${name}${others > 0 ? ` +${others}` : ''} ${life} ${hp}/${foe.max}${hit}`;
 }
 
 function statsRow(root, h, now, active, cols) {
@@ -2156,7 +2518,7 @@ function statsRow(root, h, now, active, cols) {
     [`${c.icon} ${c.name} ${color(GOLD, `Lv ${h.level}`)} ${color('38;2;167;139;250', bar)} ${h.xp}/${need} XP`, 6],
     [`${w.icon} ${w.name}`, 4],
     [skills, 1],
-    [color(b.color, whereText(h)), 3],
+    [color(b.color, whereText(h)) + (isNight(now) ? ' 🌙' : '') + (season(now) ? ` ${season(now).icon}` : ''), 3],
     [`💀 ${h.kills}`, 2],
     [targetText(h, active), 4.5],
     [status && color(...status), 5],
@@ -2194,9 +2556,9 @@ function cutToWidth(text, width) {
 
 // The hero's life bar, green, then yellow below half and red below a quarter. While working it
 // shows the damage of the hit just taken; then a knockout's rest, the potions held, the extra
-// damage a knockout gave and the shards toward the next reforge, dropped from the end while the
-// row is wider than `room`.
-function lifeRow(h, active, room) {
+// damage a knockout gave, the rested XP left (filling up during a break) and the shards toward
+// the next reforge, dropped from the end while the row is wider than `room`.
+function lifeRow(h, active, room, now) {
   const max = maxLife(h);
   const life = Math.max(0, Math.min(h.life, max));
   const filled = life > 0 ? Math.max(1, Math.ceil((life / max) * 10)) : 0;
@@ -2205,6 +2567,9 @@ function lifeRow(h, active, room) {
   let text = `💗 ${color(tint, '▰'.repeat(filled) + '▱'.repeat(10 - filled))} ${String(life).padStart(String(max).length)}/${max}`;
   if (active && h.hurt && h.hurt.step === h.step) {
     text += ` ${color(ENEMY_RED, `-${h.hurt.dmg}`)}`;
+  }
+  if (active && h.healed && h.healed.step === h.step && h.healed.amount > 0) {
+    text += ` ${color(LIFE_GREEN, `+${h.healed.amount}`)}`;
   }
   const parts = [text];
   if (h.down > 0) {
@@ -2215,6 +2580,10 @@ function lifeRow(h, active, room) {
   }
   if (h.rally > 0 && h.down === 0) {
     parts.push(color(GOLD, `💪 +${Math.round(h.rally * RALLY * 100)}% damage until the next win`));
+  }
+  const rested = active ? h.rested : restedPool(h, now);
+  if (rested > 0) {
+    parts.push(color(RESTED_PURPLE, `💤 +${RESTED_XP * 100}% XP ${restedText(rested)}`));
   }
   if (h.shards > 0) {
     parts.push(`🔩 ${h.shards}/${nextReforge(h).cost}`);
@@ -2234,7 +2603,7 @@ function worldTiles(cols) {
 }
 
 // Allies walk right behind the hero, the first to arrive closest.
-function worldRow(h, active, cols, allies) {
+function worldRow(h, active, cols, allies, now) {
   const tiles = worldTiles(cols);
   let row = '';
   for (let i = 0; i < tiles; i++) {
@@ -2263,7 +2632,7 @@ function worldRow(h, active, cols, allies) {
     } else if (h.loot.some(l => l.x === x)) {
       row += h.loot.find(l => l.x === x).icon;
     } else {
-      row += scenery(x);
+      row += scenery(x, now);
     }
   }
   return row;
@@ -2281,8 +2650,10 @@ function floorCell(f, h) {
 }
 
 // The ground under the world row: two cells per tile, styled by the biome of that tile,
-// so the next biome's floor scrolls into view before the hero reaches it.
-function floorRow(heroX, cols) {
+// so the next biome's floor scrolls into view before the hero reaches it. It darkens at night.
+function floorRow(heroX, cols, now) {
+  const light = daylight(now);
+  const s = season(now);
   const tiles = worldTiles(cols);
   let row = '';
   let style = null;
@@ -2296,8 +2667,9 @@ function floorRow(heroX, cols) {
       row += '  ';
       continue;
     }
-    const f = biomeOf(zoneOf(x)).floor;
-    const code = `${f.bg};${f.fg}`;
+    const b = biomeOf(zoneOf(x));
+    const f = s && s.snow && !b.hot ? { ...b.floor, ...s.snow } : b.floor;
+    const code = `${shade(f.bg, light)};${shade(f.fg, light)}`;
     if (code !== style) {
       row += `${ESC}${code}m`;
       style = code;
@@ -2309,15 +2681,15 @@ function floorRow(heroX, cols) {
 }
 
 // Before the first class is chosen: the three heroes wait in the meadow.
-function pickerRows(cols) {
+function pickerRows(cols, now) {
   const keys = Object.keys(CLASSES);
   const title = color(GOLD, `🎭 Choose your hero: ${COMMAND_PREFIX}chooseclass ${keys.join(' | ')}`);
   let world = '';
   for (let i = 0; i < worldTiles(cols); i++) {
     const at = [HERO_COL, HERO_COL + 3, HERO_COL + 6].indexOf(i);
-    world += at >= 0 ? CLASSES[keys[at]].icon : scenery(i);
+    world += at >= 0 ? CLASSES[keys[at]].icon : scenery(i, now);
   }
-  return [title, world, floorRow(HERO_COL, cols)];
+  return [title, world, floorRow(HERO_COL, cols, now)];
 }
 
 function render(root, now, cols) {
@@ -2327,7 +2699,7 @@ function render(root, now, cols) {
   let map;
   if (!h) {
     // The picker keeps its title even with /vwc:showprogress off: it says how to start.
-    [text, ...map] = pickerRows(cols).map(row => alignRight(row, cols));
+    [text, ...map] = pickerRows(cols, now).map(row => alignRight(row, cols));
     text = [text];
   } else {
     const active = anyActive(root, now);
@@ -2339,11 +2711,11 @@ function render(root, now, cols) {
       const c = CLASSES[h.cls];
       const xpCol = cols - displayWidth(stats) + displayWidth(`${c.icon} ${c.name} Lv ${h.level} `);
       const at = Math.max(0, xpCol - displayWidth('💗 '));
-      const life = lifeRow(h, active, cols - at);
+      const life = lifeRow(h, active, cols - at, now);
       const lifeCol = Math.min(at, Math.max(0, cols - displayWidth(life)));
       text = [alignRight(stats, cols), RESET + ' '.repeat(lifeCol) + life];
     }
-    map = [worldRow(h, active, cols, fightingAllies(root, now)), floorRow(h.heroX, cols)].map(row => alignRight(row, cols));
+    map = [worldRow(h, active, cols, fightingAllies(root, now), now), floorRow(h.heroX, cols, now)].map(row => alignRight(row, cols));
   }
   // /vwc:stats below moves the text rows (stats and life, or the picker's title) under the map.
   return show.stats === 'below' ? [...map, ...text] : [...text, ...map];
@@ -2353,8 +2725,9 @@ module.exports = {
   DIR, COMMAND_PREFIX, CLASSES, classKey, chooseClass, createCharacter, status,
   display, partKey, setVisible, placeKey, setStatsPlace, progressKey, setProgress, load, loadSaved,
   pluginVersion, skillsReport,
-  gearReport, achievementsReport, statisticsReport, journalReport, earnedCount, ACHIEVEMENTS,
+  gearReport, achievementsReport, statisticsReport, journalReport, cardReport, earnedCount, ACHIEVEMENTS,
   onHookEvent, onAgentEvent, onStatusLine, render, displayWidth,
   newRoot, newHero, migrate, step, xpNeed, attackOf, weaponOf, rollSkill, skillPower, learnSkill,
   rollGear, gearPower, gearBonus, gainXp, checkAchievements, achievementFacts, maxLife,
+  makeEnemy, isNight, daylight, season, TRAITS,
 };

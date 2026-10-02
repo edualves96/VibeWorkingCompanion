@@ -1,7 +1,9 @@
 # Ideas
 
 Ideas for later versions that haven't been built yet. Built so far from this list: the journal,
-subagent allies and salvage with reforging (1.11.0).
+subagent allies and salvage with reforging (1.11.0), rested XP (1.12.0), day and night
+(1.13.0), seasonal events (1.14.0), elite enemies (1.15.0),
+`/vwc:card` (1.16.0) and `/vwc:journal <class>` (1.17.0).
 
 ## Rules every idea has to follow
 
@@ -15,9 +17,6 @@ subagent allies and salvage with reforging (1.11.0).
 
 ## Tied to what Claude is doing
 
-- **Rested XP.** Time Claude spends waiting for you fills a capped pool (an hour's worth, say) that
-  doubles kill XP when work starts again, like rested XP in WoW. Breaks become a reward, and 💤 means
-  something. Show the pool on the life row while it lasts (`💤 +100% XP 12m`).
 - **Campfire on compaction.** When the conversation is compacted (`PreCompact` hook), the hero sets
   up camp ⛺, heals fully and gets a short buff. ⛺ is `U+26FA`, so it needs adding to `displayWidth()`.
 - **Combo streak.** Tool calls that succeed in a row build a small damage combo, and a
@@ -26,18 +25,11 @@ subagent allies and salvage with reforging (1.11.0).
 
 ## Time and calendar
 
-- **Day and night.** The floor colors follow the local clock (darker after sunset), and some enemies
-  only come out at night (🦉 🦇).
-- **Seasonal events.** October: 🎃 decor, 🍬 candy drops that heal, a 👻 ghost wave and a Halloween
-  achievement until the 31st. December: 🎄 decor and ⛄ snowmen (⛄ is `U+26C4`, add it to
-  `displayWidth()`). Events come and go with the date; nothing about them is lost afterwards.
 - **Work streaks.** Days in a row with work, for achievements only (5, 20, 100 days). Missing a day
   starts a new streak but takes nothing away.
 
 ## Loot and progression
 
-- **Elite enemies.** About 5% of enemies roll a trait (Swift, Armored, Vampiric, Explosive) shown
-  before the name, with more life and a better drop.
 - **Treasure goblin.** A rare 💰 enemy that runs away from the hero instead of fighting. Killed
   before it gets out of range, it drops a pile of shards and a lucky gear roll.
 - **Unique legendaries.** Named legendary pieces with an effect on top of their stats: boots that walk
@@ -56,13 +48,6 @@ subagent allies and salvage with reforging (1.11.0).
 - **New biomes.** The Swamp from the README example (🐊 🦟 🐸, 🦕 Bog Beast), a Tundra (🐧 🦭, 🦣
   Mammoth) and Sky Islands (🦅 🪽, 🐲 Storm Drake), so the world loops less often. Check each emoji
   against the rules above (🪽 is Unicode 15, which some terminals don't draw yet).
-
-## Commands that only show information
-
-- **`/vwc:card`:** a hero card made of the hero's icon, level, weapon, skills, best gear and a few
-  totals, to copy into Slack or a PR. Built locally; nothing is sent anywhere.
-- **`/vwc:journal <class>`:** the journal of one hero only, or `all` for everything kept instead of
-  the last 50 lines.
 
 ## Turned down
 

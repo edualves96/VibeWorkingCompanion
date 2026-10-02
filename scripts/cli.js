@@ -11,7 +11,8 @@
 //   node cli.js --data <dir> gear                          every hero's gear, slot by slot
 //   node cli.js --data <dir> achievements                  every achievement, earned or with its progress
 //   node cli.js --data <dir> statistics                    every hero's work time, tokens, turns, kills and more
-//   node cli.js --data <dir> journal                       every hero's notable moments, by day
+//   node cli.js --data <dir> journal [class] [all]         notable moments by day: one hero's, or everything kept
+//   node cli.js --data <dir> card [class|all]              a card of a hero to paste in a chat or a PR
 //   node cli.js --data <dir> commands                     list every command, plus the current state
 // --data is the plugin's data folder, where the save lives. Skills don't get it as an
 // environment variable, so they pass it here.
@@ -43,7 +44,8 @@ const COMMANDS = [
   ['gear', 'what your heroes wear in each of the 6 gear slots'],
   ['achievements', 'every achievement: the ones you earned, and how close you are to the rest'],
   ['statistics', 'each hero\'s work time, tokens, turns (longest, shortest, average), kills and more'],
-  ['journal', 'what happened while you worked: level ups, bosses, finds, reforges, achievements'],
+  ['journal [class] [all]', 'what happened while you worked; a class for one hero, all for everything kept'],
+  ['card [class|all]', 'a card of your hero to paste in Slack or a PR'],
   ['setup', 'turn the companion status line on (an existing status line stays on top)'],
   ['setup remove', 'turn it off and put back your previous status line'],
   ['commands', 'this list'],
@@ -79,7 +81,10 @@ function run() {
     return companion.statisticsReport(now);
   }
   if (command === 'journal') {
-    return companion.journalReport(now);
+    return companion.journalReport(arg, now);
+  }
+  if (command === 'card') {
+    return companion.cardReport(arg, now);
   }
   if (command === 'commands') {
     return commands();

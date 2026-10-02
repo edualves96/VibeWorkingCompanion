@@ -31,12 +31,22 @@ rest, drinks its potions and gets back up on its own.
   🦄 unicorn that walks behind the hero and fights with it until the subagent finishes.
 - **A journal:** level ups, bosses, finds, reforges and achievements are shown on the stats row for
   a few seconds, which you'll often miss while you work. `/vwc:journal` lists them by day.
-- **50 achievements** for kills, groups, bosses, survival, levels, skills, gear, allies and hours of
-  work, plus a couple of secret ones. 🏅 pops up on the stats row when you earn one.
+- **A card to share:** `/vwc:card` shows your hero as a short card to paste in Slack or a PR.
+- **Breaks are rewarded:** a break of more than 5 minutes fills a 💤 rested pool, up to an hour,
+  and kills give double XP while it lasts once you're back.
+- **Day and night:** the floor follows your local clock, darker and bluer from 20:00 to 06:00, and
+  each biome has a creature of the night (🐺 🧜 🧞…) that only comes out then.
+- **Seasonal events:** 🎃 Halloween all October, with pumpkins, 🍬 candy and 👻 ghost waves, and 🎄
+  Winter all December, with snowmen and snow.
+- **Elite enemies:** 1 enemy in 20 (1 in 10 at night) is Swift, Armored, Vampiric or Explosive,
+  tougher and better paid.
+- **55 achievements** for kills, groups, bosses, survival, levels, skills, gear, allies, seasons and
+  hours of work, plus a couple of secret ones. 🏅 pops up on the stats row when you earn one.
 - **Seven biomes,** each with its own floor, enemies and a boss every ~15 minutes of work:
   🌼 Meadow, 🌲 Dark Forest, 💎 Caves, 🌴 Coast, 🌵 Desert, 🪦 Graveyard, 🌋 Volcano. After the
   Volcano the world loops back to the Meadow, "II", with tougher enemies. The stats row shows how
-  far through the current biome you are (`🌴 Coast 37%`); its boss waits at 100%.
+  far through the current biome you are (`🌴 Coast 37%`); its boss waits at 100%. A 🌙 after it
+  means it's night (when elites are twice as common), and a 🎃 or 🎄 that a seasonal event is on.
 - **Level milestones bring bosses:** a ⭐ mini boss (a "Giant" version of a zone enemy) at levels
   5, 15, 25…, and a 👑 boss (an "Elder" version of the zone's boss, tougher than the one at the
   end of the zone) at levels 10, 20, 30…
@@ -60,7 +70,7 @@ or your files, so it's safe to run on work projects and code under an NDA.
 - **Nothing leaves your machine:** no network access at all, and no npm dependencies. The scripts
   only use Node's built-in `fs`, `path`, `os` and `child_process`, and `child_process` only runs the
   status line you already had, so it keeps showing above the hero.
-- **Easy to check:** about 2,900 lines of plain JavaScript, with no build step and nothing
+- **Easy to check:** about 3,300 lines of plain JavaScript, with no build step and nothing
   minified. The transcript reading is `ingestTranscript()` in `scripts/companion.js`.
 
 ## Install
@@ -127,7 +137,8 @@ data folder, which updates don't touch.
 | `/vwc:gear` | What every hero wears in each of the six gear slots, with each piece's rarity, power and stats, and what they add up to. |
 | `/vwc:achievements` | Every achievement: the ones you earned (with the date and the hero), and how close you are to the rest. |
 | `/vwc:statistics` | Each hero's work time, tokens, Claude turns (how many, the longest, shortest and average), XP, kills, bosses, finds and more, plus the totals of all heroes. See [Statistics](#statistics). |
-| `/vwc:journal` | What happened while you worked: level ups, new weapons and biomes, bosses, skills, gear, reforges, knockouts and achievements, by day and time. See [Journal](#journal). |
+| `/vwc:card [class\|all]` | A short card of your hero (or another class's, or all of them) to paste in Slack or a pull request. See [Card](#card). |
+| `/vwc:journal [class] [all]` | What happened while you worked: level ups, new weapons and biomes, bosses, skills, gear, reforges, knockouts and achievements, by day and time. A class shows only that hero's, and `all` everything kept instead of the last 50 lines. See [Journal](#journal). |
 | `/vwc:stats <above\|below>` | Put the hero's stats row (level, XP, weapon, zone, kills) above the map, where it starts, or below it. With no argument it switches to the other place. The choice is remembered across restarts. |
 | `/vwc:showprogress <on\|off>` | `off` hides the hero's progress (the stats row with name, level, XP, weapon, zone and kills, and the 💗 life bar) so only the map is shown; `on` brings it back. With no argument it switches. Level-ups, loot and other news are shown on the stats row, so you won't see them while it's hidden. The choice is remembered across restarts. |
 | `/vwc:commands` | List every command, your heroes, how many achievements you have, and what is currently shown or hidden. |
@@ -234,23 +245,38 @@ left behind became 1 shard, reforged right away; the journal says how many.
 
 ## Life and combat
 
-The hero's life bar sits right under its XP bar, with the potions it carries and its shards
-toward the next reforge (see [Gear](#gear)):
+The hero's life bar sits right under its XP bar, with the potions it carries, the rested XP left
+(see [Rested XP](#rested-xp)) and its shards toward the next reforge (see [Gear](#gear)):
 
 ```
 🧝 Archer Lv 16 ▰▱▱▱▱▱▱▱▱▱ 1060/5744 XP · 🪶 Fletched Bow · 💎 Caves II 81% · 👺 Goblin ▰▰▱▱▱▱▱▱▱▱ 50/326 -135
-             💗 ▰▰▰▰▰▰▰▰▱▱ 441/467 -26 · 🧪 1 · 🔩 7/10
+             💗 ▰▰▰▰▰▰▰▰▱▱ 441/467 -26 · 🧪 1 · 💤 +100% XP 12m · 🔩 7/10
 ```
 
 - **Enemies fight back,** one at a time or as a group: the nearest one, with the rest of its
   group, notices the hero 8 tiles away and walks up to it. The ones that shoot stop 4 tiles away and fire: 🟢 venom (🐍), 🟣 shrieks and curses
-  (🦇 👻), 🟤 rocks (👺), 💧 water (🦑 🐙) and 🔴 fire (🐲 🐉). Mini bosses and bosses strike every
+  (🦇 👻), 🟤 rocks (👺), 💧 water (🦑 🐙), 🎵 songs (🧜), ⚪ snowballs (⛄) and 🔴 fire (🐲 🐉 🧞). Mini bosses and bosses strike every
   other second, harder. Their damage grows with the zone, like their life.
 - **Groups:** 4 in 10 times, enemies come as a group of 2 (20%), 3 (12%) or 4 (8%), standing side
   by side, a mix of the zone's enemies. Each is weaker than one alone (65% of the life, damage and
   XP), but they fight together: the melee ones queue up behind each other, the ones that shoot
   fire over them, and there's no pause to heal until the last one falls. The stats row shows the
   rest of the group as "+2", and an area hit as "x3" after the damage.
+- **Elites:** 1 normal enemy in 20, and 1 in 10 at night, is an elite with a trait before its
+  name, in gold on the stats row. It has 2.5 times the life and gives 3 times the XP, drops a piece
+  of gear 1 time in 4 (with the rarity rolled twice, like a boss's) and potions 3 times as often.
+  Its trait:
+
+  | Trait | What it does |
+  |-------|--------------|
+  | Swift | dodges 1 hit in 4 (the stats row says `miss`) |
+  | Armored | takes 40% less damage |
+  | Vampiric | heals by half the damage it deals |
+  | Explosive | explodes 💥 when defeated, for 15% of the hero's life (it can't knock the hero out) |
+
+  ```
+  🤺 Warrior Lv 12 ▰▰▱▱▱▱▱▱▱▱ 512/2429 XP · 🪓 Axe · 🌲 Dark Forest II 64% · 💀 587 · 🐺 Armored Wolf ▰▰▰▰▰▰▰▱▱▱ 590/760 -96
+  ```
 - **Range matters:** the archer gets about 4 free shots at an enemy walking up to it, the mage 2,
   the warrior 1.
 - **Life** grows with the level and with gear's `+% life`. It comes back while walking between
@@ -261,8 +287,8 @@ toward the next reforge (see [Gear](#gear)):
   heals. Then it gets back up with full life and +25% damage for every knockout until its next win,
   so it always gets through in the end. Nothing is lost but the time.
 
-For a hero on pace (checked by simulation), that's 3 or 4 potions an hour and a knockout every 6
-or 7 hours of work, mostly by bosses, about the same for all three classes.
+For a hero on pace (checked by simulation), that's 6 to 9 potions an hour, more at night when
+elites are more common, and a knockout every few hours of work, mostly by bosses.
 
 ## Allies
 
@@ -289,13 +315,77 @@ fights with it until the subagent finishes:
   even if a subagent keeps working in the background; it only fights with its allies while Claude
   works.
 
+## Day and night
+
+The world follows your computer's clock. Night runs from 20:00 to 06:00, with an hour of dusk
+before it and an hour of dawn after it, when the floor slowly darkens or brightens.
+
+```
+🤺 Warrior Lv 14 ▰▰▰▱▱▱▱▱▱▱ 1290/3854 XP · 🔨 War Hammer · 🌴 Coast II 41% 🌙 · 🌙 Night falls, and creatures of the night come out: 🧜 Siren
+```
+
+- **What changes:** the floor gets darker and bluer, a 🌙 follows the biome on the stats row, and
+  each biome's creature of the night joins its enemies, so about 1 enemy in 4 is one of them.
+  They're as strong as the others and give the same XP. [Elite enemies](#life-and-combat) are
+  twice as common at night, 1 in 10.
+- **Creatures of the night:** 🐺 Wolf in the 🌼 Meadow, 👻 Wisp (🟣) in the 🌲 Dark Forest, 🧟 Ghoul
+  in the 💎 Caves, 🧜 Siren (🎵) on the 🌴 Coast, 🪲 Scarab in the 🌵 Desert, 🦇 Vampire Bat (🟣) in
+  the 🪦 Graveyard and 🧞 Ifrit (🔴) in the 🌋 Volcano.
+- **Nightfall and daybreak** are announced on the stats row when they happen.
+
+## Seasonal events
+
+Two months of the year have an event, from the 1st to the last day, announced on the stats row
+and in the journal when it starts. Nothing from an event goes away when it ends.
+
+```
+🧙 Mage Lv 2 ▰▰▰▰▰▰▰▱▱▱ 16/21 XP · 🪵 Branch · 🌼 Meadow 7% 🎃 · 💀 7
+           💗 ▰▰▰▰▰▰▰▰▰▰ 82/82 +6
+             🧙    . . . 🍬   🎃.     👻👻  🌳🌼  .   🌼
+```
+
+- **🎃 Halloween (October):** pumpkins among the decor of every biome. 1 enemy in 12 drops a 🍬
+  candy where it falls, and the hero eats it as it walks over it, getting 20% of its life back
+  (`+6` on the life row). About 1 group in 6 is a wave of 👻 ghosts, whatever the biome.
+- **🎄 Winter (December):** trees among the decor, snow on the floor, and ⛄ snowmen that throw ⚪
+  snowballs, about 1 enemy in 8. The 🌋 Volcano is too hot for either.
+- **Achievements:** Trick or Treat (eat 31 pieces of candy) and Snowball Fight (defeat 100
+  snowmen).
+
+## Rested XP
+
+Coming back from a break, the hero is rested: kills give double XP for a while.
+
+```
+🧝 Archer Lv 21 ▰▰▰▰▱▱▱▱▱▱ 5225/12975 XP · 💤 Rested: +100% XP from kills for 28m
+             💗 ▰▰▰▰▰▰▰▰▰▰ 709/709 · 🧪 3 · 💤 +100% XP 28m
+```
+
+- **What counts as a break:** any time without work: Claude waiting for you, a closed terminal, a
+  night away. The first 5 minutes of a break don't count, so reading Claude's answer and typing
+  the next message isn't a break.
+- **How fast it fills:** every minute of break after the first 5 adds 30 seconds of rested XP, up
+  to an hour. A 15-minute coffee is worth 5 minutes, a 1-hour lunch 28 minutes, and a night away
+  fills it all.
+- **While it lasts:** every second of work spends a second of it, and every kill gives its XP
+  twice (with the gear's `+% XP` on both). Token XP isn't doubled. The life row shows what's
+  left (`💤 +100% XP 12m`), and while you're away, how much the break has added so far.
+- **Per hero:** the active hero gets the break. A hero you switch back to after a while away
+  comes back rested too.
+- **How much it adds** (checked by simulation): on a full work day, a full pool in the morning and
+  part of one after lunch put a hero about a level further along. Someone working an hour a day
+  comes back to a full pool every day, so all their kills give double XP.
+
+Heroes from before 1.12.0 start with an empty pool, which fills at the first break after the
+update.
+
 ## Achievements
 
-50 achievements, shared by all your heroes. When you earn one, the stats row says
+55 achievements, shared by all your heroes. When you earn one, the stats row says
 `🏅 Achievement: Dragonslayer`. `/vwc:achievements` lists them all, with how close you are:
 
 ```
-🏅 Achievements · 19 of 50 earned
+🏅 Achievements · 19 of 55 earned
 
 Combat
   ✅ First Blood        defeat an enemy                                2026-10-02 🧝
@@ -305,13 +395,14 @@ Combat
 
 | Group | Achievements |
 |-------|--------------|
-| Combat | defeat 1, 100, 1,000 and 10,000 enemies; land a hit of 250 and of 2,500 damage; a critical hit with a skill; hit 4 enemies with one area skill; defeat 500 groups; be joined by an ally; defeat 100 enemies with one at your side |
+| Combat | defeat 1, 100, 1,000 and 10,000 enemies; land a hit of 250 and of 2,500 damage; a critical hit with a skill; hit 4 enemies with one area skill; defeat 500 groups; defeat 100 elites; defeat 50 creatures of the night; be joined by an ally; defeat 100 enemies with one at your side |
 | Bosses | the first zone boss, a mini boss, an Elder boss, 5 Elder bosses, the Dragon of the Volcano, and of Volcano X |
 | Survival | drink a potion, and 100; win a fight with under 10% life; get knocked out and back up |
 | Journey | levels 5, 10, 20, 30 and 35 (the star weapon); reach all 7 biomes; play every class; every class to level 10 |
 | Skills | find a skill; hold two; replace one; find an epic, and a legendary; hold two legendaries |
 | Gear | find a piece; fill all 6 slots; find an epic, and a legendary; salvage 100 pieces; reforge a piece, and 50 times |
-| Work | 1, 8 and 40 hours of work; 1 million and 10 million tokens; one turn of 30 minutes; two secrets |
+| Seasons | eat 31 pieces of Halloween candy; defeat 100 snowmen in December |
+| Work | 1, 8 and 40 hours of work; 1 million and 10 million tokens; one turn of 30 minutes; come back to a full hour of rested XP; two secrets |
 
 Kills, hours and other totals add up all your heroes, including ones replaced by
 `/vwc:createchar`. A save from before 1.5.0 gets credit right away for what it shows: levels,
@@ -328,8 +419,8 @@ kills, zones, hours of work, level bosses passed and skills held.
     Work time     2h50m
     Tokens        1.2M · 21k a turn · most in one 250k
     Turns         57 · longest 15m18s · shortest 6s · average 2m59s
-    XP            54k · 19k an hour
-    Kills         1,011 · 58 groups · 356 an hour
+    XP            54k · 19k an hour · 6,120 from rested kills
+    Kills         1,011 · 58 groups · 49 elites · 356 an hour
     Bosses        13 zone bosses · 2 mini bosses · 1 Elder boss
     Hits          biggest 450 · 212 critical skill hits
     Skills found  3 · 1 legendary · 1 replaced
@@ -347,7 +438,7 @@ All heroes · 3h11m of work · 1.5M tokens · 1,141 kills · 61 turns · longest
   when you sent it. Turns that ran a `/vwc:` command or were stopped with Esc don't count.
 - **Heroes from before 1.10.0** didn't keep their own tokens and turns, so those count from the
   day you updated, and the list says since when. The totals at the bottom count tokens and the
-  longest turn for the whole save. Allies, reforges and the kills made with allies count from 1.11.0.
+  longest turn for the whole save. Allies, reforges and the kills made with allies count from 1.11.0, and rested XP from 1.12.0.
 
 ## Journal
 
@@ -373,6 +464,34 @@ Friday 2026-10-02
   the journal of every hero reads as one.
 - **How far back:** each hero keeps its last 100 moments, and the journal shows the last 50 lines.
   Heroes from before 1.11.0 start with an empty journal.
+- **One hero, or everything:** `/vwc:journal archer` shows only that hero's moments, and
+  `/vwc:journal all` everything kept instead of the last 50 lines. They go together too:
+  `/vwc:journal archer all`.
+
+## Card
+
+`/vwc:card` shows the hero you're playing as a short card, ready to copy into Slack, a pull
+request or anywhere else. `/vwc:card mage` shows another class's hero, and `/vwc:card all` every
+hero you have:
+
+```
+╭─ 🧝 Archer · Level 22 ───────────────────────────────────────────────────────
+│ 🌙 Moon Bow · 🌠 Star Arrow (legendary) · 🦅 Eagle Barrage (rare)
+│ 🌵 Desert III 16% · 💀 1,440 kills · 🏆 22 bosses · 💥 biggest hit 474
+│ 👖 Steel Trousers (legendary) · 6 of 6 gear slots · +30% damage, +8% critical chance, +2% XP, +7% life
+│ ⏳ 3h51m of work · 825k tokens · 🏅 27 of 55 achievements
+╰─ VibeWorkCompanion 1.16.0 · github.com/edualves96/VibeWorkingCompanion ──────
+```
+
+- **What's on it:** the class and level, the weapon and skills, where the hero is, kills, bosses
+  and the biggest hit, the best piece of gear with what all the gear adds, and the hero's work
+  time, tokens and achievements. The last line links to the plugin (the `homepage` in
+  `.claude-plugin/plugin.json`, so a fork links to itself).
+- **Nothing about your work:** only game numbers, plus how long Claude worked and how many tokens
+  it used. Nothing is sent anywhere; you copy the card yourself.
+- **No right border:** emoji are drawn at different widths in different apps, so a right edge
+  would come out jagged. Paste it in a code block (between \`\`\` lines) to keep the left edge
+  straight.
 
 ## How it works
 
@@ -414,7 +533,8 @@ Claude uses (input + cache writes + output, not cache reads) is worth one kill. 
 raises both. Going from level `L` to `L+1` takes `10 + 1.4 * L^3` XP. Rough pacing, counting
 kills only: level 3 after 2 minutes of work, level 9 after an hour, level 15 after 3 hours,
 level 25 after 8 hours, the last weapon (level 35) after about 16 hours. Token XP comes on top:
-with 300,000 tokens an hour of work, a hero is one to two levels further along.
+with 300,000 tokens an hour of work, a hero is one to two levels further along. So does
+[rested XP](#rested-xp), and [allies](#allies) make fights shorter.
 
 ## Make your own version
 
@@ -480,6 +600,8 @@ Everything below is in `scripts/companion.js`.
 | `POTION_DROP`, `MAX_POTIONS` | `0.05`, `3` | Chance a normal enemy drops a potion (bosses always do), and how many the hero carries. |
 | `POTION_AT`, `POTION_HEAL` | `0.3`, `0.5` | Life below which a potion is drunk, and how much of the life it gives back. |
 | `GROUP_SIZES` | `[0.6, 0.2, 0.12, 0.08]` | Chances that enemies come alone, or in a group of 2, 3 or 4. |
+| `ELITE_CHANCE`, `ELITE` | `0.05` | The share of normal enemies that are elite (twice that at night), and an elite's life, XP, gear and potion multipliers. |
+| `TRAITS` | | The elite traits: name, what it does, and its number (`dodge`, `armor`, `drain`, `blast`). |
 | `GROUP_MEMBER`, `GROUP_GAP` | `0.65`, `3` | A group member's life, damage and XP compared to an enemy alone, and the extra tiles after a group per extra enemy. |
 | `AREA`, `AREA_MULT` | `3`, `0.85` | How many tiles behind the target an area skill reaches, and its share of a single-target skill's extra damage. |
 | `KO_STEPS`, `RALLY` | `15`, `0.25` | Seconds a knocked out hero rests, and the extra damage per knockout until its next win. |
@@ -490,6 +612,13 @@ Everything below is in `scripts/companion.js`.
 | `MAX_ALLIES`, `ALLY_DAMAGE` | `2`, `0.3` | How many allies fight at once, and each one's hit as a share of the hero's basic hit. |
 | `ALLY_STALE_MS` | `600000` | An ally whose subagent sent nothing for this long has left. |
 | `ALLY_KINDS` | | The allies that can come: icon, name and what they shoot. |
+| `NIGHT_FROM`, `NIGHT_TO` | `20`, `6` | The hours when night starts and ends, local time. Dusk and dawn take the hour before and after. |
+| `NIGHT_LIGHT` | `0.45` | How bright the floor is at night, compared to the day. |
+| `SEASONS` | | The seasonal events by month: icon, decor, announcement, and what each one brings (candy, a ghost `wave`, an `enemy`, `snow`). |
+| `CANDY_DROP`, `CANDY_HEAL` | `0.08`, `0.2` | At Halloween, the chance an enemy drops candy, and the share of the hero's life it heals. |
+| `GHOST_WAVE`, `SEASON_ENEMY` | `0.15`, `0.12` | At Halloween, the share of groups that are a ghost wave; in Winter, the share of enemies that are snowmen. |
+| `RESTED_AFTER`, `RESTED_RATE` | `300000`, `0.5` | The part of a break that doesn't count (5 minutes), and how much of the rest of it goes into the rested pool. |
+| `RESTED_MAX`, `RESTED_XP` | `3600000`, `1` | The most rested XP a hero can hold (an hour of work), and the extra kill XP while rested (+100%). |
 | `JOURNAL_SIZE`, `JOURNAL_SHOWN` | `100`, `50` | Moments each hero keeps for `/vwc:journal`, and the lines it shows. |
 | `ACHIEVEMENT_GROUPS` | | Every achievement: its name, what to do, the fact it measures (see `achievementFacts()`) and the goal. |
 | `WORLD_TILES` | `24` | Width of the world in tiles (each tile is 2 columns). |
@@ -509,12 +638,12 @@ Add an entry to `BIOMES`. Zones cycle through the list in order:
 ```js
 { name: 'Swamp', icon: '🐸', color: '38;2;101;163;13',
   decor: ['🌿', '🍄', '🪵'], enemies: [['🐊', 'Croc'], ['🦟', 'Mosquito', '🟢'], ['🐍', 'Snake']],
-  boss: ['🦕', 'Bog Beast'],
+  night: ['🐸', 'Giant Toad'], boss: ['🦕', 'Bog Beast'],
   floor: { bg: '48;2;40;60;30', fg: '38;2;132;204;22', marks: ['~', ','] } },
 ```
 
 An enemy with a third icon, like the mosquito's `🟢`, shoots it from a distance instead of
-walking up to the hero. `color` is an ANSI color (`38;2;R;G;B`) for the zone name. In `floor`, `bg` is the ground color
+walking up to the hero. `night` is the creature that joins the enemies at night. `color` is an ANSI color (`38;2;R;G;B`) for the zone name. In `floor`, `bg` is the ground color
 (`48;2;R;G;B`), `fg` the color of the marks, and `marks` the characters scattered on about 1 cell
 in 3. Marks must be plain ASCII, exactly 1 column wide, so the floor stays under the world tiles.
 
@@ -556,7 +685,7 @@ by default (Unicode `Emoji_Presentation=Yes`), such as 🐉 🔥 🌲 💎. Avoi
 - **ZWJ sequences** (several emoji glued together): 🧙‍♂️ 🧟‍♀️
 
 If you add an icon below `U+1F000` that is 2 columns wide, add its code point to `displayWidth()`,
-as was done for ⚡ ✨ ⏳.
+as was done for ⚡ ✨ ⏳ ⛄ ⚪.
 
 ### Position and size
 
@@ -574,7 +703,7 @@ as was done for ⚡ ✨ ⏳.
   If the right edge is cut off in your terminal, increase the `6`.
 - **Narrow terminals:** when the stats row doesn't fit, parts are dropped in priority order (skills
   first, then kills, the biome with its progress, and weapon), and a long message is cut short with "…". The life row
-  stays under the XP bar, dropping its extras (shards, then rally, then potions) if they don't fit. See the numbers in `statsRow()`.
+  stays under the XP bar, dropping its extras (shards, then rested XP, then rally, then potions) if they don't fit. See the numbers in `statsRow()`.
 
 ### The info row (row 1)
 
@@ -588,11 +717,11 @@ If you had a status line before `/vwc:setup`, it runs and is shown on top. Other
 | `.claude-plugin/plugin.json` | Plugin manifest (name `vwc`, version). |
 | `.claude-plugin/marketplace.json` | Makes this repository its own marketplace (`vibeworkcompanion`). |
 | `hooks/hooks.json` | The hooks that tell the companion when Claude is working. |
-| `skills/` | The `/vwc:` commands: `setup`, `chooseclass`, `createchar`, `hide`, `show`, `stats`, `showprogress`, `skills`, `gear`, `achievements`, `statistics`, `journal` and `commands`. |
+| `skills/` | The `/vwc:` commands: `setup`, `chooseclass`, `createchar`, `hide`, `show`, `stats`, `showprogress`, `skills`, `gear`, `achievements`, `statistics`, `journal`, `card` and `commands`. |
 | `scripts/companion.js` | The engine: save file, classes, biomes, game rules, rendering. |
 | `scripts/statusline.js` | What the status line runs: info row plus the three companion rows. |
 | `scripts/hook.js` | What the hooks run. Events from subagents go to the allies. |
-| `scripts/cli.js` | Class switching, new characters, hide/show, the stats row's place, showing or hiding the progress rows, the skills, gear, achievements and statistics lists, the journal, and the command list. |
+| `scripts/cli.js` | Class switching, new characters, hide/show, the stats row's place, showing or hiding the progress rows, the skills, gear, achievements and statistics lists, the journal, the hero card, and the command list. |
 | `scripts/setup.js` | Turns the status line on and off in your `settings.json`. |
 | `IDEAS.md` | Ideas for later versions that haven't been built yet. |
 
@@ -601,7 +730,7 @@ plugin updates:
 
 | File | What it is |
 |------|------------|
-| `state.json` | One hero per class (with its skills, gear, shards, journal, and counts for achievements and statistics), which one is active, the allies of the subagents running now, the achievements earned and the totals they need, what `/vwc:hide` has hidden, where `/vwc:stats` put the stats row, whether `/vwc:showprogress` hid it, and the last plugin version it saw (for the update notice). Delete it to start everything over. |
+| `state.json` | One hero per class (with its skills, gear, shards, rested XP, journal, and counts for achievements and statistics), which one is active, the allies of the subagents running now, the achievements earned and the totals they need, what `/vwc:hide` has hidden, where `/vwc:stats` put the stats row, whether `/vwc:showprogress` hid it, and the last plugin version it saw (for the update notice). Delete it to start everything over. |
 | `backups/` | Heroes replaced by `/vwc:createchar`. To restore one, copy it into `state.json` under `heroes.<class>`. |
 | `statusline.js` | Small launcher that your status line runs; it finds the current plugin version. |
 | `previous-statusline.json` | The status line you had before setup. |
