@@ -44,7 +44,7 @@ rest, drinks its potions and gets back up on its own.
   tougher and better paid.
 - **56 achievements** for kills, groups, bosses, survival, levels, skills, gear, allies, seasons and
   hours of work, plus a couple of secret ones. 🏅 pops up on the stats row when you earn one.
-- **Seven biomes,** each with its own floor, enemies and a boss every ~15 minutes of work:
+- **Seven biomes,** each with its own floor, enemies and a boss every ~17 minutes of work:
   🌼 Meadow, 🌲 Dark Forest, 💎 Caves, 🌴 Coast, 🌵 Desert, 🪦 Graveyard, 🌋 Volcano. After the
   Volcano the world loops back to the Meadow, "II", with tougher enemies. The stats row shows how
   far through the current biome you are (`🌴 Coast 37%`); its boss waits at 100%. A 🌙 after it
@@ -72,7 +72,7 @@ or your files, so it's safe to run on work projects and code under an NDA.
 - **Nothing leaves your machine:** no network access at all, and no npm dependencies. The scripts
   only use Node's built-in `fs`, `path`, `os` and `child_process`, and `child_process` only runs the
   status line you already had, so it keeps showing above the hero.
-- **Easy to check:** about 3,300 lines of plain JavaScript, with no build step and nothing
+- **Easy to check:** about 3,400 lines of plain JavaScript, with no build step and nothing
   minified. The transcript reading is `ingestTranscript()` in `scripts/companion.js`.
 
 ## Install
@@ -160,7 +160,7 @@ The mage hits weakly but rolls the strongest skills, the warrior hits hardest (i
 little weaker), and the archer lands double-damage critical shots 20% of the time. The warrior,
 always up close, has the most life; the archer, which shoots most enemies before they reach it,
 has the least, so bosses are its danger. On average all
-three level up at the same pace (within one level of each other up to 30 hours of work, checked by
+three level up at the same pace (within about a level of each other up to 30 hours of work, checked by
 simulation), so the choice is about style. Skills are random, so luck can put a hero a level or
 two ahead or behind. Only the active class's hero moves; the others wait where you left them.
 
@@ -206,8 +206,8 @@ for every milestone they had already passed, keeping the best two.
 
 ## Gear
 
-Every hero starts with nothing in its six gear slots. A normal enemy drops a piece 3% of the
-time (about one every 4 minutes of work, counting the bosses) and every boss drops one, rolling
+Every hero starts with nothing in its six gear slots. A normal enemy drops a piece 4% of the
+time (about one every 3 minutes of work, counting the bosses) and every boss drops one, rolling
 the rarity twice like a skill from a level 10 boss. Nothing to do on your side:
 
 ```
@@ -283,14 +283,29 @@ The hero's life bar sits right under its XP bar, with the potions it carries, th
   the warrior 1.
 - **Life** grows with the level and with gear's `+% life`. It comes back while walking between
   fights, and all of it on a level up.
-- **Potions:** 🧪 dropped by 1 enemy in 20 and by every boss, up to 3 at a time. The hero drinks
+- **Potions:** 🧪 dropped by 1 enemy in 15 and by every boss, up to 3 at a time. The hero drinks
   one on its own when its life drops below 30%, getting half of it back.
 - **Knocked out:** at 0 life the hero shows 😵 and rests for 15 seconds of work while the enemy
   heals. Then it gets back up with full life and +25% damage for every knockout until its next win,
   so it always gets through in the end. Nothing is lost but the time.
 
-For a hero on pace (checked by simulation), that's 6 to 9 potions an hour, more at night when
-elites are more common, and a knockout every few hours of work, mostly by bosses.
+For a hero on pace (checked by simulation), that's 3 to 6 potions an hour, more at night when
+elites are more common, and a knockout now and then, mostly by Elder bosses, which are the
+archer's real danger.
+
+### Enemies keep up with you
+
+Enemy life grows with the zone, and a hero that's ahead of the curve (thanks to tokens, rested XP
+or lucky skills) would otherwise kill everything in one or two hits. So enemies also scale with
+how far ahead you are:
+
+- **On pace:** the game knows the level a hero on pace has at each point of the world (level 14 at
+  the start of 💎 Caves II, 20 at the start of 🌵 Desert III, 26 at 🌴 Coast V…). Up to a level
+  above it, nothing changes.
+- **Ahead:** for every level beyond that, enemies have 8% more life, damage and XP, up to double.
+  A level 23 hero where a hero on pace is level 20.6 meets enemies 11% tougher.
+- **Nothing lost:** the extra XP matches the extra life, so a hero ahead of pace levels up just as
+  fast as before; its fights just stay fights. A hero behind pace meets normal enemies.
 
 ## Allies
 
@@ -542,7 +557,8 @@ The hero takes one step per second of **working time**. Hooks tell it when Claud
 Enemies have life, which grows with the zone. Each hit does the class's base damage plus its
 per-level damage times your level, plus the weapon's bonus, raised by the damage bonuses of
 skills and gear; a skill that is off cooldown multiplies it, and a critical hit doubles it. For a hero on pace, a normal enemy takes about 5 hits, a mini boss
-about 15, a zone boss about 35 and a level boss about 50; a hero ahead of the curve kills faster.
+about 15, a zone boss about 30 and a level boss about 60, all game long; a hero ahead of the curve
+meets tougher enemies (see [Enemies keep up with you](#enemies-keep-up-with-you)).
 While you fight, the stats row shows the enemy's life and the damage of each hit, and the life
 row under it the damage you take (see [Life and combat](#life-and-combat)):
 
@@ -550,10 +566,10 @@ row under it the damage you take (see [Life and combat](#life-and-combat)):
 🧝 Archer Lv 13 ▰▱▱▱▱▱▱▱▱▱ 371/3086 XP · 🪶 Fletched Bow · 🌲 Dark Forest II 64% · 💀 587 · 🐺 Wolf ▰▰▰▰▰▱▱▱▱▱ 136/304 -72
 ```
 
-XP comes from kills (`1.6 * (3 + zone + random(0..zone))`, bosses x10) and from tokens: every 2,000 tokens
+XP comes from kills (`2.2 * (3 + zone + random(0..zone))`, bosses x10) and from tokens: every 2,750 tokens
 Claude uses (input + cache writes + output, not cache reads) is worth one kill. Gear with `+% XP`
 raises both. Going from level `L` to `L+1` takes `10 + 1.4 * L^3` XP. Rough pacing, counting
-kills only: level 3 after 2 minutes of work, level 9 after an hour, level 15 after 3 hours,
+kills only: level 3 after 2 minutes of work, level 10 after an hour, level 16 after 3 hours,
 level 25 after 8 hours, the last weapon (level 35) after about 16 hours. Token XP comes on top:
 with 300,000 tokens an hour of work, a hero is one to two levels further along. So does
 [rested XP](#rested-xp), and [allies](#allies) make fights shorter.
@@ -609,17 +625,20 @@ Everything below is in `scripts/companion.js`.
 |----------|---------|---------|
 | `STEP_MS` | `1000` | Working time per game step. Lower it to make the hero faster. |
 | `ZONE_LENGTH` | `600` | Tiles per zone. A boss waits at the end of each zone. |
-| `TOKENS_PER_KILL` | `2000` | Tokens worth one kill's XP. Lower it for more token XP. |
-| `ENEMY_HP` | `[20, 60, 0.7]` | Enemy life: `20 + 60 * zone^0.7`, give or take 20%. Raise it for longer fights. |
-| `RANKS` | | Life, XP and damage of mini bosses (`2.5`, `5`, `1.5`), zone bosses (`5`, `10`, `1.5`) and level bosses (`8`, `16`, `2`), as multiples of a normal enemy's, and how often they strike (`every` 2 seconds). |
-| `KILL_XP` | `1.6` | Multiplier on the XP of every kill (and of tokens). Raise it to level faster. |
+| `TOKENS_PER_KILL` | `2750` | Tokens worth one kill's XP. Lower it for more token XP. |
+| `ENEMY_HP` | `[30, 95, 0.77]` | Enemy life: `30 + 95 * zone^0.77`, give or take 20%. Raise it for longer fights. |
+| `ENEMY_DMG` | `[20, 60, 0.7]` | The curve enemy damage follows: `20 + 60 * zone^0.7`, times `ENEMY_ATK`. |
+| `PACE`, `PACE_SLACK` | `[2.95, 3.46, 0.55]`, `1` | The level of a hero on pace at each point of the world (`2.95 + 3.46 * zone^0.55`), and the levels above it that don't count yet. |
+| `AHEAD_SCALE`, `AHEAD_MAX` | `0.08`, `1` | For a hero ahead of pace, the extra enemy life, damage and XP per level, and the most of it. |
+| `RANKS` | | Life, XP and damage of mini bosses (`2.5`, `5`, `2`), zone bosses (`5`, `10`, `2`) and level bosses (`8`, `16`, `2.6`), as multiples of a normal enemy's, and how often they strike (`every` 2 seconds). |
+| `KILL_XP` | `2.2` | Multiplier on the XP of every kill (and of tokens). Raise it to level faster. |
 | `MAX_SKILLS` | `2` | How many skills a hero holds. |
 | `RARITIES` | | Each rarity's chance, how much it multiplies the strength of a skill or a piece of gear, and the shards a salvaged piece gives. |
-| `ENEMY_ATK` | `0.085` | Enemy damage per hit, as a share of a normal enemy's life in that zone (times the rank's `atk` in `RANKS`). Raise it for a harder game. |
+| `ENEMY_ATK` | `0.05` | Enemy damage per hit, as a share of `ENEMY_DMG` in that zone (times the rank's `atk` in `RANKS`). Raise it for a harder game. |
 | `AGGRO`, `SHOT_RANGE` | `8`, `4` | How far away the nearest enemy notices the hero, and how far the ones that shoot fire from. |
 | `HERO_LIFE` | `[40, 12, 1.4]` | Hero life: `40 + 12 * level^1.4`, times the class's `life`. |
 | `REGEN` | `0.02` | Share of the hero's life that comes back each second out of combat. |
-| `POTION_DROP`, `MAX_POTIONS` | `0.05`, `3` | Chance a normal enemy drops a potion (bosses always do), and how many the hero carries. |
+| `POTION_DROP`, `MAX_POTIONS` | `0.065`, `3` | Chance a normal enemy drops a potion (bosses always do), and how many the hero carries. |
 | `POTION_AT`, `POTION_HEAL` | `0.3`, `0.5` | Life below which a potion is drunk, and how much of the life it gives back. |
 | `GROUP_SIZES` | `[0.6, 0.2, 0.12, 0.08]` | Chances that enemies come alone, or in a group of 2, 3 or 4. |
 | `ELITE_CHANCE`, `ELITE` | `0.05` | The share of normal enemies that are elite (twice that at night), and an elite's life, XP, gear and potion multipliers. |
@@ -627,7 +646,7 @@ Everything below is in `scripts/companion.js`.
 | `GROUP_MEMBER`, `GROUP_GAP` | `0.65`, `3` | A group member's life, damage and XP compared to an enemy alone, and the extra tiles after a group per extra enemy. |
 | `AREA`, `AREA_MULT` | `3`, `0.85` | How many tiles behind the target an area skill reaches, and its share of a single-target skill's extra damage. |
 | `KO_STEPS`, `RALLY` | `15`, `0.25` | Seconds a knocked out hero rests, and the extra damage per knockout until its next win. |
-| `GEAR_DROP` | `0.03` | Chance that a normal enemy drops a piece of gear. Bosses always do. |
+| `GEAR_DROP` | `0.04` | Chance that a normal enemy drops a piece of gear. Bosses always do. |
 | `GEAR_SLOTS` | | The six slots, with their icon and the base names a piece can roll (`Helm`, `Hood`…). |
 | `GEAR_MATERIALS` | | The material in a piece's name, by the level it was found at. |
 | `REFORGE_COST` | `10` | Shards for a piece's first reforge; each one after that costs this many more. |

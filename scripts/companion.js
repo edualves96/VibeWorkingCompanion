@@ -22,23 +22,33 @@ const SESSION_STALE_MS = 60000;   // a session silent this long no longer counts
 // undetected Esc), so it stops counting as working instead of moving the hero forever.
 const IDLE_CAP_MS = 10 * 60 * 1000;
 const SESSION_PRUNE_MS = 86400000;
-const TOKENS_PER_KILL = 2000;    // tokens worth one kill's XP in the current zone
-// Enemy life grows about as fast as a hero on pace gets stronger, so a normal enemy takes
-// around 5 hits and a zone boss around 35 all game long.
-const ENEMY_HP = [20, 60, 0.7];   // hp = 20 + 60 x zone^0.7, give or take 20%
+const TOKENS_PER_KILL = 2750;    // tokens worth one kill's XP in the current zone
+// Enemy life grows about as fast as a hero on pace gets stronger (with its gear, skills and
+// reforges), so a lone normal enemy takes around 5 hits all game long.
+const ENEMY_HP = [30, 95, 0.77];  // hp = 30 + 95 x zone^0.77, give or take 20%
+// Enemy damage follows a gentler curve than their life (the life curve of before 1.19.0).
+const ENEMY_DMG = [20, 60, 0.7];
+// Enemies scale with a hero that's ahead of the curve. PACE is the level a hero on pace has at
+// each point of the world: 2.95 + 3.46 x zone^0.55 (the zone counting its fraction, from the
+// simulation). For every level above that, past PACE_SLACK levels, enemies get AHEAD_SCALE more
+// life, damage and XP, up to AHEAD_MAX more: the fights stay real, and the XP an hour stays.
+const PACE = [2.95, 3.46, 0.55];
+const PACE_SLACK = 1;
+const AHEAD_SCALE = 0.08;
+const AHEAD_MAX = 1;
 // Life and XP of each kind of enemy, as multiples of a normal one's. A boss waits at the end of
 // every zone; reaching every 10th level summons an elder boss, and every other 5th level a mini boss.
 // `atk` multiplies their damage, and they strike every `every` steps: bosses hit slower but harder.
 const RANKS = {
   normal: { hp: 1, xp: 1, atk: 1, every: 1 },
-  mini: { hp: 2.5, xp: 5, atk: 1.5, every: 2, prefix: 'Giant', news: '⭐ A mini boss appears' },
-  boss: { hp: 5, xp: 10, atk: 1.5, every: 2 },
-  elder: { hp: 8, xp: 16, atk: 2, every: 2, prefix: 'Elder', news: '👑 A boss appears' },
+  mini: { hp: 2.5, xp: 5, atk: 2, every: 2, prefix: 'Giant', news: '⭐ A mini boss appears' },
+  boss: { hp: 5, xp: 10, atk: 2, every: 2 },
+  elder: { hp: 8, xp: 16, atk: 2.6, every: 2, prefix: 'Elder', news: '👑 A boss appears' },
 };
 // Enemies fight back. The nearest one ahead notices the hero AGGRO tiles away and closes in:
-// to the next tile, or to SHOT_RANGE tiles for enemies that shoot. A hit does ENEMY_ATK times a
-// normal enemy's base life in that zone (times the rank's `atk`), give or take 15%.
-const ENEMY_ATK = 0.085;
+// to the next tile, or to SHOT_RANGE tiles for enemies that shoot. A hit does ENEMY_ATK times
+// ENEMY_DMG in that zone (times the rank's `atk`), give or take 15%.
+const ENEMY_ATK = 0.05;
 const AGGRO = 8;
 const SHOT_RANGE = 4;
 // Hero life: (40 + 12 x level^1.4) x the class's `life`, plus the gear's life bonus. It comes back
@@ -47,7 +57,7 @@ const HERO_LIFE = [40, 12, 1.4];
 const REGEN = 0.02;
 // Potions: dropped by POTION_DROP of normal enemies and every boss, up to MAX_POTIONS, and drunk
 // on their own below POTION_AT of the maximum life, giving back POTION_HEAL of it.
-const POTION_DROP = 0.05;
+const POTION_DROP = 0.065;
 const MAX_POTIONS = 3;
 const POTION_AT = 0.3;
 const POTION_HEAL = 0.5;
@@ -78,7 +88,7 @@ const TRAITS = {
 const AREA = 3;
 const AREA_MULT = 0.85;
 const RALLY = 0.25;
-const KILL_XP = 1.6;             // longer fights mean fewer kills, so each kill is worth more
+const KILL_XP = 2.2;             // longer fights mean fewer kills, so each kill is worth more
 // The mini boss or boss of every 5th level drops a random skill; a hero holds this many.
 const MAX_SKILLS = 2;
 // Rarity multiplies a skill's strength. A boss of a 10th level rolls twice and keeps the better.
@@ -91,7 +101,7 @@ const RARITIES = [
 ];
 // Gear: one piece per slot, all heroes start with none. A normal enemy drops a piece this often;
 // every boss drops one, rolling rarity twice like a skill from the boss of a 10th level.
-const GEAR_DROP = 0.03;
+const GEAR_DROP = 0.04;
 const GEAR_SLOTS = {
   helmet: { icon: '🪖', name: 'Helmet', bases: ['Helm', 'Hood', 'Cap', 'Circlet'] },
   chest: { icon: '🥋', name: 'Chest', bases: ['Armor', 'Robe', 'Tunic', 'Hauberk'] },
@@ -166,7 +176,7 @@ const SEASON_ENEMY = 0.12;
 // last JOURNAL_SHOWN lines of all heroes together.
 const JOURNAL_SIZE = 100;
 const JOURNAL_SHOWN = 50;
-const ZONE_LENGTH = 600;         // tiles per zone; with the fights, about 15 minutes of work
+const ZONE_LENGTH = 600;         // tiles per zone; with the fights, about 17 minutes of work
 const VIEW_AHEAD = 40;
 const WORLD_TILES = 24;           // world strip width; each tile is 2 columns
 const MSG_MS = 10000;
@@ -177,6 +187,7 @@ const UPDATE_MSG_MS = 30000;      // the "updated" notice stays longer than othe
 const WHATS_NEW = {
   '1.3.0': 'enemies have life now, and every 5th level summons a boss',
   '1.4.0': `skills are random now, dropped by level bosses: ${COMMAND_PREFIX}skills`,
+  '1.19.0': '💀 tougher enemies (about 5 hits each), and they keep up with you',
   '1.18.0': root => (olderThan(root.seenVersion, '1.17.0')
     ? `⛺ campfires when Claude compacts, 📇 ${COMMAND_PREFIX}card, 💠 elite enemies, 🎃 seasonal events`
     : `⛺ Claude compacts, the hero makes camp: full life, +${CAMP_DAMAGE * 100}% damage`),
@@ -324,7 +335,7 @@ const BIOMES = [
 const CLASSES = {
   mage: {
     name: 'Mage', icon: '🧙', blurb: 'casts from 3 tiles, weak hits, strong spells',
-    range: 3, atk: [1, 0.8], crit: 0, hit: '🔹', life: 1.15,
+    range: 3, atk: [1, 0.9], crit: 0, hit: '🔹', life: 1.15,
     weapons: [
       { lvl: 1, icon: '🪵', name: 'Branch', atk: 0 },
       { lvl: 4, icon: '📜', name: 'Scroll', atk: 2 },
@@ -336,7 +347,7 @@ const CLASSES = {
     ],
     // Spells make up for the weak hits, so mage skills roll stronger.
     skills: {
-      power: 1.5,
+      power: 1.7,
       parts: [['🔥', 'Fire'], ['⚡', 'Storm'], ['🧊', 'Frost'], ['🌊', 'Tide'], ['💫', 'Star'], ['🌑', 'Shadow']],
       forms: ['Bolt', 'Lance', 'Orb', 'Ray'],
       areaForms: ['Nova', 'Burst', 'Wave'],
@@ -364,7 +375,7 @@ const CLASSES = {
   },
   archer: {
     name: 'Archer', icon: '🧝', blurb: 'shoots from 5 tiles, critical shots',
-    range: 5, atk: [2, 1], crit: 0.2, hit: '🔸', life: 0.75,
+    range: 5, atk: [2, 1], crit: 0.2, hit: '🔸', life: 0.85,
     weapons: [
       { lvl: 1, icon: '🪨', name: 'Sling', atk: 0 },
       { lvl: 4, icon: '🪃', name: 'Boomerang', atk: 2 },
@@ -1617,8 +1628,8 @@ function killXp(zone, roll) {
 // Bosses and elder bosses are the biome's boss; normal enemies and mini bosses one of its enemies,
 // or at night its night creature too (marked `night`), and in season the season's enemy. `forced`
 // picks the kind instead (a ghost wave's ghosts). `boss` marks every kind but normal, for the
-// "Defeated" message.
-function makeEnemy(x, zone, rank = 'normal', now = Date.now(), forced = null) {
+// "Defeated" message. `level`: the hero's, to scale the enemy for a hero ahead of the curve.
+function makeEnemy(x, zone, rank = 'normal', now = Date.now(), forced = null, level = null) {
   const b = biomeOf(zone);
   const r = RANKS[rank];
   const s = season(now);
@@ -1638,10 +1649,27 @@ function makeEnemy(x, zone, rank = 'normal', now = Date.now(), forced = null) {
   if (s && kind === s.enemy) {
     foe.snowman = true;
   }
+  const ahead = level == null ? 1 : aheadScale(level, x);
+  if (ahead > 1) {
+    foe.hp = foe.max = Math.round(foe.max * ahead);
+    foe.atk = Math.max(1, Math.round(foe.atk * ahead));
+    foe.xp = Math.round(foe.xp * ahead);
+  }
   if (rank === 'normal' && Math.random() < ELITE_CHANCE * (isNight(now) ? 2 : 1)) {
     makeElite(foe);
   }
   return foe;
+}
+
+// The level of a hero on pace at tile `x` of the world (see PACE).
+function paceLevel(x) {
+  return PACE[0] + PACE[1] * Math.pow(Math.max(0, x) / ZONE_LENGTH, PACE[2]);
+}
+
+// How much tougher enemies at `x` are for a hero of `level`: 1, or more if it's ahead of pace.
+function aheadScale(level, x) {
+  const ahead = level - paceLevel(x) - PACE_SLACK;
+  return 1 + Math.min(AHEAD_MAX, Math.max(0, ahead) * AHEAD_SCALE);
 }
 
 function makeElite(foe) {
@@ -1671,7 +1699,8 @@ function baseLife(zone) {
 }
 
 function enemyAttack(zone, rank) {
-  return { atk: Math.max(1, Math.round(baseLife(zone) * ENEMY_ATK * RANKS[rank].atk)), every: RANKS[rank].every };
+  const dmg = ENEMY_DMG[0] + ENEMY_DMG[1] * Math.pow(zone, ENEMY_DMG[2]);
+  return { atk: Math.max(1, Math.round(dmg * ENEMY_ATK * RANKS[rank].atk)), every: RANKS[rank].every };
 }
 
 function maxLife(h) {
@@ -1683,7 +1712,7 @@ function spawnAhead(h, now) {
   while (h.nextSpawnX <= h.heroX + VIEW_AHEAD) {
     const bossX = (h.bossZone + 1) * ZONE_LENGTH;
     if (h.nextSpawnX >= bossX - 3) {
-      h.enemies.push(makeEnemy(bossX, h.bossZone, 'boss', now));
+      h.enemies.push(makeEnemy(bossX, h.bossZone, 'boss', now, null, h.level));
       h.bossZone++;
       h.nextSpawnX = bossX + randInt(6, 12);
     } else {
@@ -1692,7 +1721,7 @@ function spawnAhead(h, now) {
       const s = season(now);
       const wave = size > 1 && s && s.wave && Math.random() < GHOST_WAVE ? s.wave : null;
       for (let i = 0; i < size; i++) {
-        const foe = makeEnemy(h.nextSpawnX + i, h.bossZone, 'normal', now, wave);
+        const foe = makeEnemy(h.nextSpawnX + i, h.bossZone, 'normal', now, wave, h.level);
         if (size > 1) {
           foe.group = h.nextSpawnX;
           foe.hp = foe.max = Math.max(1, Math.round(foe.max * GROUP_MEMBER));
@@ -1731,7 +1760,7 @@ function summon(h, rank, now) {
   while (x === zoneBossX || h.enemies.some(e => e.x === x)) {
     x++;
   }
-  const foe = makeEnemy(x, zoneOf(x), rank, now);
+  const foe = makeEnemy(x, zoneOf(x), rank, now, null, h.level);
   foe.drop = h.level;
   h.enemies.push(foe);
   h.enemies.sort((a, b) => a.x - b.x);
@@ -2779,5 +2808,5 @@ module.exports = {
   onHookEvent, onAgentEvent, onStatusLine, render, displayWidth,
   newRoot, newHero, migrate, step, xpNeed, attackOf, weaponOf, rollSkill, skillPower, learnSkill,
   rollGear, gearPower, gearBonus, gainXp, checkAchievements, achievementFacts, maxLife,
-  makeEnemy, isNight, daylight, season, TRAITS,
+  makeEnemy, isNight, daylight, season, TRAITS, paceLevel, aheadScale, baseLife,
 };
