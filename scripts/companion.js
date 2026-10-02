@@ -54,6 +54,17 @@ const POTION_HEAL = 0.5;
 // A hero at 0 life is knocked out: it rests KO_STEPS steps while the enemy heals, then gets up
 // with full life and RALLY more damage per knockout until its next win, so it can never get stuck.
 const KO_STEPS = 15;
+// Enemies come in groups of 1 to 4 side by side, with these chances; a group closes in and
+// fights together. GROUP_GAP more tiles follow a group per extra enemy, so enemies don't get
+// much more frequent overall.
+const GROUP_SIZES = [0.6, 0.2, 0.12, 0.08];
+const GROUP_GAP = 3;
+// A group's enemies are weaker than one alone: GROUP_MEMBER of its life, damage and XP.
+const GROUP_MEMBER = 0.65;
+// Area skills hit the target and every enemy up to AREA tiles behind it, adding AREA_MULT of the
+// extra damage a single-target skill of the same strength would.
+const AREA = 3;
+const AREA_MULT = 0.85;
 const RALLY = 0.25;
 const KILL_XP = 1.6;             // longer fights mean fewer kills, so each kill is worth more
 // The mini boss or boss of every 5th level drops a random skill; a hero holds this many.
@@ -92,6 +103,9 @@ const UPDATE_MSG_MS = 30000;      // the "updated" notice stays longer than othe
 const WHATS_NEW = {
   '1.3.0': 'enemies have life now, and every 5th level summons a boss',
   '1.4.0': `skills are random now, dropped by level bosses: ${COMMAND_PREFIX}skills`,
+  '1.7.0': root => (olderThan(root.seenVersion, '1.6.0')
+    ? `💗 life, groups, area skills, gear: ${COMMAND_PREFIX}commands`
+    : 'enemies come in groups, area skills hit them all'),
   '1.6.0': root => (olderThan(root.seenVersion, '1.5.0')
     ? `💗 life, enemies that fight back, gear and achievements: ${COMMAND_PREFIX}commands`
     : '💗 your hero has life now, and enemies fight back'),
@@ -109,6 +123,8 @@ const ACHIEVEMENT_GROUPS = {
     { id: 'heavy-hitter', name: 'Heavy Hitter', what: 'land a hit of 250 damage', of: 'maxHit', goal: 250 },
     { id: 'devastator', name: 'Devastator', what: 'land a hit of 2,500 damage', of: 'maxHit', goal: 2500 },
     { id: 'perfect-strike', name: 'Perfect Strike', what: 'land a critical hit with a skill', of: 'skillCrits', goal: 1 },
+    { id: 'crowd-control', name: 'Crowd Control', what: 'hit 4 enemies with one area skill', of: 'areaHits', goal: 4 },
+    { id: 'pack-hunter', name: 'Pack Hunter', what: 'defeat 500 groups of enemies', of: 'groups', goal: 500 },
   ],
   Bosses: [
     { id: 'boss-fight', name: 'Boss Fight', what: 'defeat the 🐻 Bear at the end of the 🌼 Meadow', of: 'zone', goal: 1 },
@@ -186,8 +202,8 @@ const BIOMES = [
 // range: how many tiles ahead the hero starts fighting. atk: [base, per level].
 // crit: chance of a double-damage hit. hit: icon of a basic attack. life: multiplies the hero's life.
 // Weapons unlock at `lvl` and add `atk`. Skills are rolled at random (see rollSkill): their
-// name is one of `parts` (which also gives the icon) plus one of `forms`, and `power` scales
-// their strength.
+// name is one of `parts` (which also gives the icon) plus one of `forms` (single target) or
+// `areaForms` (area skills), and `power` scales their strength.
 const CLASSES = {
   mage: {
     name: 'Mage', icon: '🧙', blurb: 'casts from 3 tiles, weak hits, strong spells',
@@ -205,7 +221,8 @@ const CLASSES = {
     skills: {
       power: 1.5,
       parts: [['🔥', 'Fire'], ['⚡', 'Storm'], ['🧊', 'Frost'], ['🌊', 'Tide'], ['💫', 'Star'], ['🌑', 'Shadow']],
-      forms: ['Bolt', 'Lance', 'Nova', 'Burst', 'Orb', 'Ray'],
+      forms: ['Bolt', 'Lance', 'Orb', 'Ray'],
+      areaForms: ['Nova', 'Burst', 'Wave'],
     },
   },
   warrior: {
@@ -224,7 +241,8 @@ const CLASSES = {
     skills: {
       power: 0.85,
       parts: [['💪', 'Mighty'], ['🌀', 'Whirling'], ['💢', 'Raging'], ['🩸', 'Blood'], ['🌋', 'Quake'], ['🔥', 'Blazing']],
-      forms: ['Strike', 'Cleave', 'Slam', 'Smash', 'Rend', 'Charge'],
+      forms: ['Strike', 'Rend', 'Charge'],
+      areaForms: ['Cleave', 'Slam', 'Smash'],
     },
   },
   archer: {
@@ -242,7 +260,8 @@ const CLASSES = {
     skills: {
       power: 1,
       parts: [['🎯', 'Aimed'], ['🍃', 'Wind'], ['🦅', 'Eagle'], ['💨', 'Swift'], ['🌠', 'Star'], ['🔥', 'Fire']],
-      forms: ['Shot', 'Arrow', 'Volley', 'Rain', 'Barrage', 'Bolt'],
+      forms: ['Shot', 'Arrow', 'Bolt'],
+      areaForms: ['Volley', 'Rain', 'Barrage'],
     },
   },
 };
@@ -266,12 +285,13 @@ function newStats() {
 
 // What a hero did that achievements count but the hero doesn't otherwise keep: `found` counts
 // skills and `gear` pieces of gear by rarity, `left` the gear left behind, `closeCalls` wins with
-// under 10% life left, `potions` the potions drunk.
+// under 10% life left, `potions` the potions drunk, `maxAreaHits` the most enemies one area skill
+// hit, `groups` the groups of enemies defeated.
 function newTally() {
   const byRarity = () => ({ common: 0, rare: 0, epic: 0, legendary: 0 });
   return {
     maxHit: 0, skillCrits: 0, minis: 0, elders: 0, replaced: 0, found: byRarity(), gear: byRarity(), left: 0,
-    knockouts: 0, closeCalls: 0, potions: 0,
+    knockouts: 0, closeCalls: 0, potions: 0, maxAreaHits: 0, groups: 0,
   };
 }
 
@@ -316,6 +336,14 @@ function migrate(s) {
   for (const h of Object.values(s.heroes)) {
     if (!h.skills) {
       grantMissedSkills(h);
+    }
+    for (const sk of h.skills) {
+      if (sk.area == null) {
+        sk.area = CLASSES[h.cls].skills.areaForms.includes(sk.name.split(' ').pop());
+        if (sk.area) {
+          sk.mult = areaMult(sk.mult);
+        }
+      }
     }
     // Counts added in later versions start at 0.
     h.tally = h.tally ? { ...newTally(), ...h.tally } : pastTally(h);
@@ -774,7 +802,7 @@ function status(now) {
 const BONUS_NAMES = { damage: 'damage', crit: 'critical chance' };
 
 function skillLine(s) {
-  const what = `x${s.mult} damage every ${s.cd} s, +${s.bonus.pct}% ${BONUS_NAMES[s.bonus.kind]}`;
+  const what = `x${s.mult} ${s.area ? 'area ' : ''}damage every ${s.cd} s, +${s.bonus.pct}% ${BONUS_NAMES[s.bonus.kind]}`;
   return `${s.icon} ${s.name.padEnd(16)} ${s.rarity.padEnd(10)}power ${String(skillPower(s)).padStart(3)}   ${what}`;
 }
 
@@ -807,7 +835,8 @@ function skillsReport(now) {
     return `No heroes yet. Pick one with ${COMMAND_PREFIX}chooseclass.`;
   }
   lines.push('The mini boss or boss of every 5th level drops a random skill. It takes a free slot,',
-    'or replaces your weaker skill if its power is higher.');
+    'or replaces your weaker skill if its power is higher. Area skills hit the target and every',
+    `enemy up to ${AREA} tiles behind it, for less damage each.`);
   return lines.join('\n');
 }
 
@@ -1035,10 +1064,37 @@ function spawnAhead(h) {
       h.bossZone++;
       h.nextSpawnX = bossX + randInt(6, 12);
     } else {
-      h.enemies.push(makeEnemy(h.nextSpawnX, h.bossZone));
-      h.nextSpawnX += randInt(5, 12);
+      // A group's enemies share `group` (where it spawned), so they fight together.
+      const size = Math.min(groupSize(), bossX - 1 - h.nextSpawnX);
+      for (let i = 0; i < size; i++) {
+        const foe = makeEnemy(h.nextSpawnX + i, h.bossZone);
+        if (size > 1) {
+          foe.group = h.nextSpawnX;
+          foe.hp = foe.max = Math.max(1, Math.round(foe.max * GROUP_MEMBER));
+          foe.atk = Math.max(1, Math.round(foe.atk * GROUP_MEMBER));
+          foe.xp = Math.max(1, Math.round(foe.xp * GROUP_MEMBER));
+        }
+        h.enemies.push(foe);
+      }
+      h.nextSpawnX += size - 1 + randInt(5, 12) + (size - 1) * GROUP_GAP;
     }
   }
+}
+
+function groupSize() {
+  let r = Math.random();
+  for (let i = 0; i < GROUP_SIZES.length; i++) {
+    if (r < GROUP_SIZES[i]) {
+      return i + 1;
+    }
+    r -= GROUP_SIZES[i];
+  }
+  return 1;
+}
+
+// The enemies that fight together with `foe`: its group, or just itself.
+function groupOf(h, foe) {
+  return foe.group == null ? [foe] : h.enemies.filter(e => e.group === foe.group);
 }
 
 // A level milestone's boss appears on the first free tile just beyond the hero's range, carrying
@@ -1077,9 +1133,6 @@ function rollRarity() {
   return RARITIES[0];
 }
 
-// A random skill found at `level`: a special attack that hits for `mult` x damage every `cd`
-// steps, plus a passive bonus to all damage or to the critical chance. Skills found later roll
-// stronger, so they can replace old ones. A longer cooldown comes with a bigger multiplier.
 // A lucky roll is rolled twice, keeping the rarer result.
 function luckyRarity(lucky) {
   const rarity = rollRarity();
@@ -1090,28 +1143,43 @@ function luckyRarity(lucky) {
   return RARITIES.indexOf(again) > RARITIES.indexOf(rarity) ? again : rarity;
 }
 
+// A random skill found at `level`: a special attack that hits for `mult` x damage every `cd`
+// steps, plus a passive bonus to all damage or to the critical chance. Skills found later roll
+// stronger, so they can replace old ones. A longer cooldown comes with a bigger multiplier.
+// The form decides whether it's an area skill, which hits several enemies for less.
 function rollSkill(cls, level, lucky) {
   const c = CLASSES[cls].skills;
   const [icon, first] = pick(c.parts);
+  const form = pick([...c.forms, ...c.areaForms]);
+  const area = c.areaForms.includes(form);
   const rarity = luckyRarity(lucky);
   const spread = () => 0.85 + Math.random() * 0.3;
   const cd = randInt(6, 16);
   const strength = (1 + 0.75 * Math.sqrt(level)) * rarity.power * c.power * spread();
+  const mult = 1 + (strength * cd) / 10;
   return {
     icon,
-    name: `${first} ${pick(c.forms)}`,
+    name: `${first} ${form}`,
     rarity: rarity.name,
     level,
-    mult: Math.round((1 + (strength * cd) / 10) * 10) / 10,
+    area,
+    mult: area ? areaMult(mult) : Math.round(mult * 10) / 10,
     cd,
     bonus: { kind: Math.random() < 0.5 ? 'damage' : 'crit', pct: Math.round((2 + 1.2 * Math.sqrt(level)) * rarity.power * spread()) },
     readyAt: 0,
   };
 }
 
+// The multiplier of an area skill as strong as a single-target one with multiplier `mult`.
+function areaMult(mult) {
+  return Math.round((1 + (mult - 1) * AREA_MULT) * 10) / 10;
+}
+
 // One number to compare skills by: the extra damage the attack adds per step, plus the bonus.
+// An area skill counts as the single-target skill it was rolled from: weaker on one enemy, but
+// stronger on a group.
 function skillPower(s) {
-  return Math.round(((s.mult - 1) / s.cd + s.bonus.pct / 100) * 100);
+  return Math.round(((s.mult - 1) / (s.area ? AREA_MULT : 1) / s.cd + s.bonus.pct / 100) * 100);
 }
 
 function skillBonus(h, kind) {
@@ -1222,6 +1290,7 @@ function counts(h) {
     knockouts: t.knockouts,
     closeCalls: t.closeCalls,
     potions: t.potions,
+    groups: t.groups,
   };
 }
 
@@ -1241,6 +1310,7 @@ function achievementFacts(root, now, worked) {
     ...totals,
     workHours: (totals.workSec || 0) / 3600,
     maxHit: best(h => h.tally.maxHit),
+    areaHits: best(h => h.tally.maxAreaHits),
     // A zone's boss must be beaten to leave it, so this is also how many zone bosses fell.
     zone: best(h => zoneOf(h.heroX)),
     level: best(h => h.level),
@@ -1322,7 +1392,7 @@ function targetOf(h) {
   return h.enemies.find(e => e.x > h.heroX && e.x <= h.heroX + CLASSES[h.cls].range);
 }
 
-// The nearest enemy ahead: the only one that closes in and attacks, so fights stay one at a time.
+// The nearest enemy ahead. Only it and its group close in and attack, so fights stay one at a time.
 function frontOf(h) {
   return h.enemies.find(e => e.x > h.heroX);
 }
@@ -1370,8 +1440,11 @@ function heroTurn(h, now) {
 
   let dmg = attackOf(h) * (1 + (skillBonus(h, 'damage') + gearBonus(h, 'damage')) / 100) * (1 + RALLY * h.rally);
   let icon = c.hit;
-  // The strongest skill that is off cooldown fires instead of a basic attack.
-  const ready = h.skills.filter(sk => sk.readyAt <= h.step).sort((a, b) => b.mult - a.mult)[0];
+  // The ready skill adding the most damage fires instead of a basic attack; an area skill counts
+  // its damage once for every enemy it would hit.
+  const inArea = h.enemies.filter(e => e.x >= foe.x && e.x <= foe.x + AREA);
+  const worth = sk => (sk.mult - 1) * (sk.area ? inArea.length : 1);
+  const ready = h.skills.filter(sk => sk.readyAt <= h.step).sort((a, b) => worth(b) - worth(a))[0];
   if (ready) {
     dmg *= ready.mult;
     icon = ready.icon;
@@ -1386,61 +1459,98 @@ function heroTurn(h, now) {
   }
   dmg = Math.round(dmg);
   h.tally.maxHit = Math.max(h.tally.maxHit, dmg);
-  foe.hp -= dmg;
-  // The attack travels across the gap one tile per step, so ranged shots visibly fly.
+  const hit = ready && ready.area ? inArea : [foe];
+  for (const e of hit) {
+    e.hp -= dmg;
+  }
+  if (ready && ready.area) {
+    h.tally.maxAreaHits = Math.max(h.tally.maxAreaHits, hit.length);
+  }
+  // A basic attack or a single-target skill travels across the gap one tile per step, so ranged
+  // shots visibly fly; an area skill lands on every enemy it hits.
   const gap = foe.x - h.heroX - 1;
-  h.fx = { icon, x: h.heroX + 1 + (h.step % Math.max(1, gap)), step: h.step, dmg, crit };
-  if (foe.hp <= 0) {
-    h.kills++;
-    h.enemies = h.enemies.filter(e => e !== foe);
-    h.fx = { icon: '✨', x: foe.x, step: h.step };
-    h.rally = 0;
+  h.fx = { icon, x: h.heroX + 1 + (h.step % Math.max(1, gap)), step: h.step, dmg, crit, count: hit.length };
+  if (ready && ready.area) {
+    h.fx.hits = hit.map(e => e.x);
+  }
+  const dead = hit.filter(e => e.hp <= 0);
+  if (dead.length > 0) {
+    if (!h.fx.hits) {
+      h.fx = { icon: '✨', x: foe.x, step: h.step };
+    }
     if (h.life < maxLife(h) * 0.1) {
       h.tally.closeCalls++;
     }
-    if (foe.boss) {
-      setMsg(h, `🏆 Defeated ${foe.icon} ${foe.name}!`, now);
+    for (const e of dead) {
+      defeat(h, e, now);
     }
-    if (foe.drop) {
-      h.tally[foe.drop % 10 === 0 ? 'elders' : 'minis']++;
-      dropSkill(h, foe.drop, now);
-    }
-    if (foe.boss || Math.random() < GEAR_DROP) {
-      dropGear(h, foe.x, foe.boss, now);
-    }
-    if (h.potions < MAX_POTIONS && (foe.boss || Math.random() < POTION_DROP)) {
-      h.potions++;
-    }
-    gainXp(h, foe.xp, now);
   }
   return true;
 }
 
-// The enemy's half of a step: the nearest enemy ahead notices the hero within AGGRO tiles and
-// closes in one tile per step until the hero is within its reach, then attacks every `every`
-// steps. Returns whether the hero is in a fight with it.
+function defeat(h, foe, now) {
+  h.kills++;
+  h.enemies = h.enemies.filter(e => e !== foe);
+  h.rally = 0;
+  if (foe.group != null && !h.enemies.some(e => e.group === foe.group)) {
+    h.tally.groups++;
+  }
+  if (foe.boss) {
+    setMsg(h, `🏆 Defeated ${foe.icon} ${foe.name}!`, now);
+  }
+  if (foe.drop) {
+    h.tally[foe.drop % 10 === 0 ? 'elders' : 'minis']++;
+    dropSkill(h, foe.drop, now);
+  }
+  if (foe.boss || Math.random() < GEAR_DROP) {
+    dropGear(h, foe.x, foe.boss, now);
+  }
+  if (h.potions < MAX_POTIONS && (foe.boss || Math.random() < POTION_DROP)) {
+    h.potions++;
+  }
+  gainXp(h, foe.xp, now);
+}
+
+// The enemy's half of a step: the nearest enemy ahead, with the rest of its group, notices the
+// hero within AGGRO tiles. Each one closes in a tile per step (never onto another enemy) until
+// the hero is within its reach, then attacks every `every` steps. Returns whether the hero is
+// in a fight.
 function enemyTurn(h, now) {
-  const foe = frontOf(h);
-  const d = foe ? foe.x - h.heroX : Infinity;
-  if (d > AGGRO) {
+  const front = frontOf(h);
+  if (!front || front.x - h.heroX > AGGRO) {
     return false;
   }
-  if (d > reachOf(foe)) {
-    foe.x--;
-    return false;
+  // Front to back, so each one moves into the tile the one ahead just left.
+  const group = groupOf(h, front);
+  let fighting = false;
+  let taken = 0;
+  const shots = [];
+  for (const foe of group) {
+    const d = foe.x - h.heroX;
+    if (d > reachOf(foe)) {
+      if (!h.enemies.some(e => e.x === foe.x - 1)) {
+        foe.x--;
+      }
+      continue;
+    }
+    fighting = true;
+    if (h.step % foe.every !== 0) {
+      continue;
+    }
+    taken += Math.max(1, Math.round(foe.atk * (0.85 + Math.random() * 0.3)));
+    // A shot travels toward the hero one tile per step, like the hero's own.
+    if (foe.shot) {
+      shots.push({ icon: foe.shot, x: foe.x - 1 - (h.step % Math.max(1, d - 1)) });
+    }
   }
-  if (h.step % foe.every !== 0) {
-    return true;
+  if (taken === 0) {
+    return fighting;
   }
-  const dmg = Math.max(1, Math.round(foe.atk * (0.85 + Math.random() * 0.3)));
-  h.life -= dmg;
-  h.hurt = { step: h.step, dmg };
-  // A shot travels toward the hero one tile per step, like the hero's own.
-  if (foe.shot) {
-    h.efx = { icon: foe.shot, x: foe.x - 1 - (h.step % Math.max(1, d - 1)), step: h.step };
-  }
+  h.life -= taken;
+  h.hurt = { step: h.step, dmg: taken };
+  h.shots = { step: h.step, list: shots };
   if (h.life <= 0) {
-    knockOut(h, foe, now);
+    knockOut(h, group, now);
   } else if (h.life < maxLife(h) * POTION_AT && h.potions > 0) {
     h.potions--;
     h.tally.potions++;
@@ -1450,14 +1560,17 @@ function enemyTurn(h, now) {
   return true;
 }
 
-// The hero rests for KO_STEPS while the enemy heals, then gets up stronger (see step).
-function knockOut(h, foe, now) {
+// The hero rests for KO_STEPS while the enemies it fought heal, then gets up stronger (see step).
+function knockOut(h, group, now) {
   h.life = 0;
   h.down = KO_STEPS;
   h.rally++;
   h.tally.knockouts++;
-  foe.hp = foe.max;
-  setMsg(h, `😵 Knocked out by ${foe.icon} ${foe.name}! Resting for ${KO_STEPS} s`, now);
+  for (const foe of group) {
+    foe.hp = foe.max;
+  }
+  const more = group.length > 1 ? ` and ${group.length - 1} more` : '';
+  setMsg(h, `😵 Knocked out by ${group[0].icon} ${group[0].name}${more}! Resting for ${KO_STEPS} s`, now);
 }
 
 // ---------- rendering ----------
@@ -1495,10 +1608,23 @@ function hash(x) {
   return h >>> 0;
 }
 
+// Each loop through the biomes gets a Roman numeral: Meadow, Meadow II, ... Meadow XIV, ...
 function cycleSuffix(zone) {
   const cycle = Math.floor(zone / BIOMES.length) + 1;
-  const roman = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
-  return cycle === 1 ? '' : ` ${roman[cycle] || cycle}`;
+  return cycle === 1 ? '' : ` ${roman(cycle)}`;
+}
+
+function roman(n) {
+  const numerals = [[1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'], [100, 'C'], [90, 'XC'],
+    [50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']];
+  let out = '';
+  for (const [value, letters] of numerals) {
+    while (n >= value) {
+      out += letters;
+      n -= value;
+    }
+  }
+  return out;
 }
 
 function scenery(x) {
@@ -1538,21 +1664,23 @@ function lastTurn(root) {
     .sort((a, b) => b.end - a.end)[0];
 }
 
-// The enemy being fought (the one in the hero's range, or one shooting from beyond it), its life,
-// and while working the damage of the hit that just landed (with a "!" on a critical hit).
-// Null while walking.
+// The enemy being fought (the one in the hero's range, or one shooting from beyond it) with "+N"
+// for the rest of its group, its life, and while working the damage of the hit that just landed
+// (with "!" on a critical hit and "x3" when an area skill hit three). Null while walking.
 function targetText(h, active) {
   const front = frontOf(h);
-  const foe = targetOf(h) || (front && front.x - h.heroX <= reachOf(front) ? front : null);
+  const foe = targetOf(h) || (front && groupOf(h, front).find(e => e.x - h.heroX <= reachOf(e)));
   if (!foe) {
     return null;
   }
+  const others = groupOf(h, foe).length - 1;
   const filled = Math.max(1, Math.ceil((foe.hp / foe.max) * 10));
   const life = color(ENEMY_RED, '▰'.repeat(filled) + '▱'.repeat(10 - filled));
   // Padded so the row doesn't shift by a column as the number shrinks.
   const hp = String(foe.hp).padStart(String(foe.max).length);
-  const hit = active && h.fx && h.fx.step === h.step && h.fx.dmg ? ` ${color(ENEMY_RED, `-${h.fx.dmg}${h.fx.crit ? '!' : ''}`)}` : '';
-  return `${foe.icon} ${foe.name} ${life} ${hp}/${foe.max}${hit}`;
+  const fx = active && h.fx && h.fx.step === h.step && h.fx.dmg ? h.fx : null;
+  const hit = fx ? ` ${color(ENEMY_RED, `-${fx.dmg}${fx.crit ? '!' : ''}${fx.count > 1 ? ` x${fx.count}` : ''}`)}` : '';
+  return `${foe.icon} ${foe.name}${others > 0 ? ` +${others}` : ''} ${life} ${hp}/${foe.max}${hit}`;
 }
 
 function statsRow(root, h, now, active, cols) {
@@ -1664,16 +1792,20 @@ function worldRow(h, active, cols) {
   for (let i = 0; i < tiles; i++) {
     const x = h.heroX - HERO_COL + i;
     const foe = h.enemies.find(e => e.x === x);
+    const fx = active && h.fx && h.fx.step === h.step ? h.fx : null;
+    const shot = active && h.shots && h.shots.step === h.step ? h.shots.list.find(s => s.x === x) : null;
     if (x === h.heroX) {
       row += h.down > 0 ? '😵' : CLASSES[h.cls].icon;
+    } else if (fx && fx.hits && fx.hits.includes(x)) {
+      row += fx.icon;
     } else if (foe) {
       row += foe.icon;
     } else if (!active && x === h.heroX + 1) {
       row += '💤';
-    } else if (active && h.fx && h.fx.step === h.step && h.fx.x === x) {
-      row += h.fx.icon;
-    } else if (active && h.efx && h.efx.step === h.step && h.efx.x === x) {
-      row += h.efx.icon;
+    } else if (fx && !fx.hits && fx.x === x) {
+      row += fx.icon;
+    } else if (shot) {
+      row += shot.icon;
     } else if (h.loot.some(l => l.x === x)) {
       row += h.loot.find(l => l.x === x).icon;
     } else {

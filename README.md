@@ -17,15 +17,16 @@ it equips what it finds, drinks its potions and gets back up on its own.
 - **Work time is game time:** a 2m45s task is 2m45s of adventure, and the tokens Claude uses give bonus XP.
 - **Three classes:** 🧙 Mage, 🤺 Warrior and 🧝 Archer, each with its own save, weapons and skills.
 - **Random skills:** the bosses of levels 5, 10, 15… drop a randomly rolled skill. A hero holds two,
-  and a better find replaces the weaker one.
-- **Life and enemies that fight back:** the hero has a 💗 life bar under its XP bar. Enemies
-  close in to strike, and some (🐍 🦇 👺 🦑 👻 🐲, the 🐙 Kraken and the 🐉 Dragon) shoot from
+  and a better find replaces the weaker one. Area skills (a Nova, a Volley, a Cleave…) hit a whole
+  group of enemies at once.
+- **Life and enemies that fight back:** the hero has a 💗 life bar under its XP bar. Enemies,
+  sometimes in groups of up to 4, close in to strike, and some (🐍 🦇 👺 🦑 👻 🐲, the 🐙 Kraken and the 🐉 Dragon) shoot from
   a distance, so every class takes hits. Potions are drunk on their own, and a knocked out hero
   rests a moment and gets back up stronger. It costs time, never progress.
 - **Random gear:** six slots (🪖 helmet, 🥋 chest, 👖 pants, 🧣 shoulders, 🧤 gloves, 🥾 boots), empty
   at first. Enemies sometimes drop a randomly rolled piece and bosses always do; a better piece is
   equipped, a worse one is left lying on the ground.
-- **44 achievements** for kills, bosses, survival, levels, skills, gear and hours of work, plus a
+- **46 achievements** for kills, groups, bosses, survival, levels, skills, gear and hours of work, plus a
   couple of secret ones. 🏅 pops up on the stats row when you earn one.
 - **Seven biomes,** each with its own floor, enemies and a boss every ~15 minutes of work:
   🌼 Meadow, 🌲 Dark Forest, 💎 Caves, 🌴 Coast, 🌵 Desert, 🪦 Graveyard, 🌋 Volcano. After the
@@ -133,23 +134,31 @@ Every hero starts with no skills. Reaching levels 5, 15, 25… summons a mini bo
 - **What a skill does:** it's a special attack that fires every few seconds for several times the
   damage (its icon flies across the map), plus a passive bonus that is always on: extra damage or
   extra critical chance.
+- **Single-target or area:** the second word of the name says which. Area skills hit the target
+  and every enemy up to 3 tiles behind it, so a whole group, each for 85% of the extra damage a
+  single-target skill of the same strength would add; their icon lands on every enemy hit.
+  Mage: Nova, Burst, Wave. Warrior: Cleave, Slam, Smash. Archer: Volley, Rain, Barrage. When
+  several skills are ready, the hero fires the one that adds the most damage, counting an area
+  skill once per enemy it would hit.
 - **What's rolled:** the name (from the class's parts, like 🧊 Frost + Lance), the rarity (common
   55%, rare 30%, epic 12%, legendary 3%, which multiplies the strength), the cooldown (6 to 16 s,
   with a bigger multiplier the longer it is) and the bonus. Skills found at higher levels roll
   stronger, and the bosses of levels 10, 20, 30… roll the rarity twice and keep the better result.
 - **Two slots:** a new skill takes a free slot. Once both are full, it replaces the weaker skill if
   its **power** is higher, and is discarded otherwise. Power is the extra damage per second the
-  attack adds plus the bonus, as one number to compare by.
+  attack adds plus the bonus, as one number to compare by; an area skill's power is that of the
+  single-target skill it would be, so the two compare fairly.
 - `/vwc:skills` shows each skill's rarity, power and stats, and which boss drops the next one:
 
   ```
   ▶ 🧝 Archer Lv 10 · 2 of 2 skills
       🦅 Eagle Bolt       legendary power  61   x5.6 damage every 9 s, +10% critical chance
-      🍃 Wind Barrage     rare      power  44   x5.4 damage every 12 s, +7% damage
+      🍃 Wind Barrage     rare      power  42   x4.6 area damage every 12 s, +7% damage
       Next skill: from the mini boss at level 15
   ```
 
-Heroes from before 1.4.0 had fixed powers. When they first load in 1.4.0 they get a rolled skill
+Skills found before 1.7.0 with an area form in their name (like a Frost Nova) became area skills,
+with the same power. Heroes from before 1.4.0 had fixed powers. When they first load in 1.4.0 they get a rolled skill
 for every milestone they had already passed, keeping the best two.
 
 ## Gear
@@ -194,10 +203,15 @@ The hero's life bar sits right under its XP bar, with the potions it carries:
              💗 ▰▰▰▰▰▰▰▰▱▱ 441/467 -26 · 🧪 1
 ```
 
-- **Enemies fight back,** one at a time: the nearest one notices the hero 8 tiles away and walks
-  up to it. The ones that shoot stop 4 tiles away and fire: 🟢 venom (🐍), 🟣 shrieks and curses
+- **Enemies fight back,** one at a time or as a group: the nearest one, with the rest of its
+  group, notices the hero 8 tiles away and walks up to it. The ones that shoot stop 4 tiles away and fire: 🟢 venom (🐍), 🟣 shrieks and curses
   (🦇 👻), 🟤 rocks (👺), 💧 water (🦑 🐙) and 🔴 fire (🐲 🐉). Mini bosses and bosses strike every
   other second, harder. Their damage grows with the zone, like their life.
+- **Groups:** 4 in 10 times, enemies come as a group of 2 (20%), 3 (12%) or 4 (8%), standing side
+  by side, a mix of the zone's enemies. Each is weaker than one alone (65% of the life, damage and
+  XP), but they fight together: the melee ones queue up behind each other, the ones that shoot
+  fire over them, and there's no pause to heal until the last one falls. The stats row shows the
+  rest of the group as "+2", and an area hit as "x3" after the damage.
 - **Range matters:** the archer gets about 4 free shots at an enemy walking up to it, the mage 2,
   the warrior 1.
 - **Life** grows with the level and with gear's `+% life`. It comes back while walking between
@@ -213,11 +227,11 @@ or 7 hours of work, mostly by bosses, about the same for all three classes.
 
 ## Achievements
 
-44 achievements, shared by all your heroes. When you earn one, the stats row says
+46 achievements, shared by all your heroes. When you earn one, the stats row says
 `🏅 Achievement: Dragonslayer`. `/vwc:achievements` lists them all, with how close you are:
 
 ```
-🏅 Achievements · 19 of 44 earned
+🏅 Achievements · 19 of 46 earned
 
 Combat
   ✅ First Blood        defeat an enemy                                2026-10-02 🧝
@@ -227,7 +241,7 @@ Combat
 
 | Group | Achievements |
 |-------|--------------|
-| Combat | defeat 1, 100, 1,000 and 10,000 enemies; land a hit of 250 and of 2,500 damage; a critical hit with a skill |
+| Combat | defeat 1, 100, 1,000 and 10,000 enemies; land a hit of 250 and of 2,500 damage; a critical hit with a skill; hit 4 enemies with one area skill; defeat 500 groups |
 | Bosses | the first zone boss, a mini boss, an Elder boss, 5 Elder bosses, the Dragon of the Volcano, and of Volcano X |
 | Survival | drink a potion, and 100; win a fight with under 10% life; get knocked out and back up |
 | Journey | levels 5, 10, 20, 30 and 35 (the star weapon); reach all 7 biomes; play every class; every class to level 10 |
@@ -340,6 +354,9 @@ Everything below is in `scripts/companion.js`.
 | `REGEN` | `0.02` | Share of the hero's life that comes back each second out of combat. |
 | `POTION_DROP`, `MAX_POTIONS` | `0.05`, `3` | Chance a normal enemy drops a potion (bosses always do), and how many the hero carries. |
 | `POTION_AT`, `POTION_HEAL` | `0.3`, `0.5` | Life below which a potion is drunk, and how much of the life it gives back. |
+| `GROUP_SIZES` | `[0.6, 0.2, 0.12, 0.08]` | Chances that enemies come alone, or in a group of 2, 3 or 4. |
+| `GROUP_MEMBER`, `GROUP_GAP` | `0.65`, `3` | A group member's life, damage and XP compared to an enemy alone, and the extra tiles after a group per extra enemy. |
+| `AREA`, `AREA_MULT` | `3`, `0.85` | How many tiles behind the target an area skill reaches, and its share of a single-target skill's extra damage. |
 | `KO_STEPS`, `RALLY` | `15`, `0.25` | Seconds a knocked out hero rests, and the extra damage per knockout until its next win. |
 | `GEAR_DROP` | `0.03` | Chance that a normal enemy drops a piece of gear. Bosses always do. |
 | `GEAR_SLOTS` | | The six slots, with their icon and the base names a piece can roll (`Helm`, `Hood`…). |
@@ -390,7 +407,8 @@ paladin: {
   skills: {          // random skills are named "<part> <form>", e.g. "Holy Smite"
     power: 1,        // scales how strong this class's skills roll
     parts: [['🌟', 'Holy'], ['🔥', 'Burning'], /* ... */],   // the part also gives the icon
-    forms: ['Smite', 'Strike', /* ... */],
+    forms: ['Smite', 'Strike', /* ... */],          // single-target skills
+    areaForms: ['Wrath', 'Nova', /* ... */],        // area skills
   },
 },
 ```
