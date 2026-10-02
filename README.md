@@ -36,6 +36,26 @@ it equips what it finds, drinks its potions and gets back up on its own.
   end of the zone) at levels 10, 20, 30…
 - **Keeps your status line:** if you already have one, it stays on top and the companion goes under it.
 
+## Privacy
+
+The companion never reads your work. It doesn't look at your prompts, Claude's answers, your code
+or your files, so it's safe to run on work projects and code under an NDA.
+
+- **It only needs two numbers:** *when* Claude is working, from the hook events, and *how many
+  tokens* each response used, from the `usage` field in Claude Code's local transcript. Claude Code
+  hands every hook the prompt text, but the companion ignores it. In the transcript it skips every
+  line without a `usage` field and keeps only the token counts from the rest. The one text it
+  checks for is Claude Code's own `[Request interrupted by user` marker, so pressing Esc pauses
+  the hero.
+- **Nothing from your work is saved:** the save file holds hero stats, timestamps, token totals,
+  the IDs of the last few API messages (so tokens aren't counted twice) and where it stopped
+  reading each session's transcript. See [Files](#files) for everything it writes.
+- **Nothing leaves your machine:** no network access at all, and no npm dependencies. The scripts
+  only use Node's built-in `fs`, `path`, `os` and `child_process`, and `child_process` only runs the
+  status line you already had, so it keeps showing above the hero.
+- **Easy to check:** about 2,400 lines of plain JavaScript, with no build step and nothing
+  minified. The transcript reading is `ingestTranscript()` in `scripts/companion.js`.
+
 ## Install
 
 Requirements: [Node.js](https://nodejs.org) 18 or newer on your `PATH` (check with `node --version`)
