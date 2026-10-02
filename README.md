@@ -34,13 +34,15 @@ rest, drinks its potions and gets back up on its own.
 - **A card to share:** `/vwc:card` shows your hero as a short card to paste in Slack or a PR.
 - **Breaks are rewarded:** a break of more than 5 minutes fills a 💤 rested pool, up to an hour,
   and kills give double XP while it lasts once you're back.
+- **Campfires:** when Claude compacts the conversation, the hero makes camp ⛺: full life and +25%
+  damage for 10 minutes of work.
 - **Day and night:** the floor follows your local clock, darker and bluer from 20:00 to 06:00, and
   each biome has a creature of the night (🐺 🧜 🧞…) that only comes out then.
 - **Seasonal events:** 🎃 Halloween all October, with pumpkins, 🍬 candy and 👻 ghost waves, and 🎄
   Winter all December, with snowmen and snow.
 - **Elite enemies:** 1 enemy in 20 (1 in 10 at night) is Swift, Armored, Vampiric or Explosive,
   tougher and better paid.
-- **55 achievements** for kills, groups, bosses, survival, levels, skills, gear, allies, seasons and
+- **56 achievements** for kills, groups, bosses, survival, levels, skills, gear, allies, seasons and
   hours of work, plus a couple of secret ones. 🏅 pops up on the stats row when you earn one.
 - **Seven biomes,** each with its own floor, enemies and a boss every ~15 minutes of work:
   🌼 Meadow, 🌲 Dark Forest, 💎 Caves, 🌴 Coast, 🌵 Desert, 🪦 Graveyard, 🌋 Volcano. After the
@@ -60,7 +62,7 @@ or your files, so it's safe to run on work projects and code under an NDA.
 - **It only needs two numbers:** *when* Claude is working, from the hook events (including when its
   subagents start and stop, for the allies), and *how many tokens* each response used, from the
   `usage` field in Claude Code's local transcript. Claude Code
-  hands every hook the prompt text, but the companion ignores it. In the transcript it skips every
+  hands every hook the prompt text (and `/compact` its instructions), but the companion ignores it. In the transcript it skips every
   line without a `usage` field and keeps only the token counts from the rest. The one text it
   checks for is Claude Code's own `[Request interrupted by user` marker, so pressing Esc pauses
   the hero.
@@ -352,6 +354,25 @@ and in the journal when it starts. Nothing from an event goes away when it ends.
 - **Achievements:** Trick or Treat (eat 31 pieces of candy) and Snowball Fight (defeat 100
   snowmen).
 
+## Campfire
+
+When Claude compacts the conversation, by `/compact` or on its own when the context fills up,
+the hero makes camp where it stands:
+
+```
+🤺 Warrior Lv 3 ▱▱▱▱▱▱▱▱▱▱ 0/48 XP · 🔪 Knife · ⛺ Camp while Claude compacts the conversation: full life, +25% damage for 10m
+             💗 ▰▰▰▰▰▰▰▰▰▰ 129/129 · ⛺ +25% damage 10m
+               🔥⛺🤺  🌳🌼  🐍  🌼🌼🌳    🐍    🌳. 🐗🐀🐍🐍
+```
+
+- **What it gives:** all of the hero's life back (a knocked out hero gets up right away) and
+  +25% damage for 10 minutes of work, for its allies too. The life row shows what's left.
+- **A short rest:** the hero sits by the fire for 15 seconds of work before moving on, so the camp
+  can be seen.
+- **How it knows:** from the `PreCompact` hook. Only that it happens counts; the instructions you
+  give `/compact` are never read or saved.
+- **Achievement:** Happy Camper, for making camp 10 times. The journal notes every camp.
+
 ## Rested XP
 
 Coming back from a break, the hero is rested: kills give double XP for a while.
@@ -381,11 +402,11 @@ update.
 
 ## Achievements
 
-55 achievements, shared by all your heroes. When you earn one, the stats row says
+56 achievements, shared by all your heroes. When you earn one, the stats row says
 `🏅 Achievement: Dragonslayer`. `/vwc:achievements` lists them all, with how close you are:
 
 ```
-🏅 Achievements · 19 of 55 earned
+🏅 Achievements · 19 of 56 earned
 
 Combat
   ✅ First Blood        defeat an enemy                                2026-10-02 🧝
@@ -402,7 +423,7 @@ Combat
 | Skills | find a skill; hold two; replace one; find an epic, and a legendary; hold two legendaries |
 | Gear | find a piece; fill all 6 slots; find an epic, and a legendary; salvage 100 pieces; reforge a piece, and 50 times |
 | Seasons | eat 31 pieces of Halloween candy; defeat 100 snowmen in December |
-| Work | 1, 8 and 40 hours of work; 1 million and 10 million tokens; one turn of 30 minutes; come back to a full hour of rested XP; two secrets |
+| Work | 1, 8 and 40 hours of work; 1 million and 10 million tokens; one turn of 30 minutes; come back to a full hour of rested XP; make camp 10 times; two secrets |
 
 Kills, hours and other totals add up all your heroes, including ones replaced by
 `/vwc:createchar`. A save from before 1.5.0 gets credit right away for what it shows: levels,
@@ -506,6 +527,7 @@ The hero takes one step per second of **working time**. Hooks tell it when Claud
 | Claude asks you a question (`AskUserQuestion`, `ExitPlanMode`) | waits |
 | You press Esc | waits (read from the transcript, since no hook fires) |
 | A subagent starts or stops (`SubagentStart`, `SubagentStop`) | an [ally](#allies) joins or leaves |
+| Claude compacts the conversation (`PreCompact`) | makes [camp](#campfire) |
 
 - **One hero for all your windows:** it walks while at least one Claude Code session is working.
 - **Subagents don't move the hero:** only the main conversation does. A subagent brings an ally
@@ -617,6 +639,7 @@ Everything below is in `scripts/companion.js`.
 | `SEASONS` | | The seasonal events by month: icon, decor, announcement, and what each one brings (candy, a ghost `wave`, an `enemy`, `snow`). |
 | `CANDY_DROP`, `CANDY_HEAL` | `0.08`, `0.2` | At Halloween, the chance an enemy drops candy, and the share of the hero's life it heals. |
 | `GHOST_WAVE`, `SEASON_ENEMY` | `0.15`, `0.12` | At Halloween, the share of groups that are a ghost wave; in Winter, the share of enemies that are snowmen. |
+| `CAMP_DAMAGE`, `CAMP_MS`, `CAMP_REST` | `0.25`, `600000`, `15` | A camp's extra damage, how long it lasts (10 minutes of work), and the seconds the hero sits by the fire. |
 | `RESTED_AFTER`, `RESTED_RATE` | `300000`, `0.5` | The part of a break that doesn't count (5 minutes), and how much of the rest of it goes into the rested pool. |
 | `RESTED_MAX`, `RESTED_XP` | `3600000`, `1` | The most rested XP a hero can hold (an hour of work), and the extra kill XP while rested (+100%). |
 | `JOURNAL_SIZE`, `JOURNAL_SHOWN` | `100`, `50` | Moments each hero keeps for `/vwc:journal`, and the lines it shows. |
@@ -703,7 +726,7 @@ as was done for ⚡ ✨ ⏳ ⛄ ⚪.
   If the right edge is cut off in your terminal, increase the `6`.
 - **Narrow terminals:** when the stats row doesn't fit, parts are dropped in priority order (skills
   first, then kills, the biome with its progress, and weapon), and a long message is cut short with "…". The life row
-  stays under the XP bar, dropping its extras (shards, then rested XP, then rally, then potions) if they don't fit. See the numbers in `statsRow()`.
+  stays under the XP bar, dropping its extras (shards, then rested XP, then the camp, then rally, then potions) if they don't fit. See the numbers in `statsRow()`.
 
 ### The info row (row 1)
 
@@ -730,7 +753,7 @@ plugin updates:
 
 | File | What it is |
 |------|------------|
-| `state.json` | One hero per class (with its skills, gear, shards, rested XP, journal, and counts for achievements and statistics), which one is active, the allies of the subagents running now, the achievements earned and the totals they need, what `/vwc:hide` has hidden, where `/vwc:stats` put the stats row, whether `/vwc:showprogress` hid it, and the last plugin version it saw (for the update notice). Delete it to start everything over. |
+| `state.json` | One hero per class (with its skills, gear, shards, rested XP, camp, journal, and counts for achievements and statistics), which one is active, the allies of the subagents running now, the achievements earned and the totals they need, what `/vwc:hide` has hidden, where `/vwc:stats` put the stats row, whether `/vwc:showprogress` hid it, and the last plugin version it saw (for the update notice). Delete it to start everything over. |
 | `backups/` | Heroes replaced by `/vwc:createchar`. To restore one, copy it into `state.json` under `heroes.<class>`. |
 | `statusline.js` | Small launcher that your status line runs; it finds the current plugin version. |
 | `previous-statusline.json` | The status line you had before setup. |

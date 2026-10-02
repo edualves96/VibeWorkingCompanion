@@ -3,7 +3,7 @@
 Ideas for later versions that haven't been built yet. Built so far from this list: the journal,
 subagent allies and salvage with reforging (1.11.0), rested XP (1.12.0), day and night
 (1.13.0), seasonal events (1.14.0), elite enemies (1.15.0),
-`/vwc:card` (1.16.0) and `/vwc:journal <class>` (1.17.0).
+`/vwc:card` (1.16.0), `/vwc:journal <class>` (1.17.0) and campfires on compaction (1.18.0).
 
 ## Rules every idea has to follow
 
@@ -17,8 +17,6 @@ subagent allies and salvage with reforging (1.11.0), rested XP (1.12.0), day and
 
 ## Tied to what Claude is doing
 
-- **Campfire on compaction.** When the conversation is compacted (`PreCompact` hook), the hero sets
-  up camp ⛺, heals fully and gets a short buff. ⛺ is `U+26FA`, so it needs adding to `displayWidth()`.
 - **Combo streak.** Tool calls that succeed in a row build a small damage combo, and a
   `PostToolUseFailure` resets it. Only the event type counts, never the tool or what it did. A
   failure must only end the streak, never hurt the hero.

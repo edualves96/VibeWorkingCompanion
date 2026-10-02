@@ -130,6 +130,12 @@ const RESTED_RATE = 0.5;
 const RESTED_MAX = 60 * 60 * 1000;
 const RESTED_XP = 1;
 const RESTED_PURPLE = '38;2;167;139;250';  // the color of the XP bar
+// When Claude compacts the conversation (the PreCompact hook), the hero makes camp: it gets all its
+// life back (and gets up, if knocked out) and CAMP_DAMAGE more damage for CAMP_MS of work. It sits
+// by the fire for CAMP_REST steps before moving on, so the camp can be seen.
+const CAMP_DAMAGE = 0.25;
+const CAMP_MS = 10 * 60 * 1000;
+const CAMP_REST = 15;
 // Day and night follow the local clock: night runs from NIGHT_FROM to NIGHT_TO o'clock, with an
 // hour of dusk before it and of dawn after. At night the floor is NIGHT_LIGHT as bright, and
 // bluer, and each biome's night creature (`night` in BIOMES) comes out with the other enemies.
@@ -171,6 +177,9 @@ const UPDATE_MSG_MS = 30000;      // the "updated" notice stays longer than othe
 const WHATS_NEW = {
   '1.3.0': 'enemies have life now, and every 5th level summons a boss',
   '1.4.0': `skills are random now, dropped by level bosses: ${COMMAND_PREFIX}skills`,
+  '1.18.0': root => (olderThan(root.seenVersion, '1.17.0')
+    ? `⛺ campfires when Claude compacts, 📇 ${COMMAND_PREFIX}card, 💠 elite enemies, 🎃 seasonal events`
+    : `⛺ Claude compacts, the hero makes camp: full life, +${CAMP_DAMAGE * 100}% damage`),
   '1.17.0': root => (olderThan(root.seenVersion, '1.16.0')
     ? `📇 ${COMMAND_PREFIX}card to share your hero, and ${COMMAND_PREFIX}journal ${root.active || 'archer'} for one hero's journal`
     : `📜 ${COMMAND_PREFIX}journal ${root.active || 'archer'} shows one hero's journal, ${COMMAND_PREFIX}journal all everything kept`),
@@ -279,6 +288,7 @@ const ACHIEVEMENT_GROUPS = {
     { id: 'token-furnace', name: 'Token Furnace', what: 'use 10 million tokens', of: 'tokens', goal: 1e7 },
     { id: 'well-rested', name: 'Well Rested', what: 'come back to a full hour of rested XP', of: 'fullRests', goal: 1 },
     { id: 'deep-work', name: 'Deep Work', what: 'a single Claude turn that runs for 30 minutes', of: 'longestTurn', goal: 30 },
+    { id: 'happy-camper', name: 'Happy Camper', what: 'make camp 10 times (when Claude compacts)', of: 'camps', goal: 10 },
     { id: 'night-owl', name: 'Night Owl', what: 'work between midnight and 5 a.m.', of: 'night', goal: 1, secret: true },
     { id: 'weekend-warrior', name: 'Weekend Warrior', what: 'work on a Saturday or Sunday', of: 'weekend', goal: 1, secret: true },
   ],
@@ -398,7 +408,7 @@ function newStats() {
 // enemies defeated with an ally at the hero's side, `forged` the reforges, `restedXp` the extra
 // XP that rested kills gave and `fullRests` the times the hero came back to a full rested pool and `nightKills` the night
 // creatures defeated, `candy` the candy eaten, `snowmen` the snowmen defeated and `elites` the
-// elite enemies defeated.
+// elite enemies defeated and `camps` the camps made.
 // For /vwc:statistics: `tokens` used while the hero was active, and the Claude turns played with
 // it: how many, their total time (ms) and tokens, the longest and shortest (ms, null before the
 // first) and the most tokens in one. Heroes from before 1.10.0 count these from `countedFrom` on.
@@ -406,7 +416,7 @@ function newTally() {
   const byRarity = () => ({ common: 0, rare: 0, epic: 0, legendary: 0 });
   return {
     maxHit: 0, skillCrits: 0, minis: 0, elders: 0, replaced: 0, found: byRarity(), gear: byRarity(), left: 0,
-    knockouts: 0, closeCalls: 0, potions: 0, maxAreaHits: 0, groups: 0, allies: 0, allyKills: 0, forged: 0, restedXp: 0, fullRests: 0, nightKills: 0, candy: 0, snowmen: 0, elites: 0,
+    knockouts: 0, closeCalls: 0, potions: 0, maxAreaHits: 0, groups: 0, allies: 0, allyKills: 0, forged: 0, restedXp: 0, fullRests: 0, nightKills: 0, candy: 0, snowmen: 0, elites: 0, camps: 0,
     tokens: 0, turns: 0, turnMs: 0, turnTokens: 0, longestTurn: 0, shortestTurn: null, mostTokens: 0,
   };
 }
@@ -438,6 +448,9 @@ function newHero(cls, now) {
     shards: 0,       // from salvaged gear, until there are enough for a reforge
     rested: 0,       // ms of rested XP left (see RESTED_MAX)
     lastWorked: null, // when the hero last worked, so a break can be measured
+    camp: null,      // where the hero last made camp ({ x })
+    camped: 0,       // ms of the camp's extra damage left
+    resting: 0,      // steps left sitting by the camp's fire
     tally: newTally(),
     cooldowns: {},   // unused now; read by older versions that may still run in another window
     fx: null,
@@ -482,6 +495,11 @@ function migrate(s, now = Date.now()) {
     }
     if (!h.journal) {
       h.journal = [];
+    }
+    if (h.camped == null) {
+      h.camp = null;
+      h.camped = 0;
+      h.resting = 0;
     }
     // Rested XP starts counting at the first break after 1.12.0.
     if (h.rested == null) {
@@ -891,6 +909,9 @@ function applyHookEvent(root, ev, at) {
   }
   const ss = session(root, ev.session_id, at);
   ingestTranscript(root, ss, ev.transcript_path, at);
+  if (name === 'PreCompact') {
+    makeCamp(activeHero(root), at);
+  }
   if (name === 'UserPromptSubmit') {
     const h = activeHero(root);
     ss.turn = { start: at, end: null, tokens: 0, cls: root.active, xp0: h ? h.totalXp : 0 };
@@ -915,6 +936,21 @@ function applyHookEvent(root, ev, at) {
     }
   }
   debug(`hook ${name} active=${ss.active}`);
+}
+
+// The conversation is being compacted: the hero makes camp (see CAMP_DAMAGE). Only that it
+// happens counts, never the instructions given to /compact.
+function makeCamp(h, now) {
+  if (!h) {
+    return;
+  }
+  h.camp = { x: h.heroX };
+  h.down = 0;
+  h.life = maxLife(h);
+  h.camped = CAMP_MS;
+  h.resting = CAMP_REST;
+  h.tally.camps++;
+  news(h, `⛺ Camp while Claude compacts the conversation: full life, +${CAMP_DAMAGE * 100}% damage for ${restedText(CAMP_MS)}`, now);
 }
 
 // A /vwc: command is a turn too, but a few seconds of showing a list isn't work, so it would
@@ -1256,7 +1292,7 @@ function heroStatistics(h) {
     ['Hits', `biggest ${shortNumber(t.maxHit)} · ${plural(t.skillCrits, 'critical skill hit')}`],
     ['Skills found', `${foundText(t.found)} · ${shortNumber(t.replaced)} replaced`],
     ['Gear found', `${foundText(t.gear)} · ${shortNumber(t.left)} salvaged · ${plural(t.forged, 'reforge')}`],
-    ['Survival', `${plural(t.potions, 'potion')} drunk · ${plural(t.knockouts, 'knockout')} · ${plural(t.closeCalls, 'close call')}${t.candy > 0 ? ` · ${plural(t.candy, 'candy', 'candies')} eaten` : ''}`],
+    ['Survival', `${plural(t.potions, 'potion')} drunk · ${plural(t.knockouts, 'knockout')} · ${plural(t.closeCalls, 'close call')}${t.candy > 0 ? ` · ${plural(t.candy, 'candy', 'candies')} eaten` : ''}${t.camps > 0 ? ` · ${plural(t.camps, 'camp')}` : ''}`],
     ['Allies', `${plural(t.allies, 'ally', 'allies')} joined · ${plural(t.allyKills, 'kill')} together`],
   ];
   return rows.map(([label, value]) => `    ${label.padEnd(14)}${value}`);
@@ -1400,7 +1436,7 @@ function journalReport(arg, now) {
     }
   }
   const what = 'Level ups, new weapons and biomes, bosses, skills, gear worn, epic and legendary gear salvaged,'
-    + '\nreforges, knockouts and achievements';
+    + '\nreforges, knockouts, camps and achievements';
   const whose = only ? ` · ${CLASSES[only].icon} ${CLASSES[only].name}` : '';
   if (moments.length === 0) {
     return `📜 Journal${whose} · nothing written yet\n\n${what} are written down as they happen.`;
@@ -1934,6 +1970,7 @@ function counts(h) {
     candy: t.candy,
     snowmen: t.snowmen,
     elites: t.elites,
+    camps: t.camps,
   };
 }
 
@@ -2063,7 +2100,8 @@ function reachOf(foe) {
 
 // One second of work: the hero walks, or attacks the nearest enemy within its range (and its
 // `allies` with it); then the nearest enemy closes in or strikes back. Out of combat, life comes
-// back. A knocked out hero only rests. Every step spends a second of rested XP.
+// back. A knocked out hero only rests, and so does one sitting by its camp's fire. Every step
+// spends a second of rested XP and of a camp's buff.
 function step(h, now, allies = []) {
   h.step++;
   spawnAhead(h, now);
@@ -2073,6 +2111,8 @@ function step(h, now, allies = []) {
       h.life = maxLife(h);
       setMsg(h, `💪 Back on your feet, +${Math.round(h.rally * RALLY * 100)}% damage until the next win`, now);
     }
+  } else if (h.resting > 0) {
+    h.resting--;
   } else {
     const attacked = heroTurn(h, now, allies.length > 0);
     if (attacked && allies.length > 0) {
@@ -2084,6 +2124,7 @@ function step(h, now, allies = []) {
     }
   }
   h.rested = Math.max(0, h.rested - STEP_MS);
+  h.camped = Math.max(0, h.camped - STEP_MS);
 }
 
 // The hero's half of a step. Returns whether it attacked. `allied`: an ally is at its side.
@@ -2158,9 +2199,10 @@ function heroTurn(h, now, allied) {
   return true;
 }
 
-// The damage of a basic hit, before rally, skills and critical hits.
+// The damage of a basic hit, before rally, skills and critical hits, with a camp's extra damage.
 function basicHit(h) {
-  return attackOf(h) * (1 + (skillBonus(h, 'damage') + gearBonus(h, 'damage')) / 100);
+  const camp = h.camped > 0 ? 1 + CAMP_DAMAGE : 1;
+  return attackOf(h) * (1 + (skillBonus(h, 'damage') + gearBonus(h, 'damage')) / 100) * camp;
 }
 
 // After the hero's attack, each ally strikes the hero's target (the next one in range if that one
@@ -2388,8 +2430,8 @@ function color(code, text) {
 
 // Columns a string takes on screen. Every emoji used here is a double-width
 // Emoji_Presentation character, so this simple rule is exact for our output.
-// The ones below U+1F000: ⚡ ✨ ⏳ ⭐ ✅ ⬜ ⛄ ⚪.
-const WIDE_BELOW_1F000 = new Set([0x26a1, 0x2728, 0x23f3, 0x2b50, 0x2705, 0x2b1c, 0x26c4, 0x26aa]);
+// The ones below U+1F000: ⚡ ✨ ⏳ ⭐ ✅ ⬜ ⛄ ⚪ ⛺.
+const WIDE_BELOW_1F000 = new Set([0x26a1, 0x2728, 0x23f3, 0x2b50, 0x2705, 0x2b1c, 0x26c4, 0x26aa, 0x26fa]);
 
 function displayWidth(str) {
   let w = 0;
@@ -2556,8 +2598,9 @@ function cutToWidth(text, width) {
 
 // The hero's life bar, green, then yellow below half and red below a quarter. While working it
 // shows the damage of the hit just taken; then a knockout's rest, the potions held, the extra
-// damage a knockout gave, the rested XP left (filling up during a break) and the shards toward
-// the next reforge, dropped from the end while the row is wider than `room`.
+// damage a knockout gave, what's left of a camp's extra damage, the rested XP left (filling up
+// during a break) and the shards toward the next reforge, dropped from the end while the row is
+// wider than `room`.
 function lifeRow(h, active, room, now) {
   const max = maxLife(h);
   const life = Math.max(0, Math.min(h.life, max));
@@ -2580,6 +2623,9 @@ function lifeRow(h, active, room, now) {
   }
   if (h.rally > 0 && h.down === 0) {
     parts.push(color(GOLD, `💪 +${Math.round(h.rally * RALLY * 100)}% damage until the next win`));
+  }
+  if (h.camped > 0) {
+    parts.push(color(GOLD, `⛺ +${CAMP_DAMAGE * 100}% damage ${restedText(h.camped)}`));
   }
   const rested = active ? h.rested : restedPool(h, now);
   if (rested > 0) {
@@ -2629,6 +2675,10 @@ function worldRow(h, active, cols, allies, now) {
       row += allyShot.icon;
     } else if (ally) {
       row += ally.icon;
+    } else if (h.camp && x === h.camp.x - 1) {
+      row += '⛺';
+    } else if (h.camp && x === h.camp.x - 2) {
+      row += '🔥';
     } else if (h.loot.some(l => l.x === x)) {
       row += h.loot.find(l => l.x === x).icon;
     } else {
