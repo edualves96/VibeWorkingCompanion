@@ -8,8 +8,8 @@ it equips what it finds, drinks its potions and gets back up on its own.
 
 ```
 ⚠️ Opus 5.5 | my-project | main | ▰▰▰▰▰▰▱▱▱▱ 63% (634 200 / 1 000 000) | ⏳ 1h59m (42%)
-                🧝 Archer Lv 12 ▰▰▰▰▱▱▱▱▱▱ 812/2429 XP · 🏹 Bow · 🎯🍃 · 🌴 Coast · 💀 431 · 🦑 Squid ▰▰▰▱▱▱▱▱▱▱ 61/236
-                             💗 ▰▰▰▰▰▰▰▱▱▱ 284/402 -19 · 🧪 2
+            🧝 Archer Lv 12 ▰▰▰▰▱▱▱▱▱▱ 812/2429 XP · 🏹 Bow · 🎯🍃 · 🌴 Coast 37% · 💀 431 · 🦑 Squid ▰▰▰▱▱▱▱▱▱▱ 61/236
+                         💗 ▰▰▰▰▰▰▰▱▱▱ 284/402 -19 · 🧪 2
                                                  .   🧝  . 🔸  💧  🦑      🐚    . .         🌴
                                                  ~      ~   ~         ~    ~      ~    ~
 ```
@@ -30,7 +30,8 @@ it equips what it finds, drinks its potions and gets back up on its own.
   couple of secret ones. 🏅 pops up on the stats row when you earn one.
 - **Seven biomes,** each with its own floor, enemies and a boss every ~15 minutes of work:
   🌼 Meadow, 🌲 Dark Forest, 💎 Caves, 🌴 Coast, 🌵 Desert, 🪦 Graveyard, 🌋 Volcano. After the
-  Volcano the world loops back to the Meadow, "II", with tougher enemies.
+  Volcano the world loops back to the Meadow, "II", with tougher enemies. The stats row shows how
+  far through the current biome you are (`🌴 Coast 37%`); its boss waits at 100%.
 - **Level milestones bring bosses:** a ⭐ mini boss (a "Giant" version of a zone enemy) at levels
   5, 15, 25…, and a 👑 boss (an "Elder" version of the zone's boss, tougher than the one at the
   end of the zone) at levels 10, 20, 30…
@@ -220,7 +221,7 @@ Heroes from before 1.5.0 start with empty slots, like new ones.
 The hero's life bar sits right under its XP bar, with the potions it carries:
 
 ```
-🧝 Archer Lv 16 ▰▱▱▱▱▱▱▱▱▱ 1060/5744 XP · 🪶 Fletched Bow · 💎 Caves II · 👺 Goblin ▰▰▱▱▱▱▱▱▱▱ 50/326 -135
+🧝 Archer Lv 16 ▰▱▱▱▱▱▱▱▱▱ 1060/5744 XP · 🪶 Fletched Bow · 💎 Caves II 81% · 👺 Goblin ▰▰▱▱▱▱▱▱▱▱ 50/326 -135
              💗 ▰▰▰▰▰▰▰▰▱▱ 441/467 -26 · 🧪 1
 ```
 
@@ -302,7 +303,7 @@ While you fight, the stats row shows the enemy's life and the damage of each hit
 row under it the damage you take (see [Life and combat](#life-and-combat)):
 
 ```
-🧝 Archer Lv 13 ▰▱▱▱▱▱▱▱▱▱ 371/3086 XP · 🪶 Fletched Bow · 🌲 Dark Forest II · 💀 587 · 🐺 Wolf ▰▰▰▰▰▱▱▱▱▱ 136/304 -72
+🧝 Archer Lv 13 ▰▱▱▱▱▱▱▱▱▱ 371/3086 XP · 🪶 Fletched Bow · 🌲 Dark Forest II 64% · 💀 587 · 🐺 Wolf ▰▰▰▰▰▱▱▱▱▱ 136/304 -72
 ```
 
 XP comes from kills (`1.6 * (3 + zone + random(0..zone))`, bosses x10) and from tokens: every 2,000 tokens
@@ -464,7 +465,7 @@ as was done for ⚡ ✨ ⏳.
   width in `COLUMNS`, pads the status line by 2 columns on each side, and cuts off anything wider.
   If the right edge is cut off in your terminal, increase the `6`.
 - **Narrow terminals:** when the stats row doesn't fit, parts are dropped in priority order (skills
-  first, then kills, zone and weapon), and a long message is cut short with "…". The life row
+  first, then kills, the biome with its progress, and weapon), and a long message is cut short with "…". The life row
   stays under the XP bar, dropping its extras (rally, then potions) if they don't fit. See the numbers in `statsRow()`.
 
 ### The info row (row 1)

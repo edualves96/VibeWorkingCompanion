@@ -103,6 +103,9 @@ const UPDATE_MSG_MS = 30000;      // the "updated" notice stays longer than othe
 const WHATS_NEW = {
   '1.3.0': 'enemies have life now, and every 5th level summons a boss',
   '1.4.0': `skills are random now, dropped by level bosses: ${COMMAND_PREFIX}skills`,
+  '1.9.0': root => (olderThan(root.seenVersion, '1.8.0')
+    ? `🧭 biome progress on this row, and ${COMMAND_PREFIX}showprogress off for just the map`
+    : '🧭 the biome shows how far through it you are; its boss waits at 100%'),
   '1.8.0': `just want the map? ${COMMAND_PREFIX}showprogress off hides this row and the life bar`,
   '1.7.0': root => (olderThan(root.seenVersion, '1.6.0')
     ? `💗 life, groups, area skills, gear: ${COMMAND_PREFIX}commands`
@@ -722,10 +725,8 @@ function classKey(name) {
 
 function describe(h) {
   const c = CLASSES[h.cls];
-  const zone = zoneOf(h.heroX);
-  const b = biomeOf(zone);
   const skills = h.skills.length > 0 ? ` · ${h.skills.map(s => s.icon).join('')}` : '';
-  return `${c.icon} ${c.name} Lv ${h.level} · ${weaponOf(h).icon} ${weaponOf(h).name}${skills} · ${h.kills} kills · ${b.icon} ${b.name}${cycleSuffix(zone)}`;
+  return `${c.icon} ${c.name} Lv ${h.level} · ${weaponOf(h).icon} ${weaponOf(h).name}${skills} · ${h.kills} kills · ${whereText(h)}`;
 }
 
 // Switches the active class, creating that hero on first use. Returns a message for the user.
@@ -1042,6 +1043,19 @@ function zoneOf(x) {
 
 function biomeOf(zone) {
   return BIOMES[zone % BIOMES.length];
+}
+
+// How far through its zone the hero is, 0 to 99%. The zone's boss waits at 100%, the first tile
+// of the next zone.
+function zoneProgress(h) {
+  return Math.floor(((h.heroX % ZONE_LENGTH) / ZONE_LENGTH) * 100);
+}
+
+// Where the hero is: the biome (with the loop's numeral) and how far through it, "🌼 Meadow 42%".
+function whereText(h) {
+  const zone = zoneOf(h.heroX);
+  const b = biomeOf(zone);
+  return `${b.icon} ${b.name}${cycleSuffix(zone)} ${zoneProgress(h)}%`;
 }
 
 function xpNeed(level) {
@@ -1725,8 +1739,7 @@ function statsRow(root, h, now, active, cols) {
   const bar = '▰'.repeat(filled) + '▱'.repeat(10 - filled);
   const w = weaponOf(h);
   const skills = h.skills.map(s => s.icon).join('');
-  const zone = zoneOf(h.heroX);
-  const b = biomeOf(zone);
+  const b = biomeOf(zoneOf(h.heroX));
 
   // The status is a [color, text] pair, so it can be shortened instead of dropped.
   let status = null;
@@ -1748,7 +1761,7 @@ function statsRow(root, h, now, active, cols) {
     [`${c.icon} ${c.name} ${color(GOLD, `Lv ${h.level}`)} ${color('38;2;167;139;250', bar)} ${h.xp}/${need} XP`, 6],
     [`${w.icon} ${w.name}`, 4],
     [skills, 1],
-    [color(b.color, `${b.icon} ${b.name}${cycleSuffix(zone)}`), 3],
+    [color(b.color, whereText(h)), 3],
     [`💀 ${h.kills}`, 2],
     [targetText(h, active), 4.5],
     [status && color(...status), 5],
