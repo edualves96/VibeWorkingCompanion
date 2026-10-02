@@ -3,14 +3,15 @@
 An idle RPG hero that lives in the bottom-right corner of your Claude Code status line.
 While Claude works, your hero walks through the world, fights monsters that fight back, gains
 XP, levels up, unlocks weapons, finds random skills and gear, and earns achievements. When Claude
-stops and waits for you, the hero waits too (💤). It never needs anything from you while you work:
-it equips what it finds, drinks its potions and gets back up on its own.
+runs subagents, they join the fight as allies. When Claude stops and waits for you, the hero waits
+too (💤). It never needs anything from you while you work: it equips what it finds, salvages the
+rest, drinks its potions and gets back up on its own.
 
 ```
 ⚠️ Opus 5.5 | my-project | main | ▰▰▰▰▰▰▱▱▱▱ 63% (634 200 / 1 000 000) | ⏳ 1h59m (42%)
             🧝 Archer Lv 12 ▰▰▰▰▱▱▱▱▱▱ 812/2429 XP · 🏹 Bow · 🎯🍃 · 🌴 Coast 37% · 💀 431 · 🦑 Squid ▰▰▰▱▱▱▱▱▱▱ 61/236
-                         💗 ▰▰▰▰▰▰▰▱▱▱ 284/402 -19 · 🧪 2
-                                                 .   🧝  . 🔸  💧  🦑      🐚    . .         🌴
+                         💗 ▰▰▰▰▰▰▰▱▱▱ 284/402 -19 · 🧪 2 · 🔩 7/10
+                                                   🦊🧝  . 🔸🐾💧  🦑      🐚    . .         🌴
                                                  ~      ~   ~         ~    ~      ~    ~
 ```
 
@@ -25,9 +26,13 @@ it equips what it finds, drinks its potions and gets back up on its own.
   rests a moment and gets back up stronger. It costs time, never progress.
 - **Random gear:** six slots (🪖 helmet, 🥋 chest, 👖 pants, 🧣 shoulders, 🧤 gloves, 🥾 boots), empty
   at first. Enemies sometimes drop a randomly rolled piece and bosses always do; a better piece is
-  equipped, a worse one is left lying on the ground.
-- **46 achievements** for kills, groups, bosses, survival, levels, skills, gear and hours of work, plus a
-  couple of secret ones. 🏅 pops up on the stats row when you earn one.
+  equipped, a worse one is salvaged into 🔩 shards, which reforge your weakest piece.
+- **Subagents are allies:** every subagent Claude runs brings a 🦊 fox, 🦉 owl, 🐕 hound, 🧚 fairy or
+  🦄 unicorn that walks behind the hero and fights with it until the subagent finishes.
+- **A journal:** level ups, bosses, finds, reforges and achievements are shown on the stats row for
+  a few seconds, which you'll often miss while you work. `/vwc:journal` lists them by day.
+- **50 achievements** for kills, groups, bosses, survival, levels, skills, gear, allies and hours of
+  work, plus a couple of secret ones. 🏅 pops up on the stats row when you earn one.
 - **Seven biomes,** each with its own floor, enemies and a boss every ~15 minutes of work:
   🌼 Meadow, 🌲 Dark Forest, 💎 Caves, 🌴 Coast, 🌵 Desert, 🪦 Graveyard, 🌋 Volcano. After the
   Volcano the world loops back to the Meadow, "II", with tougher enemies. The stats row shows how
@@ -42,8 +47,9 @@ it equips what it finds, drinks its potions and gets back up on its own.
 The companion never reads your work. It doesn't look at your prompts, Claude's answers, your code
 or your files, so it's safe to run on work projects and code under an NDA.
 
-- **It only needs two numbers:** *when* Claude is working, from the hook events, and *how many
-  tokens* each response used, from the `usage` field in Claude Code's local transcript. Claude Code
+- **It only needs two numbers:** *when* Claude is working, from the hook events (including when its
+  subagents start and stop, for the allies), and *how many tokens* each response used, from the
+  `usage` field in Claude Code's local transcript. Claude Code
   hands every hook the prompt text, but the companion ignores it. In the transcript it skips every
   line without a `usage` field and keeps only the token counts from the rest. The one text it
   checks for is Claude Code's own `[Request interrupted by user` marker, so pressing Esc pauses
@@ -54,7 +60,7 @@ or your files, so it's safe to run on work projects and code under an NDA.
 - **Nothing leaves your machine:** no network access at all, and no npm dependencies. The scripts
   only use Node's built-in `fs`, `path`, `os` and `child_process`, and `child_process` only runs the
   status line you already had, so it keeps showing above the hero.
-- **Easy to check:** about 2,400 lines of plain JavaScript, with no build step and nothing
+- **Easy to check:** about 2,900 lines of plain JavaScript, with no build step and nothing
   minified. The transcript reading is `ingestTranscript()` in `scripts/companion.js`.
 
 ## Install
@@ -120,6 +126,8 @@ data folder, which updates don't touch.
 | `/vwc:skills` | Every hero's skills with their rarity, power and stats, and which boss drops the next one. |
 | `/vwc:gear` | What every hero wears in each of the six gear slots, with each piece's rarity, power and stats, and what they add up to. |
 | `/vwc:achievements` | Every achievement: the ones you earned (with the date and the hero), and how close you are to the rest. |
+| `/vwc:statistics` | Each hero's work time, tokens, Claude turns (how many, the longest, shortest and average), XP, kills, bosses, finds and more, plus the totals of all heroes. See [Statistics](#statistics). |
+| `/vwc:journal` | What happened while you worked: level ups, new weapons and biomes, bosses, skills, gear, reforges, knockouts and achievements, by day and time. See [Journal](#journal). |
 | `/vwc:stats <above\|below>` | Put the hero's stats row (level, XP, weapon, zone, kills) above the map, where it starts, or below it. With no argument it switches to the other place. The choice is remembered across restarts. |
 | `/vwc:showprogress <on\|off>` | `off` hides the hero's progress (the stats row with name, level, XP, weapon, zone and kills, and the 💗 life bar) so only the map is shown; `on` brings it back. With no argument it switches. Level-ups, loot and other news are shown on the stats row, so you won't see them while it's hidden. The choice is remembered across restarts. |
 | `/vwc:commands` | List every command, your heroes, how many achievements you have, and what is currently shown or hidden. |
@@ -192,37 +200,46 @@ the rarity twice like a skill from a level 10 boss. Nothing to do on your side:
 ```
 🎁 🧤 Iron Grips (rare) equipped
 🎁 🥾 Steel Treads (epic) replaces Iron Boots
-🏆 Defeated 🦍 Ape King! · 🎁 🧣 Steel Spaulders (rare) left behind, yours is better
+🏆 Defeated 🦍 Ape King! · 🎁 🧣 Steel Spaulders (rare) salvaged for 🔩 2, yours is better
+🎁 🪖 Steel Hood (common) salvaged for 🔩 1, yours is better · 🔩 Reforged 🧤 Iron Grips +1 (+1% damage)
 ```
 
 - **What's rolled:** the slot, the rarity (same chances as skills), and the stats: `+% damage`,
   `+% critical chance`, `+% XP` or `+% life`, sometimes two of them. Gear found at higher levels rolls
   stronger, and its material shows how deep it was found: Leather, Bronze (level 5), Iron (10),
   Steel (15), Silver (20), Mithril (25), Dragonscale (35).
-- **Better or left behind:** a piece's **power** is the sum of its stats (a +1% critical chance is
+- **Better or salvaged:** a piece's **power** is the sum of its stats (a +1% critical chance is
   worth +1% damage on average). A piece with more power than the one in its slot is equipped right
-  away; otherwise it stays on the ground where the enemy fell, and you keep the old one.
+  away. Otherwise it's salvaged into 🔩 shards (1 for a common piece, 2 rare, 3 epic, 5 legendary),
+  leaving a 🔩 where the enemy fell, and you keep the old one.
+- **Reforging:** shards reforge your weakest piece on their own, adding +1 to its biggest stat and
+  a +1 to its name ("Iron Grips +2"). A piece's first reforge costs 10 shards, its second 20, its
+  third 30 and so on, and of two pieces as weak, the one reforged less goes first. The life row
+  shows the shards against the price of the next reforge (`🔩 7/10`). That's about one reforge
+  every 45 minutes of work. A reforged piece is replaced like any other once a better one drops.
 - **How much it adds:** a full set adds about +30% after an hour of work, +60% after 8 hours and
-  +85% after 30 hours, spread over damage, critical chance, XP and life.
-- `/vwc:gear` shows what each hero wears:
+  +90% after 30 hours, spread over damage, critical chance, XP and life.
+- `/vwc:gear` shows what each hero wears, and its shards:
 
   ```
-  ▶ 🧝 Archer Lv 16 · 6 of 6 slots · +24% damage, +6% critical chance, +11% XP · 💗 467 life
-      🪖 Helmet     Steel Circlet        epic      power  9   +9% damage
-      🥋 Chest      Steel Robe           common    power  5   +5% XP
-      👖 Pants      Iron Leggings        rare      power  6   +4% damage, +2% critical chance
+  ▶ 🧝 Archer Lv 16 · 6 of 6 slots · +24% damage, +6% critical chance, +11% XP · 💗 467 life · 🔩 7/10 shards
+      🪖 Helmet     Steel Circlet             epic      power  9   +9% damage
+      🥋 Chest      Steel Robe +1             common    power  6   +6% XP
+      👖 Pants      Iron Leggings             rare      power  6   +4% damage, +2% critical chance
       ...
   ```
 
-Heroes from before 1.5.0 start with empty slots, like new ones.
+Heroes from before 1.5.0 start with empty slots, like new ones. In 1.11.0, every piece a hero had
+left behind became 1 shard, reforged right away; the journal says how many.
 
 ## Life and combat
 
-The hero's life bar sits right under its XP bar, with the potions it carries:
+The hero's life bar sits right under its XP bar, with the potions it carries and its shards
+toward the next reforge (see [Gear](#gear)):
 
 ```
 🧝 Archer Lv 16 ▰▱▱▱▱▱▱▱▱▱ 1060/5744 XP · 🪶 Fletched Bow · 💎 Caves II 81% · 👺 Goblin ▰▰▱▱▱▱▱▱▱▱ 50/326 -135
-             💗 ▰▰▰▰▰▰▰▰▱▱ 441/467 -26 · 🧪 1
+             💗 ▰▰▰▰▰▰▰▰▱▱ 441/467 -26 · 🧪 1 · 🔩 7/10
 ```
 
 - **Enemies fight back,** one at a time or as a group: the nearest one, with the rest of its
@@ -247,13 +264,38 @@ The hero's life bar sits right under its XP bar, with the potions it carries:
 For a hero on pace (checked by simulation), that's 3 or 4 potions an hour and a knockout every 6
 or 7 hours of work, mostly by bosses, about the same for all three classes.
 
+## Allies
+
+When Claude runs a subagent (to explore the code, plan, review…), an ally joins the hero and
+fights with it until the subagent finishes:
+
+```
+🧝 Archer Lv 12 ▰▰▰▰▱▱▱▱▱▱ 812/2429 XP · 🦊 A fox joins the fight
+                                                🦊🦉🧝  . 🔸🪶🐾  🦑      🐚    . .         🌴
+```
+
+- **Who comes:** a 🦊 fox, 🦉 owl, 🐕 hound, 🧚 fairy or 🦄 unicorn, at random, walking right behind
+  the hero. Up to 2 fight at once; if Claude runs more subagents, the next one steps in when one
+  of the first two leaves.
+- **What they do:** every second the hero attacks, each ally strikes the same enemy for 30% of the
+  hero's basic hit (without skills or critical hits), and its 🐾 🪶 🌸 🌈 flies across the map like
+  the hero's shots. Enemies only go after the hero, so allies can't be hurt.
+- **How much it helps:** with an ally at its side for a whole work day (checked by simulation), a
+  hero ends about a level further along, and drinks fewer potions and gets knocked out less,
+  since fights are shorter.
+- **When they leave:** when the subagent finishes, when its session ends, or after 10 minutes
+  without any news from it (a missed "finished" event).
+- **Nothing to do:** subagents never move the hero on their own. A hero waiting for you stays put
+  even if a subagent keeps working in the background; it only fights with its allies while Claude
+  works.
+
 ## Achievements
 
-46 achievements, shared by all your heroes. When you earn one, the stats row says
+50 achievements, shared by all your heroes. When you earn one, the stats row says
 `🏅 Achievement: Dragonslayer`. `/vwc:achievements` lists them all, with how close you are:
 
 ```
-🏅 Achievements · 19 of 46 earned
+🏅 Achievements · 19 of 50 earned
 
 Combat
   ✅ First Blood        defeat an enemy                                2026-10-02 🧝
@@ -263,17 +305,74 @@ Combat
 
 | Group | Achievements |
 |-------|--------------|
-| Combat | defeat 1, 100, 1,000 and 10,000 enemies; land a hit of 250 and of 2,500 damage; a critical hit with a skill; hit 4 enemies with one area skill; defeat 500 groups |
+| Combat | defeat 1, 100, 1,000 and 10,000 enemies; land a hit of 250 and of 2,500 damage; a critical hit with a skill; hit 4 enemies with one area skill; defeat 500 groups; be joined by an ally; defeat 100 enemies with one at your side |
 | Bosses | the first zone boss, a mini boss, an Elder boss, 5 Elder bosses, the Dragon of the Volcano, and of Volcano X |
 | Survival | drink a potion, and 100; win a fight with under 10% life; get knocked out and back up |
 | Journey | levels 5, 10, 20, 30 and 35 (the star weapon); reach all 7 biomes; play every class; every class to level 10 |
 | Skills | find a skill; hold two; replace one; find an epic, and a legendary; hold two legendaries |
-| Gear | find a piece; fill all 6 slots; find an epic, and a legendary; leave 100 pieces behind |
+| Gear | find a piece; fill all 6 slots; find an epic, and a legendary; salvage 100 pieces; reforge a piece, and 50 times |
 | Work | 1, 8 and 40 hours of work; 1 million and 10 million tokens; one turn of 30 minutes; two secrets |
 
 Kills, hours and other totals add up all your heroes, including ones replaced by
 `/vwc:createchar`. A save from before 1.5.0 gets credit right away for what it shows: levels,
 kills, zones, hours of work, level bosses passed and skills held.
+
+## Statistics
+
+`/vwc:statistics` shows what each hero did, then the totals of all of them:
+
+```
+📊 Statistics
+
+▶ 🧝 Archer Lv 20 · 🌙 Moon Bow · 🌋 Volcano II 34%
+    Work time     2h50m
+    Tokens        1.2M · 21k a turn · most in one 250k
+    Turns         57 · longest 15m18s · shortest 6s · average 2m59s
+    XP            54k · 19k an hour
+    Kills         1,011 · 58 groups · 356 an hour
+    Bosses        13 zone bosses · 2 mini bosses · 1 Elder boss
+    Hits          biggest 450 · 212 critical skill hits
+    Skills found  3 · 1 legendary · 1 replaced
+    Gear found    13 · 1 epic · 1 legendary · 6 salvaged · 1 reforge
+    Survival      2 potions drunk · 0 knockouts · 0 close calls
+    Allies        14 allies joined · 287 kills together
+
+All heroes · 3h11m of work · 1.5M tokens · 1,141 kills · 61 turns · longest turn 15m18s
+```
+
+- **Work time** is the time the hero spent adventuring: only while Claude works.
+- **Tokens** are the ones used while that hero was active (input, cache writes and output, not
+  cache reads, as for XP).
+- **A turn** runs from your message to Claude's answer and counts for the hero that was active
+  when you sent it. Turns that ran a `/vwc:` command or were stopped with Esc don't count.
+- **Heroes from before 1.10.0** didn't keep their own tokens and turns, so those count from the
+  day you updated, and the list says since when. The totals at the bottom count tokens and the
+  longest turn for the whole save. Allies, reforges and the kills made with allies count from 1.11.0.
+
+## Journal
+
+What the stats row says only stays there for a few seconds, and you're busy working.
+`/vwc:journal` keeps the moments worth knowing about, by day, oldest first, so the newest end up
+right above your prompt:
+
+```
+📜 Journal · the last 50 of 214 moments
+
+Friday 2026-10-02
+  14:21 🧝 🏆 Defeated 🦖 Sand Rex! · Entered 🪦 Graveyard
+  14:25 🧝 🎁 🧤 Iron Grips (epic) salvaged for 🔩 3, yours is better · 🎉 Level 11!
+  14:31 🧝 🔩 Reforged 🥋 Bronze Robe +1 (+1% damage)
+  15:01 🧝 🎉 Level 13! · New weapon: 🪶 Fletched Bow
+  15:44 🧝 🏆 Defeated 🦅 Giant Vulture! · 🎁 🔥 Fire Shot (epic) replaces 🔥 Fire Barrage
+```
+
+- **What's written down:** level ups, new weapons, new biomes, defeated bosses, skills found, gear
+  equipped, epic and legendary gear salvaged, reforges, knockouts, achievements and updates.
+  Potions, allies joining and common salvages are left out, since they come often.
+- **One line a minute:** a hero's moments from the same minute share a line, with its icon, so
+  the journal of every hero reads as one.
+- **How far back:** each hero keeps its last 100 moments, and the journal shows the last 50 lines.
+  Heroes from before 1.11.0 start with an empty journal.
 
 ## How it works
 
@@ -287,13 +386,17 @@ The hero takes one step per second of **working time**. Hooks tell it when Claud
 | Claude needs your permission (`PermissionRequest`) | waits |
 | Claude asks you a question (`AskUserQuestion`, `ExitPlanMode`) | waits |
 | You press Esc | waits (read from the transcript, since no hook fires) |
+| A subagent starts or stops (`SubagentStart`, `SubagentStop`) | an [ally](#allies) joins or leaves |
 
 - **One hero for all your windows:** it walks while at least one Claude Code session is working.
-- **Subagents don't count:** only the main conversation moves the hero.
+- **Subagents don't move the hero:** only the main conversation does. A subagent brings an ally
+  instead, and while its session is working, what the subagent does counts as activity (see the
+  next points).
 - **Sleep doesn't count:** gaps longer than 30 s (a sleeping laptop, a closed terminal) are ignored.
-- **A missed "finished" event can't keep it walking:** a session that has sent no hook event and
-  written nothing to its transcript for 10 minutes counts as waiting. One very long silent
-  command (a 15-minute build, say) pauses the hero after 10 minutes until it finishes.
+- **A missed "finished" event can't keep it walking:** a session that has sent no hook event,
+  written nothing to its transcript and heard nothing from its subagents for 10 minutes counts
+  as waiting. One very long silent command (a 15-minute build, say) pauses the hero after 10
+  minutes until it finishes.
 
 Enemies have life, which grows with the zone. Each hit does the class's base damage plus its
 per-level damage times your level, plus the weapon's bonus, raised by the damage bonuses of
@@ -369,7 +472,7 @@ Everything below is in `scripts/companion.js`.
 | `RANKS` | | Life, XP and damage of mini bosses (`2.5`, `5`, `1.5`), zone bosses (`5`, `10`, `1.5`) and level bosses (`8`, `16`, `2`), as multiples of a normal enemy's, and how often they strike (`every` 2 seconds). |
 | `KILL_XP` | `1.6` | Multiplier on the XP of every kill (and of tokens). Raise it to level faster. |
 | `MAX_SKILLS` | `2` | How many skills a hero holds. |
-| `RARITIES` | | Each rarity's chance and how much it multiplies the strength of a skill or a piece of gear. |
+| `RARITIES` | | Each rarity's chance, how much it multiplies the strength of a skill or a piece of gear, and the shards a salvaged piece gives. |
 | `ENEMY_ATK` | `0.085` | Enemy damage per hit, as a share of a normal enemy's life in that zone (times the rank's `atk` in `RANKS`). Raise it for a harder game. |
 | `AGGRO`, `SHOT_RANGE` | `8`, `4` | How far away the nearest enemy notices the hero, and how far the ones that shoot fire from. |
 | `HERO_LIFE` | `[40, 12, 1.4]` | Hero life: `40 + 12 * level^1.4`, times the class's `life`. |
@@ -383,6 +486,11 @@ Everything below is in `scripts/companion.js`.
 | `GEAR_DROP` | `0.03` | Chance that a normal enemy drops a piece of gear. Bosses always do. |
 | `GEAR_SLOTS` | | The six slots, with their icon and the base names a piece can roll (`Helm`, `Hood`…). |
 | `GEAR_MATERIALS` | | The material in a piece's name, by the level it was found at. |
+| `REFORGE_COST` | `10` | Shards for a piece's first reforge; each one after that costs this many more. |
+| `MAX_ALLIES`, `ALLY_DAMAGE` | `2`, `0.3` | How many allies fight at once, and each one's hit as a share of the hero's basic hit. |
+| `ALLY_STALE_MS` | `600000` | An ally whose subagent sent nothing for this long has left. |
+| `ALLY_KINDS` | | The allies that can come: icon, name and what they shoot. |
+| `JOURNAL_SIZE`, `JOURNAL_SHOWN` | `100`, `50` | Moments each hero keeps for `/vwc:journal`, and the lines it shows. |
 | `ACHIEVEMENT_GROUPS` | | Every achievement: its name, what to do, the fact it measures (see `achievementFacts()`) and the goal. |
 | `WORLD_TILES` | `24` | Width of the world in tiles (each tile is 2 columns). |
 | `MSG_MS` | `10000` | How long messages like "🎉 Level 5!" stay visible. |
@@ -466,7 +574,7 @@ as was done for ⚡ ✨ ⏳.
   If the right edge is cut off in your terminal, increase the `6`.
 - **Narrow terminals:** when the stats row doesn't fit, parts are dropped in priority order (skills
   first, then kills, the biome with its progress, and weapon), and a long message is cut short with "…". The life row
-  stays under the XP bar, dropping its extras (rally, then potions) if they don't fit. See the numbers in `statsRow()`.
+  stays under the XP bar, dropping its extras (shards, then rally, then potions) if they don't fit. See the numbers in `statsRow()`.
 
 ### The info row (row 1)
 
@@ -480,19 +588,20 @@ If you had a status line before `/vwc:setup`, it runs and is shown on top. Other
 | `.claude-plugin/plugin.json` | Plugin manifest (name `vwc`, version). |
 | `.claude-plugin/marketplace.json` | Makes this repository its own marketplace (`vibeworkcompanion`). |
 | `hooks/hooks.json` | The hooks that tell the companion when Claude is working. |
-| `skills/` | The `/vwc:` commands: `setup`, `chooseclass`, `createchar`, `hide`, `show`, `stats`, `showprogress`, `skills`, `gear`, `achievements` and `commands`. |
+| `skills/` | The `/vwc:` commands: `setup`, `chooseclass`, `createchar`, `hide`, `show`, `stats`, `showprogress`, `skills`, `gear`, `achievements`, `statistics`, `journal` and `commands`. |
 | `scripts/companion.js` | The engine: save file, classes, biomes, game rules, rendering. |
 | `scripts/statusline.js` | What the status line runs: info row plus the three companion rows. |
-| `scripts/hook.js` | What the hooks run. |
-| `scripts/cli.js` | Class switching, new characters, hide/show, the stats row's place, showing or hiding the progress rows, the skills, gear and achievements lists, and the command list. |
+| `scripts/hook.js` | What the hooks run. Events from subagents go to the allies. |
+| `scripts/cli.js` | Class switching, new characters, hide/show, the stats row's place, showing or hiding the progress rows, the skills, gear, achievements and statistics lists, the journal, and the command list. |
 | `scripts/setup.js` | Turns the status line on and off in your `settings.json`. |
+| `IDEAS.md` | Ideas for later versions that haven't been built yet. |
 
 Your saves live in the plugin's data folder, `~/.claude/plugins/data/<plugin id>/`, which survives
 plugin updates:
 
 | File | What it is |
 |------|------------|
-| `state.json` | One hero per class (with its skills, gear and counts for achievements), which one is active, the achievements earned and the totals they need, what `/vwc:hide` has hidden, where `/vwc:stats` put the stats row, whether `/vwc:showprogress` hid it, and the last plugin version it saw (for the update notice). Delete it to start everything over. |
+| `state.json` | One hero per class (with its skills, gear, shards, journal, and counts for achievements and statistics), which one is active, the allies of the subagents running now, the achievements earned and the totals they need, what `/vwc:hide` has hidden, where `/vwc:stats` put the stats row, whether `/vwc:showprogress` hid it, and the last plugin version it saw (for the update notice). Delete it to start everything over. |
 | `backups/` | Heroes replaced by `/vwc:createchar`. To restore one, copy it into `state.json` under `heroes.<class>`. |
 | `statusline.js` | Small launcher that your status line runs; it finds the current plugin version. |
 | `previous-statusline.json` | The status line you had before setup. |

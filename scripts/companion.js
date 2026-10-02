@@ -70,11 +70,12 @@ const KILL_XP = 1.6;             // longer fights mean fewer kills, so each kill
 // The mini boss or boss of every 5th level drops a random skill; a hero holds this many.
 const MAX_SKILLS = 2;
 // Rarity multiplies a skill's strength. A boss of a 10th level rolls twice and keeps the better.
+// `shards`: what a piece of gear of that rarity is salvaged into.
 const RARITIES = [
-  { name: 'common', chance: 0.55, power: 1 },
-  { name: 'rare', chance: 0.3, power: 1.25 },
-  { name: 'epic', chance: 0.12, power: 1.55 },
-  { name: 'legendary', chance: 0.03, power: 2 },
+  { name: 'common', chance: 0.55, power: 1, shards: 1 },
+  { name: 'rare', chance: 0.3, power: 1.25, shards: 2 },
+  { name: 'epic', chance: 0.12, power: 1.55, shards: 3 },
+  { name: 'legendary', chance: 0.03, power: 2, shards: 5 },
 ];
 // Gear: one piece per slot, all heroes start with none. A normal enemy drops a piece this often;
 // every boss drops one, rolling rarity twice like a skill from the boss of a 10th level.
@@ -92,7 +93,28 @@ const GEAR_MATERIALS = [[1, 'Leather'], [5, 'Bronze'], [10, 'Iron'], [15, 'Steel
 // What gear can give, in percent. Every point is worth about the same (a +1% critical chance is
 // +1% damage on average), so a piece's power is the sum of its stats.
 const GEAR_STATS = { damage: 'damage', crit: 'critical chance', xp: 'XP', life: 'life' };
-const ZONE_LENGTH = 600;          // tiles per zone; with the fights, about 15 minutes of work
+// A piece weaker than the one worn is salvaged into shards (see RARITIES), and shards reforge the
+// weakest piece worn: +1 to its biggest stat. The first reforge of a piece costs REFORGE_COST
+// shards, and each one after that REFORGE_COST more, so reforges slow down as they add up.
+const REFORGE_COST = 10;
+// Every subagent Claude runs brings an ally that fights beside the hero until it finishes, up to
+// MAX_ALLIES at a time. Each strikes the hero's target every step for ALLY_DAMAGE of a basic hit.
+// An ally whose subagent sent nothing for ALLY_STALE_MS has left (its "finished" event was missed).
+const MAX_ALLIES = 2;
+const ALLY_DAMAGE = 0.3;
+const ALLY_STALE_MS = 10 * 60 * 1000;
+const ALLY_KINDS = [
+  { icon: '🦊', name: 'Fox', a: 'A fox', hit: '🐾' },
+  { icon: '🦉', name: 'Owl', a: 'An owl', hit: '🪶' },
+  { icon: '🐕', name: 'Hound', a: 'A hound', hit: '🐾' },
+  { icon: '🧚', name: 'Fairy', a: 'A fairy', hit: '🌸' },
+  { icon: '🦄', name: 'Unicorn', a: 'A unicorn', hit: '🌈' },
+];
+// /vwc:journal: each hero keeps its last JOURNAL_SIZE notable moments, and the journal shows the
+// last JOURNAL_SHOWN lines of all heroes together.
+const JOURNAL_SIZE = 100;
+const JOURNAL_SHOWN = 50;
+const ZONE_LENGTH = 600;         // tiles per zone; with the fights, about 15 minutes of work
 const VIEW_AHEAD = 40;
 const WORLD_TILES = 24;           // world strip width; each tile is 2 columns
 const MSG_MS = 10000;
@@ -103,6 +125,10 @@ const UPDATE_MSG_MS = 30000;      // the "updated" notice stays longer than othe
 const WHATS_NEW = {
   '1.3.0': 'enemies have life now, and every 5th level summons a boss',
   '1.4.0': `skills are random now, dropped by level bosses: ${COMMAND_PREFIX}skills`,
+  '1.11.0': root => (olderThan(root.seenVersion, '1.10.0')
+    ? `🦊 subagent allies, 🔩 reforges, ${COMMAND_PREFIX}journal, ${COMMAND_PREFIX}statistics`
+    : `🦊 subagents fight beside you, 🔩 gear reforges, ${COMMAND_PREFIX}journal`),
+  '1.10.0': `📊 each hero's work time, tokens, turns, kills and more: ${COMMAND_PREFIX}statistics`,
   '1.9.0': root => (olderThan(root.seenVersion, '1.8.0')
     ? `🧭 biome progress on this row, and ${COMMAND_PREFIX}showprogress off for just the map`
     : '🧭 the biome shows how far through it you are; its boss waits at 100%'),
@@ -129,6 +155,8 @@ const ACHIEVEMENT_GROUPS = {
     { id: 'perfect-strike', name: 'Perfect Strike', what: 'land a critical hit with a skill', of: 'skillCrits', goal: 1 },
     { id: 'crowd-control', name: 'Crowd Control', what: 'hit 4 enemies with one area skill', of: 'areaHits', goal: 4 },
     { id: 'pack-hunter', name: 'Pack Hunter', what: 'defeat 500 groups of enemies', of: 'groups', goal: 500 },
+    { id: 'fellowship', name: 'Fellowship', what: 'be joined by an ally (a subagent)', of: 'allies', goal: 1 },
+    { id: 'better-together', name: 'Better Together', what: 'defeat 100 enemies with an ally at your side', of: 'allyKills', goal: 100 },
   ],
   Bosses: [
     { id: 'boss-fight', name: 'Boss Fight', what: 'defeat the 🐻 Bear at the end of the 🌼 Meadow', of: 'zone', goal: 1 },
@@ -167,7 +195,9 @@ const ACHIEVEMENT_GROUPS = {
     { id: 'fully-equipped', name: 'Fully Equipped', what: 'wear gear in all 6 slots', of: 'gearWorn', goal: 6 },
     { id: 'shiny', name: 'Shiny', what: 'find an epic or legendary piece of gear', of: 'gearEpic', goal: 1 },
     { id: 'treasure-hunter', name: 'Treasure Hunter', what: 'find a legendary piece of gear', of: 'gearLegendary', goal: 1 },
-    { id: 'picky', name: 'Picky', what: 'leave 100 pieces of gear behind', of: 'gearLeft', goal: 100 },
+    { id: 'picky', name: 'Picky', what: 'salvage 100 pieces of gear', of: 'gearLeft', goal: 100 },
+    { id: 'tinkerer', name: 'Tinkerer', what: 'reforge a piece of gear', of: 'forged', goal: 1 },
+    { id: 'master-smith', name: 'Master Smith', what: 'reforge gear 50 times', of: 'forged', goal: 50 },
   ],
   Work: [
     { id: 'clocked-in', name: 'Clocked In', what: 'work for 1 hour', of: 'workHours', goal: 1 },
@@ -275,10 +305,11 @@ const WAIT_EVENTS = new Set(['Stop', 'StopFailure', 'PermissionRequest', 'PreToo
 
 // ---------- save file ----------
 
-// The save holds one hero per class; only the `active` one moves.
+// The save holds one hero per class; only the `active` one moves. `allies` are the subagents
+// running now, by agent id, and `alliesGone` the ids of the last ones that finished.
 function newRoot(now) {
   // A new save starts on the current version, so it never shows an "updated" notice.
-  return { v: 2, active: null, heroes: {}, lastTick: now, sessions: {}, seenVersion: pluginVersion(), stats: newStats(), achievements: {} };
+  return { v: 2, active: null, heroes: {}, lastTick: now, sessions: {}, seenVersion: pluginVersion(), stats: newStats(), achievements: {}, allies: {}, alliesGone: [] };
 }
 
 // Shared by all heroes: tokens used, the longest turn (ms), and the counts of heroes replaced
@@ -290,12 +321,17 @@ function newStats() {
 // What a hero did that achievements count but the hero doesn't otherwise keep: `found` counts
 // skills and `gear` pieces of gear by rarity, `left` the gear left behind, `closeCalls` wins with
 // under 10% life left, `potions` the potions drunk, `maxAreaHits` the most enemies one area skill
-// hit, `groups` the groups of enemies defeated.
+// hit, `groups` the groups of enemies defeated, `allies` the allies that joined, `allyKills` the
+// enemies defeated with an ally at the hero's side and `forged` the reforges.
+// For /vwc:statistics: `tokens` used while the hero was active, and the Claude turns played with
+// it: how many, their total time (ms) and tokens, the longest and shortest (ms, null before the
+// first) and the most tokens in one. Heroes from before 1.10.0 count these from `countedFrom` on.
 function newTally() {
   const byRarity = () => ({ common: 0, rare: 0, epic: 0, legendary: 0 });
   return {
     maxHit: 0, skillCrits: 0, minis: 0, elders: 0, replaced: 0, found: byRarity(), gear: byRarity(), left: 0,
-    knockouts: 0, closeCalls: 0, potions: 0, maxAreaHits: 0, groups: 0,
+    knockouts: 0, closeCalls: 0, potions: 0, maxAreaHits: 0, groups: 0, allies: 0, allyKills: 0, forged: 0,
+    tokens: 0, turns: 0, turnMs: 0, turnTokens: 0, longestTurn: 0, shortestTurn: null, mostTokens: 0,
   };
 }
 
@@ -306,6 +342,7 @@ function newLife(h) {
 
 function newHero(cls, now) {
   const c = CLASSES[cls];
+  const awakens = `${c.icon} A new ${c.name.toLowerCase()} awakens`;
   const h = {
     cls,
     level: 1,
@@ -321,18 +358,20 @@ function newHero(cls, now) {
     enemies: [],
     skills: [],
     gear: {},        // slot -> the piece worn there
-    loot: [],        // gear left behind on the ground, until it scrolls out of view
+    loot: [],        // what salvaged gear left on the ground, until it scrolls out of view
+    shards: 0,       // from salvaged gear, until there are enough for a reforge
     tally: newTally(),
     cooldowns: {},   // unused now; read by older versions that may still run in another window
     fx: null,
-    msg: { text: `${c.icon} A new ${c.name.toLowerCase()} awakens`, at: now },
+    msg: { text: awakens, at: now },
+    journal: [{ at: now, text: awakens }],
   };
   return Object.assign(h, newLife(h));
 }
 
 // Version 1 kept a single hero at the top level. It already looked like a mage (🧙,
 // elemental powers), so it becomes the mage save with its progress intact.
-function migrate(s) {
+function migrate(s, now = Date.now()) {
   if (s.v !== 2) {
     const { v, lastTick, sessions, ...hero } = s;
     s = { v: 2, active: 'mage', heroes: { mage: { ...hero, cls: 'mage' } }, lastTick, sessions };
@@ -349,14 +388,31 @@ function migrate(s) {
         }
       }
     }
-    // Counts added in later versions start at 0.
+    // Counts added in later versions start at 0. Tokens and turns weren't kept per hero before
+    // 1.10.0, so /vwc:statistics says when they started counting.
+    const counted = h.tally && h.tally.turns != null;
     h.tally = h.tally ? { ...newTally(), ...h.tally } : pastTally(h);
+    if (!counted) {
+      h.tally.countedFrom = now;
+    }
     if (!h.gear) {
       h.gear = {};
       h.loot = [];
     }
     if (h.life == null) {
       Object.assign(h, newLife(h));
+    }
+    if (!h.journal) {
+      h.journal = [];
+    }
+    // Gear left behind before 1.11.0 is salvaged too, as common pieces, and reforged right away.
+    // Only the journal says so, leaving the stats row to the update notice.
+    if (h.shards == null) {
+      h.shards = h.tally.left * RARITIES[0].shards;
+      if (h.shards > 0) {
+        record(h, `🔩 The ${plural(h.tally.left, 'piece')} of gear left behind before 1.11.0 became ${plural(h.shards, 'shard')}`, now);
+        reforge(h, now, record);
+      }
     }
     // Enemies from before 1.6.0 didn't fight back.
     for (const e of h.enemies) {
@@ -368,6 +424,10 @@ function migrate(s) {
   }
   if (!s.stats) {
     s.stats = newStats();
+  }
+  if (!s.allies) {
+    s.allies = {};
+    s.alliesGone = [];
   }
   return s;
 }
@@ -415,7 +475,7 @@ function load(now) {
   }
   // Only an unreadable file counts as broken. If migrate() fails, that's a bug in the code: the
   // error goes up and nothing is saved, instead of replacing the heroes with an empty save.
-  return migrate(parsed);
+  return migrate(parsed, now);
 }
 
 function save(s) {
@@ -512,10 +572,11 @@ function settle(root, now) {
     return 0;
   }
   h.carryMs += gap;
+  const allies = fightingAllies(root, now);
   let steps = 0;
   while (h.carryMs >= STEP_MS) {
     h.carryMs -= STEP_MS;
-    step(h, now);
+    step(h, now, allies);
     steps++;
   }
   return steps;
@@ -526,6 +587,71 @@ function prune(root, now) {
     if (now - ss.lastSeen > SESSION_PRUNE_MS) {
       delete root.sessions[id];
     }
+  }
+  for (const [id, a] of Object.entries(root.allies)) {
+    if (now - a.seen > ALLY_STALE_MS) {
+      leave(root, id);
+    }
+  }
+}
+
+// ---------- allies ----------
+
+// The allies at the hero's side: the first MAX_ALLIES to arrive. The others wait their turn.
+function fightingAllies(root, now) {
+  return Object.values(root.allies)
+    .filter(a => now - a.seen <= ALLY_STALE_MS)
+    .sort((a, b) => a.since - b.since)
+    .slice(0, MAX_ALLIES);
+}
+
+// Something a subagent did. Its first event brings an ally, its SubagentStop sends it home, and
+// everything in between keeps it there. A subagent never wakes a waiting hero, but while its
+// session works, the subagent's activity keeps it from counting as idle (see IDLE_CAP_MS).
+function applyAgentEvent(root, ev, at) {
+  const ss = root.sessions[ev.session_id];
+  if (ss) {
+    ss.lastActivity = Math.max(ss.lastActivity || 0, at);
+  }
+  const id = ev.agent_id;
+  if (ev.hook_event_name === 'SubagentStop') {
+    // Without an id, the session's ally that arrived first goes.
+    const mine = Object.entries(root.allies).filter(([, a]) => a.session === ev.session_id).sort((a, b) => a[1].since - b[1].since);
+    const gone = id || (mine[0] && mine[0][0]);
+    if (gone) {
+      leave(root, gone);
+    }
+    return;
+  }
+  if (!id) {
+    return;
+  }
+  const ally = root.allies[id];
+  if (ally) {
+    ally.seen = Math.max(ally.seen, at);
+    return;
+  }
+  // Async hooks can finish out of order: a late event from a finished subagent doesn't bring it back.
+  if (root.alliesGone.includes(id)) {
+    return;
+  }
+  const taken = Object.values(root.allies).map(a => a.icon);
+  const free = ALLY_KINDS.filter(k => !taken.includes(k.icon));
+  const kind = pick(free.length > 0 ? free : ALLY_KINDS);
+  const joined = { icon: kind.icon, name: kind.name, hit: kind.hit, session: ev.session_id, since: at, seen: at };
+  root.allies[id] = joined;
+  const h = activeHero(root);
+  if (h && fightingAllies(root, at).includes(joined)) {
+    h.tally.allies++;
+    setMsg(h, `${kind.icon} ${kind.a} joins the fight`, at);
+  }
+}
+
+function leave(root, id) {
+  delete root.allies[id];
+  root.alliesGone.push(id);
+  if (root.alliesGone.length > 20) {
+    root.alliesGone.shift();
   }
 }
 
@@ -615,6 +741,7 @@ function ingestTranscript(root, ss, transcriptPath, now) {
     if (!h) {
       return;
     }
+    h.tally.tokens += tokens;
     h.tokenCarry += tokens;
     const kills = Math.floor(h.tokenCarry / TOKENS_PER_KILL);
     h.tokenCarry -= kills * TOKENS_PER_KILL;
@@ -631,10 +758,24 @@ function onHookEvent(ev, at) {
   }).root;
 }
 
+// A hook event from inside a subagent, or about one starting or stopping (see applyAgentEvent).
+function onAgentEvent(ev, at) {
+  return update(at, 2000, root => {
+    const worked = settle(root, at) > 0;
+    applyAgentEvent(root, ev, at);
+    checkAchievements(root, at, worked);
+  }).root;
+}
+
 function applyHookEvent(root, ev, at) {
   const name = ev.hook_event_name;
   if (name === 'SessionEnd') {
     delete root.sessions[ev.session_id];
+    for (const [id, a] of Object.entries(root.allies)) {
+      if (a.session === ev.session_id) {
+        leave(root, id);
+      }
+    }
     return;
   }
   const ss = session(root, ev.session_id, at);
@@ -642,6 +783,9 @@ function applyHookEvent(root, ev, at) {
   if (name === 'UserPromptSubmit') {
     const h = activeHero(root);
     ss.turn = { start: at, end: null, tokens: 0, cls: root.active, xp0: h ? h.totalXp : 0 };
+    if (isCompanionCommand(ev.prompt)) {
+      ss.turn.cmd = true;
+    }
   }
   // Async hooks can finish out of order; an older event must not undo a newer one.
   if (at < ss.eventAt) {
@@ -652,12 +796,36 @@ function applyHookEvent(root, ev, at) {
     ss.active = true;
   } else if (WAIT_EVENTS.has(name)) {
     ss.active = false;
-    if (ss.turn && (name === 'Stop' || name === 'StopFailure')) {
+    // Only the first Stop ends a turn, so a turn is never counted twice.
+    if (ss.turn && !ss.turn.end && (name === 'Stop' || name === 'StopFailure')) {
       ss.turn.end = at;
       root.stats.longestTurn = Math.max(root.stats.longestTurn, at - ss.turn.start);
+      countTurn(root.heroes[ss.turn.cls], ss.turn);
     }
   }
   debug(`hook ${name} active=${ss.active}`);
+}
+
+// A /vwc: command is a turn too, but a few seconds of showing a list isn't work, so it would
+// only ever be the shortest turn. The prompt is the typed command, or its expanded form.
+function isCompanionCommand(prompt) {
+  return typeof prompt === 'string'
+    && (prompt.trimStart().startsWith(COMMAND_PREFIX) || prompt.includes(`<command-name>${COMMAND_PREFIX}`));
+}
+
+// Adds a finished turn to the hero it was played with (the one active when you sent the message).
+function countTurn(h, turn) {
+  if (!h || turn.cmd) {
+    return;
+  }
+  const t = h.tally;
+  const ms = turn.end - turn.start;
+  t.turns++;
+  t.turnMs += ms;
+  t.turnTokens += turn.tokens;
+  t.longestTurn = Math.max(t.longestTurn, ms);
+  t.shortestTurn = t.shortestTurn == null ? ms : Math.min(t.shortestTurn, ms);
+  t.mostTokens = Math.max(t.mostTokens, turn.tokens);
 }
 
 function onStatusLine(data, now) {
@@ -712,6 +880,7 @@ function noticeUpdate(root, now) {
     const entry = WHATS_NEW[version];
     const news = typeof entry === 'function' ? entry(root) : entry || `${COMMAND_PREFIX}commands lists every command`;
     h.msg = { text: `🆕 Updated to ${version} · ${news}`, at: now, ms: UPDATE_MSG_MS };
+    record(h, `🆕 Updated to ${version}`, now);
   }
   root.seenVersion = version;
 }
@@ -864,11 +1033,11 @@ function gearReport(now) {
       }
     }
     const worn = Object.keys(h.gear).length;
-    lines.push(`${root.active === cls ? '▶' : ' '} ${c.icon} ${c.name} Lv ${h.level} · ${worn} of ${Object.keys(GEAR_SLOTS).length} slots · ${worn > 0 ? statsText(total) : 'no gear yet'} · 💗 ${maxLife(h)} life`);
+    lines.push(`${root.active === cls ? '▶' : ' '} ${c.icon} ${c.name} Lv ${h.level} · ${worn} of ${Object.keys(GEAR_SLOTS).length} slots · ${worn > 0 ? statsText(total) : 'no gear yet'} · 💗 ${maxLife(h)} life · 🔩 ${h.shards}/${nextReforge(h).cost} shards`);
     for (const [slot, g] of Object.entries(GEAR_SLOTS)) {
       const item = h.gear[slot];
       const what = item
-        ? `${item.name.padEnd(20)} ${item.rarity.padEnd(10)}power ${String(gearPower(item)).padStart(2)}   ${statsText(item.stats)}`
+        ? `${gearName(item).padEnd(25)} ${item.rarity.padEnd(10)}power ${String(gearPower(item)).padStart(2)}   ${statsText(item.stats)}`
         : '(empty)';
       lines.push(`    ${g.icon} ${g.name.padEnd(10)} ${what}`);
     }
@@ -877,8 +1046,11 @@ function gearReport(now) {
   if (lines.length === 0) {
     return `No heroes yet. Pick one with ${COMMAND_PREFIX}chooseclass.`;
   }
+  const shards = RARITIES.map(r => `${r.shards} ${r.name}`).join(', ');
   lines.push(`Enemies sometimes drop gear, and bosses always do. A piece with more power than the one`,
-    'worn in its slot is equipped; a weaker one is left behind.');
+    `worn in its slot is equipped; a weaker one is salvaged into 🔩 shards (${shards}).`,
+    `Shards reforge your weakest piece: +1 to its biggest stat, and +1 on its name. A piece's first`,
+    `reforge costs ${REFORGE_COST} shards, its second ${REFORGE_COST * 2}, its third ${REFORGE_COST * 3}, and so on.`);
   return lines.join('\n');
 }
 
@@ -927,6 +1099,132 @@ function achievementsReport(now) {
     }
   }
   lines.push('', 'Achievements are shared by all your heroes. Secret ones show up once earned.');
+  return lines.join('\n');
+}
+
+// "1 group", "12 groups".
+function plural(n, one, many = `${one}s`) {
+  return `${shortNumber(n)} ${n === 1 ? one : many}`;
+}
+
+// How many were found, and how many of those were epic or legendary: "12 · 2 epic · 1 legendary".
+function foundText(byRarity) {
+  const total = Object.values(byRarity).reduce((a, b) => a + b, 0);
+  const rare = ['epic', 'legendary'].filter(r => byRarity[r] > 0).map(r => `${byRarity[r]} ${r}`);
+  return [shortNumber(total), ...rare].join(' · ');
+}
+
+// " · 355 an hour", once there are 10 minutes of work to go by.
+function perHour(n, workSec) {
+  return workSec >= 600 ? ` · ${shortNumber(Math.round((n * 3600) / workSec))} an hour` : '';
+}
+
+// One hero's lines for /vwc:statistics. Work time is the hero's steps, one per second of work.
+function heroStatistics(h) {
+  const t = h.tally;
+  const since = t.countedFrom ? ` · since ${localDate(t.countedFrom)}` : '';
+  const perTurn = t.turns > 0 ? ` · ${shortNumber(Math.round(t.turnTokens / t.turns))} a turn · most in one ${shortNumber(t.mostTokens)}` : '';
+  const turns = t.turns > 0
+    ? `${shortNumber(t.turns)} · longest ${formatDuration(t.longestTurn)} · shortest ${formatDuration(t.shortestTurn)} · average ${formatDuration(t.turnMs / t.turns)}`
+    : 'none finished yet';
+  const rows = [
+    ['Work time', h.step > 0 ? formatDuration(h.step * 1000) : 'none yet'],
+    ['Tokens', `${shortNumber(t.tokens)}${perTurn}${since}`],
+    ['Turns', `${turns}${since}`],
+    ['XP', `${shortNumber(h.totalXp)}${perHour(h.totalXp, h.step)}`],
+    ['Kills', `${shortNumber(h.kills)} · ${plural(t.groups, 'group')}${perHour(h.kills, h.step)}`],
+    // A zone's boss must be beaten to leave it, so the zone is also how many zone bosses fell.
+    ['Bosses', `${plural(zoneOf(h.heroX), 'zone boss', 'zone bosses')} · ${plural(t.minis, 'mini boss', 'mini bosses')} · ${plural(t.elders, 'Elder boss', 'Elder bosses')}`],
+    ['Hits', `biggest ${shortNumber(t.maxHit)} · ${plural(t.skillCrits, 'critical skill hit')}`],
+    ['Skills found', `${foundText(t.found)} · ${shortNumber(t.replaced)} replaced`],
+    ['Gear found', `${foundText(t.gear)} · ${shortNumber(t.left)} salvaged · ${plural(t.forged, 'reforge')}`],
+    ['Survival', `${plural(t.potions, 'potion')} drunk · ${plural(t.knockouts, 'knockout')} · ${plural(t.closeCalls, 'close call')}`],
+    ['Allies', `${plural(t.allies, 'ally', 'allies')} joined · ${plural(t.allyKills, 'kill')} together`],
+  ];
+  return rows.map(([label, value]) => `    ${label.padEnd(14)}${value}`);
+}
+
+// /vwc:statistics: what every hero did, then the totals of all of them.
+function statisticsReport(now) {
+  const root = loadSaved(now);
+  const lines = ['📊 Statistics'];
+  for (const cls of Object.keys(CLASSES)) {
+    const h = root.heroes[cls];
+    if (!h) {
+      continue;
+    }
+    const c = CLASSES[cls];
+    const w = weaponOf(h);
+    lines.push('', `${root.active === cls ? '▶' : ' '} ${c.icon} ${c.name} Lv ${h.level} · ${w.icon} ${w.name} · ${whereText(h)}`, ...heroStatistics(h));
+  }
+  if (lines.length === 1) {
+    return `No heroes yet. Pick one with ${COMMAND_PREFIX}chooseclass.`;
+  }
+  // The totals include heroes replaced by /vwc:createchar; tokens and the longest turn are
+  // counted for the whole save, even before any hero was picked.
+  const f = achievementFacts(root, now, false);
+  const all = [`${formatDuration((f.workSec || 0) * 1000)} of work`, `${shortNumber(root.stats.tokens)} tokens`, plural(f.kills || 0, 'kill')];
+  if (f.turns > 0) {
+    all.push(plural(f.turns, 'turn'));
+  }
+  if (root.stats.longestTurn > 0) {
+    all.push(`longest turn ${formatDuration(root.stats.longestTurn)}`);
+  }
+  lines.push('', `All heroes · ${all.join(' · ')}`, '',
+    'Work time counts only while Claude works. A turn runs from your message to Claude\'s answer;',
+    `${COMMAND_PREFIX} commands and turns stopped with Esc don't count.`);
+  if (Object.values(root.heroes).some(h => h.tally.countedFrom)) {
+    lines.push('Heroes from before 1.10.0 count their tokens and turns from the day you updated.');
+  }
+  return lines.join('\n');
+}
+
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function localTime(at) {
+  const d = new Date(at);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+// /vwc:journal: every hero's notable moments by day, oldest first, so the newest end up right
+// above your prompt. A hero's moments from the same minute share a line.
+function journalReport(now) {
+  const root = loadSaved(now);
+  if (Object.keys(root.heroes).length === 0) {
+    return `No heroes yet. Pick one with ${COMMAND_PREFIX}chooseclass.`;
+  }
+  const minute = at => `${localDate(at)} ${localTime(at)}`;
+  const moments = [];
+  for (const [cls, h] of Object.entries(root.heroes)) {
+    let last = null;
+    for (const e of h.journal) {
+      if (last && minute(last.at) === minute(e.at)) {
+        last.texts.push(e.text);
+      } else {
+        last = { cls, at: e.at, texts: [e.text] };
+        moments.push(last);
+      }
+    }
+  }
+  const what = 'Level ups, new weapons and biomes, bosses, skills, gear worn, epic and legendary gear salvaged,'
+    + '\nreforges, knockouts and achievements';
+  if (moments.length === 0) {
+    return `📜 Journal · nothing written yet\n\n${what} are written down as they happen.`;
+  }
+  // A stable sort, so each hero's moments keep their order.
+  moments.sort((a, b) => a.at - b.at);
+  const shown = moments.slice(-JOURNAL_SHOWN);
+  const count = shown.length < moments.length ? `the last ${shown.length} of ${moments.length} moments` : plural(moments.length, 'moment');
+  const lines = [`📜 Journal · ${count}`];
+  let day = null;
+  for (const m of shown) {
+    if (localDate(m.at) !== day) {
+      day = localDate(m.at);
+      lines.push('', `${WEEKDAYS[new Date(m.at).getDay()]} ${day}`);
+    }
+    lines.push(`  ${localTime(m.at)} ${CLASSES[m.cls].icon} ${m.texts.join(' · ')}`);
+  }
+  lines.push('', `${what} are written down as they happen. Each hero keeps its last ${JOURNAL_SIZE}.`);
   return lines.join('\n');
 }
 
@@ -1257,11 +1555,11 @@ function dropSkill(h, level, now) {
   const found = `${s.icon} ${s.name} (${s.rarity})`;
   if (replaced) {
     h.tally.replaced++;
-    setMsg(h, `🎁 ${found} replaces ${replaced.icon} ${replaced.name}`, now);
+    news(h, `🎁 ${found} replaces ${replaced.icon} ${replaced.name}`, now);
   } else if (kept) {
-    setMsg(h, `🎁 New skill: ${found}`, now);
+    news(h, `🎁 New skill: ${found}`, now);
   } else {
-    setMsg(h, `🎁 Found ${found}, weaker than your skills`, now);
+    news(h, `🎁 Found ${found}, weaker than your skills`, now);
   }
 }
 
@@ -1299,8 +1597,13 @@ function statsText(stats) {
   return Object.entries(stats).map(([k, pct]) => `+${pct}% ${GEAR_STATS[k]}`).join(', ');
 }
 
-// A dropped piece is worn if it beats the piece in its slot (or the slot is empty), and is
-// otherwise left lying where it fell, keeping the old piece.
+// "Iron Grips", or "Iron Grips +2" once reforged twice.
+function gearName(item) {
+  return item.forged ? `${item.name} +${item.forged}` : item.name;
+}
+
+// A dropped piece is worn if it beats the piece in its slot (or the slot is empty). Otherwise it
+// is salvaged into shards, leaving a 🔩 where it fell, and the old piece is kept.
 function dropGear(h, x, lucky, now) {
   const item = rollGear(h.level, lucky);
   h.tally.gear[item.rarity]++;
@@ -1308,11 +1611,51 @@ function dropGear(h, x, lucky, now) {
   const old = h.gear[item.slot];
   if (gearPower(item) > gearPower(old)) {
     h.gear[item.slot] = item;
-    setMsg(h, `🎁 ${found} ${old ? `replaces ${old.name}` : 'equipped'}`, now);
+    news(h, `🎁 ${found} ${old ? `replaces ${gearName(old)}` : 'equipped'}`, now);
   } else {
+    const shards = RARITIES.find(r => r.name === item.rarity).shards;
     h.tally.left++;
-    h.loot.push({ x, icon: item.icon });
-    setMsg(h, `🎁 ${found} left behind, yours is better`, now);
+    h.shards += shards;
+    h.loot.push({ x, icon: '🔩' });
+    const text = `🎁 ${found} salvaged for 🔩 ${shards}, yours is better`;
+    // Only the salvage of a rare find is worth a line in the journal.
+    if (shards >= RARITIES[2].shards) {
+      news(h, text, now);
+    } else {
+      setMsg(h, text, now);
+    }
+  }
+  reforge(h, now);
+}
+
+// The weakest piece worn (of two as weak, the one reforged less), which the next reforge goes to,
+// and the shards it costs. A hero without gear gets its first piece's price.
+function nextReforge(h) {
+  const worn = Object.values(h.gear);
+  if (worn.length === 0) {
+    return { piece: null, cost: REFORGE_COST };
+  }
+  const weaker = (a, b) => gearPower(a) - gearPower(b) || (a.forged || 0) - (b.forged || 0);
+  const piece = worn.reduce((a, b) => (weaker(b, a) < 0 ? b : a));
+  return { piece, cost: REFORGE_COST * ((piece.forged || 0) + 1) };
+}
+
+// Spends the shards on reforges while there are enough: +1 to the biggest stat of the weakest
+// piece worn. `say` tells about it (news, or record for the journal alone).
+function reforge(h, now, say = news) {
+  const done = new Map();   // piece -> [stat, times reforged now]
+  for (let next = nextReforge(h); next.piece && h.shards >= next.cost; next = nextReforge(h)) {
+    const weakest = next.piece;
+    const [kind] = Object.entries(weakest.stats).reduce((a, b) => (b[1] > a[1] ? b : a));
+    weakest.stats[kind]++;
+    weakest.forged = (weakest.forged || 0) + 1;
+    h.shards -= next.cost;
+    h.tally.forged++;
+    done.set(weakest, [kind, (done.has(weakest) ? done.get(weakest)[1] : 0) + 1]);
+  }
+  if (done.size > 0) {
+    const what = [...done].map(([g, [kind, n]]) => `${g.icon} ${gearName(g)} (+${n}% ${GEAR_STATS[kind]})`);
+    say(h, `🔩 Reforged ${what.join(', ')}`, now);
   }
 }
 
@@ -1340,6 +1683,10 @@ function counts(h) {
     closeCalls: t.closeCalls,
     potions: t.potions,
     groups: t.groups,
+    turns: t.turns,
+    allies: t.allies,
+    allyKills: t.allyKills,
+    forged: t.forged,
   };
 }
 
@@ -1391,7 +1738,7 @@ function checkAchievements(root, now, worked = false) {
     return [];
   }
   if (h) {
-    setMsg(h, `🏅 ${earned.length > 1 ? 'Achievements' : 'Achievement'}: ${earned.map(a => a.name).join(', ')}`, now);
+    news(h, `🏅 ${earned.length > 1 ? 'Achievements' : 'Achievement'}: ${earned.map(a => a.name).join(', ')}`, now);
   }
   return earned;
 }
@@ -1409,6 +1756,20 @@ function setMsg(h, text, now) {
   }
 }
 
+// Writes a moment in the hero's journal (/vwc:journal), which keeps the last JOURNAL_SIZE.
+function record(h, text, now) {
+  h.journal.push({ at: now, text });
+  if (h.journal.length > JOURNAL_SIZE) {
+    h.journal.splice(0, h.journal.length - JOURNAL_SIZE);
+  }
+}
+
+// A message worth keeping: shown on the stats row and written in the journal.
+function news(h, text, now) {
+  setMsg(h, text, now);
+  record(h, text, now);
+}
+
 function gainXp(h, xp, now) {
   if (xp <= 0) {
     return;
@@ -1421,10 +1782,10 @@ function gainXp(h, xp, now) {
   while (h.xp >= xpNeed(h.level)) {
     h.xp -= xpNeed(h.level);
     h.level++;
-    setMsg(h, `🎉 Level ${h.level}!`, now);
+    news(h, `🎉 Level ${h.level}!`, now);
     const w = c.weapons.find(x => x.lvl === h.level);
     if (w) {
-      setMsg(h, `New weapon: ${w.icon} ${w.name}`, now);
+      news(h, `New weapon: ${w.icon} ${w.name}`, now);
     }
     if (h.level % 5 === 0) {
       summon(h, h.level % 10 === 0 ? 'elder' : 'mini', now);
@@ -1451,10 +1812,10 @@ function reachOf(foe) {
   return foe.shot ? SHOT_RANGE : 1;
 }
 
-// One second of work: the hero walks, or attacks the nearest enemy within its range; then the
-// nearest enemy closes in or strikes back. Out of combat, life comes back. A knocked out hero
-// only rests.
-function step(h, now) {
+// One second of work: the hero walks, or attacks the nearest enemy within its range (and its
+// `allies` with it); then the nearest enemy closes in or strikes back. Out of combat, life comes
+// back. A knocked out hero only rests.
+function step(h, now, allies = []) {
   h.step++;
   spawnAhead(h);
   if (h.down > 0) {
@@ -1465,29 +1826,32 @@ function step(h, now) {
     }
     return;
   }
-  const attacked = heroTurn(h, now);
+  const attacked = heroTurn(h, now, allies.length > 0);
+  if (attacked && allies.length > 0) {
+    allyTurn(h, allies, now);
+  }
   const fought = enemyTurn(h, now) || attacked;
   if (!fought) {
     h.life = Math.min(maxLife(h), h.life + Math.ceil(maxLife(h) * REGEN));
   }
 }
 
-// The hero's half of a step. Returns whether it attacked.
-function heroTurn(h, now) {
+// The hero's half of a step. Returns whether it attacked. `allied`: an ally is at its side.
+function heroTurn(h, now, allied) {
   const c = CLASSES[h.cls];
   const foe = targetOf(h);
   if (!foe) {
     h.heroX++;
     if (h.heroX % ZONE_LENGTH === 0) {
       const b = biomeOf(zoneOf(h.heroX));
-      setMsg(h, `Entered ${b.icon} ${b.name}${cycleSuffix(zoneOf(h.heroX))}`, now);
+      news(h, `Entered ${b.icon} ${b.name}${cycleSuffix(zoneOf(h.heroX))}`, now);
     }
     h.enemies = h.enemies.filter(e => e.x > h.heroX - 10);
     h.loot = h.loot.filter(l => l.x > h.heroX - 10);
     return false;
   }
 
-  let dmg = attackOf(h) * (1 + (skillBonus(h, 'damage') + gearBonus(h, 'damage')) / 100) * (1 + RALLY * h.rally);
+  let dmg = basicHit(h) * (1 + RALLY * h.rally);
   let icon = c.hit;
   // The ready skill adding the most damage fires instead of a basic attack; an area skill counts
   // its damage once for every enemy it would hit.
@@ -1531,21 +1895,52 @@ function heroTurn(h, now) {
       h.tally.closeCalls++;
     }
     for (const e of dead) {
-      defeat(h, e, now);
+      defeat(h, e, now, allied);
     }
   }
   return true;
 }
 
-function defeat(h, foe, now) {
+// The damage of a basic hit, before rally, skills and critical hits.
+function basicHit(h) {
+  return attackOf(h) * (1 + (skillBonus(h, 'damage') + gearBonus(h, 'damage')) / 100);
+}
+
+// After the hero's attack, each ally strikes the hero's target (the next one in range if that one
+// fell) for ALLY_DAMAGE of the hero's basic hit. Their shots fly like the hero's, a tile apart.
+function allyTurn(h, allies, now) {
+  const dmg = Math.max(1, Math.round(basicHit(h) * ALLY_DAMAGE));
+  const shots = [];
+  allies.forEach((a, i) => {
+    const foe = targetOf(h);
+    if (!foe) {
+      return;
+    }
+    foe.hp -= dmg;
+    const gap = foe.x - h.heroX - 1;
+    shots.push({ icon: a.hit, x: h.heroX + 1 + ((h.step + 1 + i) % Math.max(1, gap)) });
+    if (foe.hp <= 0) {
+      if (h.life < maxLife(h) * 0.1) {
+        h.tally.closeCalls++;
+      }
+      defeat(h, foe, now, true);
+    }
+  });
+  h.allyFx = { step: h.step, list: shots };
+}
+
+function defeat(h, foe, now, allied = false) {
   h.kills++;
+  if (allied) {
+    h.tally.allyKills++;
+  }
   h.enemies = h.enemies.filter(e => e !== foe);
   h.rally = 0;
   if (foe.group != null && !h.enemies.some(e => e.group === foe.group)) {
     h.tally.groups++;
   }
   if (foe.boss) {
-    setMsg(h, `🏆 Defeated ${foe.icon} ${foe.name}!`, now);
+    news(h, `🏆 Defeated ${foe.icon} ${foe.name}!`, now);
   }
   if (foe.drop) {
     h.tally[foe.drop % 10 === 0 ? 'elders' : 'minis']++;
@@ -1619,7 +2014,7 @@ function knockOut(h, group, now) {
     foe.hp = foe.max;
   }
   const more = group.length > 1 ? ` and ${group.length - 1} more` : '';
-  setMsg(h, `😵 Knocked out by ${group[0].icon} ${group[0].name}${more}! Resting for ${KO_STEPS} s`, now);
+  news(h, `😵 Knocked out by ${group[0].icon} ${group[0].name}${more}! Resting for ${KO_STEPS} s`, now);
 }
 
 // ---------- rendering ----------
@@ -1798,8 +2193,9 @@ function cutToWidth(text, width) {
 }
 
 // The hero's life bar, green, then yellow below half and red below a quarter. While working it
-// shows the damage of the hit just taken; then a knockout's rest, the potions held and the extra
-// damage a knockout gave, dropped from the end while the row is wider than `room`.
+// shows the damage of the hit just taken; then a knockout's rest, the potions held, the extra
+// damage a knockout gave and the shards toward the next reforge, dropped from the end while the
+// row is wider than `room`.
 function lifeRow(h, active, room) {
   const max = maxLife(h);
   const life = Math.max(0, Math.min(h.life, max));
@@ -1820,6 +2216,9 @@ function lifeRow(h, active, room) {
   if (h.rally > 0 && h.down === 0) {
     parts.push(color(GOLD, `💪 +${Math.round(h.rally * RALLY * 100)}% damage until the next win`));
   }
+  if (h.shards > 0) {
+    parts.push(`🔩 ${h.shards}/${nextReforge(h).cost}`);
+  }
   let row = parts.join(SEP);
   while (displayWidth(row) > room && parts.length > 1) {
     parts.pop();
@@ -1834,7 +2233,8 @@ function worldTiles(cols) {
   return Math.max(10, Math.min(WORLD_TILES, Math.floor(cols / 2)));
 }
 
-function worldRow(h, active, cols) {
+// Allies walk right behind the hero, the first to arrive closest.
+function worldRow(h, active, cols, allies) {
   const tiles = worldTiles(cols);
   let row = '';
   for (let i = 0; i < tiles; i++) {
@@ -1842,6 +2242,8 @@ function worldRow(h, active, cols) {
     const foe = h.enemies.find(e => e.x === x);
     const fx = active && h.fx && h.fx.step === h.step ? h.fx : null;
     const shot = active && h.shots && h.shots.step === h.step ? h.shots.list.find(s => s.x === x) : null;
+    const allyShot = active && h.allyFx && h.allyFx.step === h.step ? h.allyFx.list.find(s => s.x === x) : null;
+    const ally = allies[h.heroX - 1 - x];
     if (x === h.heroX) {
       row += h.down > 0 ? '😵' : CLASSES[h.cls].icon;
     } else if (fx && fx.hits && fx.hits.includes(x)) {
@@ -1854,6 +2256,10 @@ function worldRow(h, active, cols) {
       row += fx.icon;
     } else if (shot) {
       row += shot.icon;
+    } else if (allyShot) {
+      row += allyShot.icon;
+    } else if (ally) {
+      row += ally.icon;
     } else if (h.loot.some(l => l.x === x)) {
       row += h.loot.find(l => l.x === x).icon;
     } else {
@@ -1937,7 +2343,7 @@ function render(root, now, cols) {
       const lifeCol = Math.min(at, Math.max(0, cols - displayWidth(life)));
       text = [alignRight(stats, cols), RESET + ' '.repeat(lifeCol) + life];
     }
-    map = [worldRow(h, active, cols), floorRow(h.heroX, cols)].map(row => alignRight(row, cols));
+    map = [worldRow(h, active, cols, fightingAllies(root, now)), floorRow(h.heroX, cols)].map(row => alignRight(row, cols));
   }
   // /vwc:stats below moves the text rows (stats and life, or the picker's title) under the map.
   return show.stats === 'below' ? [...map, ...text] : [...text, ...map];
@@ -1947,8 +2353,8 @@ module.exports = {
   DIR, COMMAND_PREFIX, CLASSES, classKey, chooseClass, createCharacter, status,
   display, partKey, setVisible, placeKey, setStatsPlace, progressKey, setProgress, load, loadSaved,
   pluginVersion, skillsReport,
-  gearReport, achievementsReport, earnedCount, ACHIEVEMENTS,
-  onHookEvent, onStatusLine, render, displayWidth,
+  gearReport, achievementsReport, statisticsReport, journalReport, earnedCount, ACHIEVEMENTS,
+  onHookEvent, onAgentEvent, onStatusLine, render, displayWidth,
   newRoot, newHero, migrate, step, xpNeed, attackOf, weaponOf, rollSkill, skillPower, learnSkill,
   rollGear, gearPower, gearBonus, gainXp, checkAchievements, achievementFacts, maxLife,
 };

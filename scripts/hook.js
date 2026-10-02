@@ -45,8 +45,13 @@ process.stdin.on('end', () => {
       require('./setup').autoSetup(process.env.CLAUDE_PLUGIN_DATA);
     } catch {}
   }
-  // Only the main conversation moves the hero; subagent events would wake it while you're being asked something.
-  if (!ev.session_id || ev.agent_id) {
+  if (!ev.session_id) {
+    return;
+  }
+  // Only the main conversation moves the hero; subagent events would wake it while you're being
+  // asked something. A subagent brings an ally instead, while it runs.
+  if (ev.agent_id || ev.hook_event_name === 'SubagentStart' || ev.hook_event_name === 'SubagentStop') {
+    companion.onAgentEvent(ev, at);
     return;
   }
   companion.onHookEvent(ev, at);
