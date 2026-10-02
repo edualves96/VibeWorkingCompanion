@@ -7,7 +7,9 @@
 //   node cli.js --data <dir> show <bar|companion|all>      draw it again
 //   node cli.js --data <dir> stats [above|below]           put the stats row above or below the map (no place: switch)
 //   node cli.js --data <dir> skills                        every hero's skills and their stats
-//   node cli.js --data <dir> commands                    list every command, plus the current state
+//   node cli.js --data <dir> gear                          every hero's gear, slot by slot
+//   node cli.js --data <dir> achievements                  every achievement, earned or with its progress
+//   node cli.js --data <dir> commands                      list every command, plus the current state
 // --data is the plugin's data folder, where the save lives. Skills don't get it as an
 // environment variable, so they pass it here.
 // Always exits 0: a non-zero exit would abort the slash command before Claude can reply.
@@ -34,6 +36,8 @@ const COMMANDS = [
   ['show <bar|companion|all>', 'show them again'],
   ['stats <above|below>', 'put the hero\'s stats row above or below the map (no place: switch)'],
   ['skills', 'your heroes\' skills, their stats, and where the next one comes from'],
+  ['gear', 'what your heroes wear in each of the 6 gear slots'],
+  ['achievements', 'every achievement: the ones you earned, and how close you are to the rest'],
   ['setup', 'turn the companion status line on (an existing status line stays on top)'],
   ['setup remove', 'turn it off and put back your previous status line'],
   ['commands', 'this list'],
@@ -42,11 +46,13 @@ const COMMANDS = [
 function commands() {
   const width = Math.max(...COMMANDS.map(([c]) => c.length)) + p.length + 2;
   const list = COMMANDS.map(([c, what]) => `  ${(p + c).padEnd(width)}${what}`);
-  const shown = companion.display(companion.loadSaved(now));
+  const root = companion.loadSaved(now);
+  const shown = companion.display(root);
   const state = `status bar ${shown.bar ? 'shown' : 'hidden'} · companion ${shown.companion ? 'shown' : 'hidden'} · stats ${shown.stats} the map`;
   const version = companion.pluginVersion();
   const title = version ? `VibeWorkCompanion ${version} commands` : 'VibeWorkCompanion commands';
-  return [title, ...list, '', 'Your heroes:', companion.status(now), '', `Display: ${state}`].join('\n');
+  const earned = `Achievements: ${companion.earnedCount(root)} of ${companion.ACHIEVEMENTS.length} earned`;
+  return [title, ...list, '', 'Your heroes:', companion.status(now), '', earned, `Display: ${state}`].join('\n');
 }
 
 function run() {
@@ -55,6 +61,12 @@ function run() {
   }
   if (command === 'skills') {
     return companion.skillsReport(now);
+  }
+  if (command === 'gear') {
+    return companion.gearReport(now);
+  }
+  if (command === 'achievements') {
+    return companion.achievementsReport(now);
   }
   if (command === 'commands') {
     return commands();

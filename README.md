@@ -1,13 +1,16 @@
 # VibeWorkCompanion
 
 An idle RPG hero that lives in the bottom-right corner of your Claude Code status line.
-While Claude works, your hero walks through the world, fights monsters, gains XP, levels up and
-unlocks weapons and finds random skills. When Claude stops and waits for you, the hero waits too (💤).
+While Claude works, your hero walks through the world, fights monsters that fight back, gains
+XP, levels up, unlocks weapons, finds random skills and gear, and earns achievements. When Claude
+stops and waits for you, the hero waits too (💤). It never needs anything from you while you work:
+it equips what it finds, drinks its potions and gets back up on its own.
 
 ```
 ⚠️ Opus 5.5 | my-project | main | ▰▰▰▰▰▰▱▱▱▱ 63% (634 200 / 1 000 000) | ⏳ 1h59m (42%)
-                      🧝 Archer Lv 12 ▰▰▰▰▱▱▱▱▱▱ 812/2429 XP · 🏹 Bow · 🎯🍃 · 🌴 Coast · 💀 431
-                                                 .   🧝  . 🔸  🦀  🌴      🐚    . .         🌴
+                🧝 Archer Lv 12 ▰▰▰▰▱▱▱▱▱▱ 812/2429 XP · 🏹 Bow · 🎯🍃 · 🌴 Coast · 💀 431 · 🦑 Squid ▰▰▰▱▱▱▱▱▱▱ 61/236
+                             💗 ▰▰▰▰▰▰▰▱▱▱ 284/402 -19 · 🧪 2
+                                                 .   🧝  . 🔸  💧  🦑      🐚    . .         🌴
                                                  ~      ~   ~         ~    ~      ~    ~
 ```
 
@@ -15,6 +18,15 @@ unlocks weapons and finds random skills. When Claude stops and waits for you, th
 - **Three classes:** 🧙 Mage, 🤺 Warrior and 🧝 Archer, each with its own save, weapons and skills.
 - **Random skills:** the bosses of levels 5, 10, 15… drop a randomly rolled skill. A hero holds two,
   and a better find replaces the weaker one.
+- **Life and enemies that fight back:** the hero has a 💗 life bar under its XP bar. Enemies
+  close in to strike, and some (🐍 🦇 👺 🦑 👻 🐲, the 🐙 Kraken and the 🐉 Dragon) shoot from
+  a distance, so every class takes hits. Potions are drunk on their own, and a knocked out hero
+  rests a moment and gets back up stronger. It costs time, never progress.
+- **Random gear:** six slots (🪖 helmet, 🥋 chest, 👖 pants, 🧣 shoulders, 🧤 gloves, 🥾 boots), empty
+  at first. Enemies sometimes drop a randomly rolled piece and bosses always do; a better piece is
+  equipped, a worse one is left lying on the ground.
+- **44 achievements** for kills, bosses, survival, levels, skills, gear and hours of work, plus a
+  couple of secret ones. 🏅 pops up on the stats row when you earn one.
 - **Seven biomes,** each with its own floor, enemies and a boss every ~15 minutes of work:
   🌼 Meadow, 🌲 Dark Forest, 💎 Caves, 🌴 Coast, 🌵 Desert, 🪦 Graveyard, 🌋 Volcano. After the
   Volcano the world loops back to the Meadow, "II", with tougher enemies.
@@ -84,8 +96,10 @@ data folder, which updates don't touch.
 | `/vwc:hide <bar\|companion\|all>` | Hide the status bar (the info row on top), the companion (the hero rows), or both. A hidden hero keeps adventuring in the background. The choice is remembered across restarts. |
 | `/vwc:show <bar\|companion\|all>` | Show them again. |
 | `/vwc:skills` | Every hero's skills with their rarity, power and stats, and which boss drops the next one. |
+| `/vwc:gear` | What every hero wears in each of the six gear slots, with each piece's rarity, power and stats, and what they add up to. |
+| `/vwc:achievements` | Every achievement: the ones you earned (with the date and the hero), and how close you are to the rest. |
 | `/vwc:stats <above\|below>` | Put the hero's stats row (level, XP, weapon, zone, kills) above the map, where it starts, or below it. With no argument it switches to the other place. The choice is remembered across restarts. |
-| `/vwc:commands` | List every command, your heroes, and what is currently shown or hidden. |
+| `/vwc:commands` | List every command, your heroes, how many achievements you have, and what is currently shown or hidden. |
 
 The commands run a small script before Claude sees anything, and then use Haiku to repeat the
 result, so they are quick and cheap. Claude never runs them on its own.
@@ -99,7 +113,9 @@ result, so they are quick and cheap. Claude never runs them on its own.
 | Archer | 🧝 | 5 tiles | 🔸 arrow that flies across the gap | 🪨 🪃 🏹 🪶 🌙 💘 🌟 | 🎯 🍃 🦅 💨 🌠 🔥 shots |
 
 The mage hits weakly but rolls the strongest skills, the warrior hits hardest (its skills roll a
-little weaker), and the archer lands double-damage critical shots 20% of the time. On average all
+little weaker), and the archer lands double-damage critical shots 20% of the time. The warrior,
+always up close, has the most life; the archer, which shoots most enemies before they reach it,
+has the least, so bosses are its danger. On average all
 three level up at the same pace (within one level of each other up to 30 hours of work, checked by
 simulation), so the choice is about style. Skills are random, so luck can put a hero a level or
 two ahead or behind. Only the active class's hero moves; the others wait where you left them.
@@ -136,6 +152,93 @@ Every hero starts with no skills. Reaching levels 5, 15, 25… summons a mini bo
 Heroes from before 1.4.0 had fixed powers. When they first load in 1.4.0 they get a rolled skill
 for every milestone they had already passed, keeping the best two.
 
+## Gear
+
+Every hero starts with nothing in its six gear slots. A normal enemy drops a piece 3% of the
+time (about one every 4 minutes of work, counting the bosses) and every boss drops one, rolling
+the rarity twice like a skill from a level 10 boss. Nothing to do on your side:
+
+```
+🎁 🧤 Iron Grips (rare) equipped
+🎁 🥾 Steel Treads (epic) replaces Iron Boots
+🏆 Defeated 🦍 Ape King! · 🎁 🧣 Steel Spaulders (rare) left behind, yours is better
+```
+
+- **What's rolled:** the slot, the rarity (same chances as skills), and the stats: `+% damage`,
+  `+% critical chance`, `+% XP` or `+% life`, sometimes two of them. Gear found at higher levels rolls
+  stronger, and its material shows how deep it was found: Leather, Bronze (level 5), Iron (10),
+  Steel (15), Silver (20), Mithril (25), Dragonscale (35).
+- **Better or left behind:** a piece's **power** is the sum of its stats (a +1% critical chance is
+  worth +1% damage on average). A piece with more power than the one in its slot is equipped right
+  away; otherwise it stays on the ground where the enemy fell, and you keep the old one.
+- **How much it adds:** a full set adds about +30% after an hour of work, +60% after 8 hours and
+  +85% after 30 hours, spread over damage, critical chance, XP and life.
+- `/vwc:gear` shows what each hero wears:
+
+  ```
+  ▶ 🧝 Archer Lv 16 · 6 of 6 slots · +24% damage, +6% critical chance, +11% XP · 💗 467 life
+      🪖 Helmet     Steel Circlet        epic      power  9   +9% damage
+      🥋 Chest      Steel Robe           common    power  5   +5% XP
+      👖 Pants      Iron Leggings        rare      power  6   +4% damage, +2% critical chance
+      ...
+  ```
+
+Heroes from before 1.5.0 start with empty slots, like new ones.
+
+## Life and combat
+
+The hero's life bar sits right under its XP bar, with the potions it carries:
+
+```
+🧝 Archer Lv 16 ▰▱▱▱▱▱▱▱▱▱ 1060/5744 XP · 🪶 Fletched Bow · 💎 Caves II · 👺 Goblin ▰▰▱▱▱▱▱▱▱▱ 50/326 -135
+             💗 ▰▰▰▰▰▰▰▰▱▱ 441/467 -26 · 🧪 1
+```
+
+- **Enemies fight back,** one at a time: the nearest one notices the hero 8 tiles away and walks
+  up to it. The ones that shoot stop 4 tiles away and fire: 🟢 venom (🐍), 🟣 shrieks and curses
+  (🦇 👻), 🟤 rocks (👺), 💧 water (🦑 🐙) and 🔴 fire (🐲 🐉). Mini bosses and bosses strike every
+  other second, harder. Their damage grows with the zone, like their life.
+- **Range matters:** the archer gets about 4 free shots at an enemy walking up to it, the mage 2,
+  the warrior 1.
+- **Life** grows with the level and with gear's `+% life`. It comes back while walking between
+  fights, and all of it on a level up.
+- **Potions:** 🧪 dropped by 1 enemy in 20 and by every boss, up to 3 at a time. The hero drinks
+  one on its own when its life drops below 30%, getting half of it back.
+- **Knocked out:** at 0 life the hero shows 😵 and rests for 15 seconds of work while the enemy
+  heals. Then it gets back up with full life and +25% damage for every knockout until its next win,
+  so it always gets through in the end. Nothing is lost but the time.
+
+For a hero on pace (checked by simulation), that's 3 or 4 potions an hour and a knockout every 6
+or 7 hours of work, mostly by bosses, about the same for all three classes.
+
+## Achievements
+
+44 achievements, shared by all your heroes. When you earn one, the stats row says
+`🏅 Achievement: Dragonslayer`. `/vwc:achievements` lists them all, with how close you are:
+
+```
+🏅 Achievements · 19 of 44 earned
+
+Combat
+  ✅ First Blood        defeat an enemy                                2026-10-02 🧝
+  ⬜ Slayer             defeat 1,000 enemies                           778/1,000
+  ...
+```
+
+| Group | Achievements |
+|-------|--------------|
+| Combat | defeat 1, 100, 1,000 and 10,000 enemies; land a hit of 250 and of 2,500 damage; a critical hit with a skill |
+| Bosses | the first zone boss, a mini boss, an Elder boss, 5 Elder bosses, the Dragon of the Volcano, and of Volcano X |
+| Survival | drink a potion, and 100; win a fight with under 10% life; get knocked out and back up |
+| Journey | levels 5, 10, 20, 30 and 35 (the star weapon); reach all 7 biomes; play every class; every class to level 10 |
+| Skills | find a skill; hold two; replace one; find an epic, and a legendary; hold two legendaries |
+| Gear | find a piece; fill all 6 slots; find an epic, and a legendary; leave 100 pieces behind |
+| Work | 1, 8 and 40 hours of work; 1 million and 10 million tokens; one turn of 30 minutes; two secrets |
+
+Kills, hours and other totals add up all your heroes, including ones replaced by
+`/vwc:createchar`. A save from before 1.5.0 gets credit right away for what it shows: levels,
+kills, zones, hours of work, level bosses passed and skills held.
+
 ## How it works
 
 The hero takes one step per second of **working time**. Hooks tell it when Claude is working:
@@ -157,19 +260,22 @@ The hero takes one step per second of **working time**. Hooks tell it when Claud
   command (a 15-minute build, say) pauses the hero after 10 minutes until it finishes.
 
 Enemies have life, which grows with the zone. Each hit does the class's base damage plus its
-per-level damage times your level, plus the weapon's bonus and the skills' damage bonuses; a
-skill that is off cooldown multiplies it, and a critical hit doubles it. For a hero on pace, a normal enemy takes about 5 hits, a mini boss
+per-level damage times your level, plus the weapon's bonus, raised by the damage bonuses of
+skills and gear; a skill that is off cooldown multiplies it, and a critical hit doubles it. For a hero on pace, a normal enemy takes about 5 hits, a mini boss
 about 15, a zone boss about 35 and a level boss about 50; a hero ahead of the curve kills faster.
-While you fight, the stats row shows the enemy's life and the damage of each hit:
+While you fight, the stats row shows the enemy's life and the damage of each hit, and the life
+row under it the damage you take (see [Life and combat](#life-and-combat)):
 
 ```
 🧝 Archer Lv 13 ▰▱▱▱▱▱▱▱▱▱ 371/3086 XP · 🪶 Fletched Bow · 🌲 Dark Forest II · 💀 587 · 🐺 Wolf ▰▰▰▰▰▱▱▱▱▱ 136/304 -72
 ```
 
 XP comes from kills (`1.6 * (3 + zone + random(0..zone))`, bosses x10) and from tokens: every 2,000 tokens
-Claude uses (input + cache writes + output, not cache reads) is worth one kill. Going from level
-`L` to `L+1` takes `10 + 1.4 * L^3` XP. Rough pacing: level 3 after 2 minutes of work, level 9 after
-an hour, level 15 after 3 hours, the last weapon after about 25 hours.
+Claude uses (input + cache writes + output, not cache reads) is worth one kill. Gear with `+% XP`
+raises both. Going from level `L` to `L+1` takes `10 + 1.4 * L^3` XP. Rough pacing, counting
+kills only: level 3 after 2 minutes of work, level 9 after an hour, level 15 after 3 hours,
+level 25 after 8 hours, the last weapon (level 35) after about 16 hours. Token XP comes on top:
+with 300,000 tokens an hour of work, a hero is one to two levels further along.
 
 ## Make your own version
 
@@ -224,17 +330,29 @@ Everything below is in `scripts/companion.js`.
 | `ZONE_LENGTH` | `600` | Tiles per zone. A boss waits at the end of each zone. |
 | `TOKENS_PER_KILL` | `2000` | Tokens worth one kill's XP. Lower it for more token XP. |
 | `ENEMY_HP` | `[20, 60, 0.7]` | Enemy life: `20 + 60 * zone^0.7`, give or take 20%. Raise it for longer fights. |
-| `RANKS` | | Life and XP of mini bosses (`2.5`, `5`), zone bosses (`5`, `10`) and level bosses (`8`, `16`), as multiples of a normal enemy's. |
+| `RANKS` | | Life, XP and damage of mini bosses (`2.5`, `5`, `1.5`), zone bosses (`5`, `10`, `1.5`) and level bosses (`8`, `16`, `2`), as multiples of a normal enemy's, and how often they strike (`every` 2 seconds). |
 | `KILL_XP` | `1.6` | Multiplier on the XP of every kill (and of tokens). Raise it to level faster. |
 | `MAX_SKILLS` | `2` | How many skills a hero holds. |
-| `RARITIES` | | Each rarity's chance and how much it multiplies a skill's strength. |
+| `RARITIES` | | Each rarity's chance and how much it multiplies the strength of a skill or a piece of gear. |
+| `ENEMY_ATK` | `0.085` | Enemy damage per hit, as a share of a normal enemy's life in that zone (times the rank's `atk` in `RANKS`). Raise it for a harder game. |
+| `AGGRO`, `SHOT_RANGE` | `8`, `4` | How far away the nearest enemy notices the hero, and how far the ones that shoot fire from. |
+| `HERO_LIFE` | `[40, 12, 1.4]` | Hero life: `40 + 12 * level^1.4`, times the class's `life`. |
+| `REGEN` | `0.02` | Share of the hero's life that comes back each second out of combat. |
+| `POTION_DROP`, `MAX_POTIONS` | `0.05`, `3` | Chance a normal enemy drops a potion (bosses always do), and how many the hero carries. |
+| `POTION_AT`, `POTION_HEAL` | `0.3`, `0.5` | Life below which a potion is drunk, and how much of the life it gives back. |
+| `KO_STEPS`, `RALLY` | `15`, `0.25` | Seconds a knocked out hero rests, and the extra damage per knockout until its next win. |
+| `GEAR_DROP` | `0.03` | Chance that a normal enemy drops a piece of gear. Bosses always do. |
+| `GEAR_SLOTS` | | The six slots, with their icon and the base names a piece can roll (`Helm`, `Hood`…). |
+| `GEAR_MATERIALS` | | The material in a piece's name, by the level it was found at. |
+| `ACHIEVEMENT_GROUPS` | | Every achievement: its name, what to do, the fact it measures (see `achievementFacts()`) and the goal. |
 | `WORLD_TILES` | `24` | Width of the world in tiles (each tile is 2 columns). |
 | `MSG_MS` | `10000` | How long messages like "🎉 Level 5!" stay visible. |
 | `MAX_GAP_MS` | `30000` | Gaps between refreshes longer than this are ignored. |
 | `SESSION_STALE_MS` | `60000` | A session silent for this long no longer counts as working. |
 
 Difficulty lives in `xpNeed()` (the level curve), `makeEnemy()` (enemy HP and XP), `attackOf()`
-(hero damage, from the class's `atk`) and `rollSkill()` (how strong skills roll at each level). If you make fights longer or shorter, change `KILL_XP` the
+(hero damage, from the class's `atk`), `rollSkill()` (how strong skills roll at each level) and
+`rollGear()` (how strong gear rolls). If you make fights longer or shorter, change `KILL_XP` the
 opposite way, or levelling slows down or speeds up with them.
 
 ### Add a biome
@@ -243,12 +361,13 @@ Add an entry to `BIOMES`. Zones cycle through the list in order:
 
 ```js
 { name: 'Swamp', icon: '🐸', color: '38;2;101;163;13',
-  decor: ['🌿', '🍄', '🪵'], enemies: [['🐊', 'Croc'], ['🦟', 'Mosquito'], ['🐍', 'Snake']],
+  decor: ['🌿', '🍄', '🪵'], enemies: [['🐊', 'Croc'], ['🦟', 'Mosquito', '🟢'], ['🐍', 'Snake']],
   boss: ['🦕', 'Bog Beast'],
   floor: { bg: '48;2;40;60;30', fg: '38;2;132;204;22', marks: ['~', ','] } },
 ```
 
-`color` is an ANSI color (`38;2;R;G;B`) for the zone name. In `floor`, `bg` is the ground color
+An enemy with a third icon, like the mosquito's `🟢`, shoots it from a distance instead of
+walking up to the hero. `color` is an ANSI color (`38;2;R;G;B`) for the zone name. In `floor`, `bg` is the ground color
 (`48;2;R;G;B`), `fg` the color of the marks, and `marks` the characters scattered on about 1 cell
 in 3. Marks must be plain ASCII, exactly 1 column wide, so the floor stays under the world tiles.
 
@@ -262,6 +381,7 @@ paladin: {
   range: 2,          // starts fighting when an enemy is this many tiles ahead
   atk: [3, 1.1],     // damage = 3 + 1.1 x level, plus the weapon's atk
   crit: 0.1,         // 10% chance of a double-damage hit
+  life: 1.2,         // multiplies the hero's life
   hit: '💥',         // icon of a basic attack
   weapons: [         // unlocked at `lvl`, `atk` is added to the damage
     { lvl: 1, icon: '🔨', name: 'Mace', atk: 0 },
@@ -303,7 +423,8 @@ as was done for ⚡ ✨ ⏳.
   width in `COLUMNS`, pads the status line by 2 columns on each side, and cuts off anything wider.
   If the right edge is cut off in your terminal, increase the `6`.
 - **Narrow terminals:** when the stats row doesn't fit, parts are dropped in priority order (skills
-  first, then kills, zone and weapon). See the numbers in `statsRow()`.
+  first, then kills, zone and weapon), and a long message is cut short with "…". The life row
+  stays under the XP bar, dropping its extras (rally, then potions) if they don't fit. See the numbers in `statsRow()`.
 
 ### The info row (row 1)
 
@@ -317,11 +438,11 @@ If you had a status line before `/vwc:setup`, it runs and is shown on top. Other
 | `.claude-plugin/plugin.json` | Plugin manifest (name `vwc`, version). |
 | `.claude-plugin/marketplace.json` | Makes this repository its own marketplace (`vibeworkcompanion`). |
 | `hooks/hooks.json` | The hooks that tell the companion when Claude is working. |
-| `skills/` | The `/vwc:` commands: `setup`, `chooseclass`, `createchar`, `hide`, `show`, `stats`, `skills` and `commands`. |
+| `skills/` | The `/vwc:` commands: `setup`, `chooseclass`, `createchar`, `hide`, `show`, `stats`, `skills`, `gear`, `achievements` and `commands`. |
 | `scripts/companion.js` | The engine: save file, classes, biomes, game rules, rendering. |
 | `scripts/statusline.js` | What the status line runs: info row plus the three companion rows. |
 | `scripts/hook.js` | What the hooks run. |
-| `scripts/cli.js` | Class switching, new characters, hide/show, the stats row's place, the skills list, and the command list. |
+| `scripts/cli.js` | Class switching, new characters, hide/show, the stats row's place, the skills, gear and achievements lists, and the command list. |
 | `scripts/setup.js` | Turns the status line on and off in your `settings.json`. |
 
 Your saves live in the plugin's data folder, `~/.claude/plugins/data/<plugin id>/`, which survives
@@ -329,7 +450,7 @@ plugin updates:
 
 | File | What it is |
 |------|------------|
-| `state.json` | One hero per class (with its skills), which one is active, what `/vwc:hide` has hidden, where `/vwc:stats` put the stats row, and the last plugin version it saw (for the update notice). Delete it to start everything over. |
+| `state.json` | One hero per class (with its skills, gear and counts for achievements), which one is active, the achievements earned and the totals they need, what `/vwc:hide` has hidden, where `/vwc:stats` put the stats row, and the last plugin version it saw (for the update notice). Delete it to start everything over. |
 | `backups/` | Heroes replaced by `/vwc:createchar`. To restore one, copy it into `state.json` under `heroes.<class>`. |
 | `statusline.js` | Small launcher that your status line runs; it finds the current plugin version. |
 | `previous-statusline.json` | The status line you had before setup. |
