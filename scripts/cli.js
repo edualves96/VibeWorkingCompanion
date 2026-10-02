@@ -6,6 +6,7 @@
 //   node cli.js --data <dir> hide <bar|companion|all>      stop drawing a part of the status line
 //   node cli.js --data <dir> show <bar|companion|all>      draw it again
 //   node cli.js --data <dir> stats [above|below]           put the stats row above or below the map (no place: switch)
+//   node cli.js --data <dir> progress [on|off]             show or hide the stats row and life bar (no choice: switch)
 //   node cli.js --data <dir> skills                        every hero's skills and their stats
 //   node cli.js --data <dir> gear                          every hero's gear, slot by slot
 //   node cli.js --data <dir> achievements                  every achievement, earned or with its progress
@@ -35,6 +36,7 @@ const COMMANDS = [
   ['hide <bar|companion|all>', 'hide the status bar, the companion, or both'],
   ['show <bar|companion|all>', 'show them again'],
   ['stats <above|below>', 'put the hero\'s stats row above or below the map (no place: switch)'],
+  ['showprogress <on|off>', 'show or hide the stats and life rows, leaving only the map (no choice: switch)'],
   ['skills', 'your heroes\' skills, their stats, and where the next one comes from'],
   ['gear', 'what your heroes wear in each of the 6 gear slots'],
   ['achievements', 'every achievement: the ones you earned, and how close you are to the rest'],
@@ -48,7 +50,8 @@ function commands() {
   const list = COMMANDS.map(([c, what]) => `  ${(p + c).padEnd(width)}${what}`);
   const root = companion.loadSaved(now);
   const shown = companion.display(root);
-  const state = `status bar ${shown.bar ? 'shown' : 'hidden'} · companion ${shown.companion ? 'shown' : 'hidden'} · stats ${shown.stats} the map`;
+  const progress = shown.progress ? `progress shown · stats ${shown.stats} the map` : 'progress hidden (map only)';
+  const state = `status bar ${shown.bar ? 'shown' : 'hidden'} · companion ${shown.companion ? 'shown' : 'hidden'} · ${progress}`;
   const version = companion.pluginVersion();
   const title = version ? `VibeWorkCompanion ${version} commands` : 'VibeWorkCompanion commands';
   const earned = `Achievements: ${companion.earnedCount(root)} of ${companion.ACHIEVEMENTS.length} earned`;
@@ -85,6 +88,13 @@ function run() {
       return `"${arg}" is not a place for the stats row. Usage: ${p}stats <above | below>, or ${p}stats alone to switch.`;
     }
     return companion.setStatsPlace(place, now);
+  }
+  if (command === 'progress') {
+    const visible = companion.progressKey(arg);
+    if (visible === null && arg && arg.trim()) {
+      return `"${arg}" is not on or off. Usage: ${p}showprogress <on | off>, or ${p}showprogress alone to switch.`;
+    }
+    return companion.setProgress(visible, now);
   }
   if (command !== 'class' && command !== 'new') {
     return usage;

@@ -103,6 +103,7 @@ const UPDATE_MSG_MS = 30000;      // the "updated" notice stays longer than othe
 const WHATS_NEW = {
   '1.3.0': 'enemies have life now, and every 5th level summons a boss',
   '1.4.0': `skills are random now, dropped by level bosses: ${COMMAND_PREFIX}skills`,
+  '1.8.0': `just want the map? ${COMMAND_PREFIX}showprogress off hides this row and the life bar`,
   '1.7.0': root => (olderThan(root.seenVersion, '1.6.0')
     ? `💗 life, groups, area skills, gear: ${COMMAND_PREFIX}commands`
     : 'enemies come in groups, area skills hit them all'),
@@ -928,13 +929,15 @@ function achievementsReport(now) {
   return lines.join('\n');
 }
 
-// ---------- display (cli.js: hide / show / stats) ----------
+// ---------- display (cli.js: hide / show / stats / progress) ----------
 
 const PARTS = { bar: 'status bar', companion: 'companion' };
 const STATS_PLACES = ['above', 'below'];
+const PROGRESS_ON = ['on', 'show'];
+const PROGRESS_OFF = ['off', 'hide'];
 
 function display(root) {
-  return { bar: true, companion: true, stats: 'above', ...(root.display || {}) };
+  return { bar: true, companion: true, stats: 'above', progress: true, ...(root.display || {}) };
 }
 
 function partKey(name) {
@@ -987,6 +990,38 @@ function setStatsPlace(place, now) {
     const to = place || (d.stats === 'below' ? 'above' : 'below');
     text = d.stats === to ? `The stats row is already ${to} the map.` : `The stats row is now ${to} the map.`;
     d.stats = to;
+    root.display = d;
+    if (!d.companion) {
+      text += ` The companion is hidden; ${COMMAND_PREFIX}show companion brings it back.`;
+    } else if (!d.progress) {
+      text += ` It's hidden for now; ${COMMAND_PREFIX}showprogress on brings it back.`;
+    }
+  });
+  return saved ? text : 'The save file is busy right now. Try again in a moment.';
+}
+
+// true for on, false for off, null for anything else (including nothing).
+function progressKey(name) {
+  const key = String(name || '').trim().split(/\s+/)[0].toLowerCase();
+  return PROGRESS_ON.includes(key) ? true : PROGRESS_OFF.includes(key) ? false : null;
+}
+
+// Shows or hides the hero's progress (the stats row and the life bar), so the companion can be
+// just the map. With no choice it switches. Only what's drawn changes.
+function setProgress(visible, now) {
+  let text = '';
+  const { saved } = update(now, 3000, root => {
+    const d = display(root);
+    const to = visible === null ? !d.progress : visible;
+    if (d.progress === to) {
+      text = `The hero's progress is already ${to ? 'shown' : 'hidden'}.`;
+    } else if (to) {
+      text = 'The hero\'s progress (the stats row and the life bar) is shown again.';
+    } else {
+      text = 'The hero\'s progress (the stats row and the life bar) is hidden, so only the map is shown.'
+        + ` Bring it back with ${COMMAND_PREFIX}showprogress on.`;
+    }
+    d.progress = to;
     root.display = d;
     if (!d.companion) {
       text += ` The companion is hidden; ${COMMAND_PREFIX}show companion brings it back.`;
@@ -1868,31 +1903,37 @@ function pickerRows(cols) {
 
 function render(root, now, cols) {
   const h = activeHero(root);
-  let text;
+  const show = display(root);
+  let text = [];
   let map;
   if (!h) {
+    // The picker keeps its title even with /vwc:showprogress off: it says how to start.
     [text, ...map] = pickerRows(cols).map(row => alignRight(row, cols));
     text = [text];
   } else {
     const active = anyActive(root, now);
-    const stats = statsRow(root, h, now, active, cols);
-    // The life bar sits right under the XP bar, which follows "<icon> <class> Lv <level> " in the
-    // right-aligned stats row; if the life row still doesn't fit there, it ends at the right edge.
-    const c = CLASSES[h.cls];
-    const xpCol = cols - displayWidth(stats) + displayWidth(`${c.icon} ${c.name} Lv ${h.level} `);
-    const at = Math.max(0, xpCol - displayWidth('💗 '));
-    const life = lifeRow(h, active, cols - at);
-    const lifeCol = Math.min(at, Math.max(0, cols - displayWidth(life)));
-    text = [alignRight(stats, cols), RESET + ' '.repeat(lifeCol) + life];
+    // /vwc:showprogress off leaves only the map.
+    if (show.progress) {
+      const stats = statsRow(root, h, now, active, cols);
+      // The life bar sits right under the XP bar, which follows "<icon> <class> Lv <level> " in the
+      // right-aligned stats row; if the life row still doesn't fit there, it ends at the right edge.
+      const c = CLASSES[h.cls];
+      const xpCol = cols - displayWidth(stats) + displayWidth(`${c.icon} ${c.name} Lv ${h.level} `);
+      const at = Math.max(0, xpCol - displayWidth('💗 '));
+      const life = lifeRow(h, active, cols - at);
+      const lifeCol = Math.min(at, Math.max(0, cols - displayWidth(life)));
+      text = [alignRight(stats, cols), RESET + ' '.repeat(lifeCol) + life];
+    }
     map = [worldRow(h, active, cols), floorRow(h.heroX, cols)].map(row => alignRight(row, cols));
   }
   // /vwc:stats below moves the text rows (stats and life, or the picker's title) under the map.
-  return display(root).stats === 'below' ? [...map, ...text] : [...text, ...map];
+  return show.stats === 'below' ? [...map, ...text] : [...text, ...map];
 }
 
 module.exports = {
   DIR, COMMAND_PREFIX, CLASSES, classKey, chooseClass, createCharacter, status,
-  display, partKey, setVisible, placeKey, setStatsPlace, load, loadSaved, pluginVersion, skillsReport,
+  display, partKey, setVisible, placeKey, setStatsPlace, progressKey, setProgress, load, loadSaved,
+  pluginVersion, skillsReport,
   gearReport, achievementsReport, earnedCount, ACHIEVEMENTS,
   onHookEvent, onStatusLine, render, displayWidth,
   newRoot, newHero, migrate, step, xpNeed, attackOf, weaponOf, rollSkill, skillPower, learnSkill,
