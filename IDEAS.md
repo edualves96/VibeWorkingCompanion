@@ -3,7 +3,8 @@
 Ideas for later versions that haven't been built yet. Built so far from this list: the journal,
 subagent allies and salvage with reforging (1.11.0), rested XP (1.12.0), day and night
 (1.13.0), seasonal events (1.14.0), elite enemies (1.15.0),
-`/vwc:card` (1.16.0), `/vwc:journal <class>` (1.17.0) and campfires on compaction (1.18.0).
+`/vwc:card` (1.16.0), `/vwc:journal <class>` (1.17.0), campfires on compaction (1.18.0) and, for
+the endgame, the 🧢 Trainer unlocked at level 50 (1.20.0, see `TRAINER_PLAN.md`).
 
 ## Rules every idea has to follow
 
@@ -36,7 +37,8 @@ subagent allies and salvage with reforging (1.11.0), rested XP (1.12.0), day and
 - **Biome gear sets.** Each biome's boss can drop its set (a Coral set from the Coast, an Ember set
   from the Volcano), with bonuses for wearing 2, 4 or all 6 pieces. Equipping stays automatic, so a
   set piece needs to count its set bonus in its power.
-- **Endgame after level 35.** Nothing new unlocks after the 🌟 weapon. Weapon mastery (the weapon
+- **Endgame after level 35.** Nothing new unlocks after the 🌟 weapon until the 🧢 Trainer at level
+  50, and nothing for the three starting classes after it. Weapon mastery (the weapon
   levels up with kills: Star Bow +1, +2…) or endless small "paragon" bonuses every few levels.
 - **Inactive heroes train at camp.** The heroes not being played earn about 10% of the XP the active
   one does, so players with all three classes don't leave two of them behind.

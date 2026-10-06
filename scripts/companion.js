@@ -191,6 +191,10 @@ const MISSING_WEIGHT = 6;
 const CATCH = 0.08;
 const CATCH_BOSS = 0.5;
 const SECRET_CHANCE = 0.01;
+// How much a species' power (roster.js) changes its attack and life as a partner: half, so a
+// partner of power 1.3 hits and lasts 15% more. Late partners are strong, and at full effect
+// trainers pulled ahead of the other classes after about 20 hours of work.
+const POWER_EFFECT = 0.5;
 const ZONE_LENGTH = 600;         // tiles per zone; with the fights, about 17 minutes of work
 const VIEW_AHEAD = 40;
 const WORLD_TILES = 24;           // world strip width; each tile is 2 columns
@@ -202,6 +206,9 @@ const UPDATE_MSG_MS = 30000;      // the "updated" notice stays longer than othe
 const WHATS_NEW = {
   '1.3.0': 'enemies have life now, and every 5th level summons a boss',
   '1.4.0': `skills are random now, dropped by level bosses: ${COMMAND_PREFIX}skills`,
+  '1.20.0': root => (olderThan(root.seenVersion, '1.19.0')
+    ? `🧢 Bash the Trainer unlocks at level 50 (${COMMAND_PREFIX}dex), and 💀 tougher enemies`
+    : `🧢 Bash the Trainer unlocks at level 50: his partner fights, and he catches 151 critters (${COMMAND_PREFIX}dex)`),
   '1.19.0': '💀 tougher enemies (about 5 hits each), and they keep up with you',
   '1.18.0': root => (olderThan(root.seenVersion, '1.17.0')
     ? `⛺ campfires when Claude compacts, 📇 ${COMMAND_PREFIX}card, 💠 elite enemies, 🎃 seasonal events`
@@ -302,6 +309,17 @@ const ACHIEVEMENT_GROUPS = {
     { id: 'picky', name: 'Picky', what: 'salvage 100 pieces of gear', of: 'gearLeft', goal: 100 },
     { id: 'tinkerer', name: 'Tinkerer', what: 'reforge a piece of gear', of: 'forged', goal: 1 },
     { id: 'master-smith', name: 'Master Smith', what: 'reforge gear 50 times', of: 'forged', goal: 50 },
+  ],
+  Collection: [
+    { id: 'first-catch', name: 'First Catch', what: 'catch a critter as the 🧢 Trainer', of: 'caught', goal: 1 },
+    { id: 'collector', name: 'Collector', what: 'have 25 critters in the dex', of: 'dex', goal: 25 },
+    { id: 'field-researcher', name: 'Field Researcher', what: 'have 75 critters in the dex', of: 'dex', goal: 75 },
+    { id: 'almost-there', name: 'Almost There', what: 'have 150 critters in the dex', of: 'dex', goal: 150 },
+    { id: 'complete-dex', name: 'Complete Dex', what: 'catch all 151 critters', of: 'dex', goal: 151, secret: true },
+    { id: 'growing-up', name: 'Growing Up', what: 'see a caught critter evolve', of: 'evolutions', goal: 1 },
+    { id: 'legendary-catch', name: 'Legendary Catch', what: 'catch a legendary critter', of: 'legends', goal: 1 },
+    { id: 'night-shift', name: 'Night Shift', what: 'catch all 14 critters of the night', of: 'nightDex', goal: 14 },
+    { id: 'team-player', name: 'Team Player', what: 'have 5 different partners', of: 'partners', goal: 5 },
   ],
   Seasons: [
     { id: 'trick-or-treat', name: 'Trick or Treat', what: 'eat 31 pieces of 🍬 candy at Halloween', of: 'candy', goal: 31 },
@@ -719,7 +737,7 @@ function activeHero(root) {
 // What a hero fights with: its class's range, attack, critical chance, life, basic hit, weapons and
 // skills. Every fight and drawing reads them through here. A trainer fights like the class its
 // partner's type is `like`, with that type's hit and skills, and the species' power multiplying
-// its attack and life.
+// its attack and life (POWER_EFFECT of it).
 function classOf(h) {
   const c = CLASSES[h.cls];
   if (!c.starter) {
@@ -730,12 +748,13 @@ function classOf(h) {
     const s = speciesOf(h.partner.n);
     const type = TYPES[s.type];
     const like = CLASSES[type.like];
+    const power = 1 + (s.power - 1) * POWER_EFFECT;
     partnerClasses.set(key, {
       ...c,
       range: like.range,
-      atk: like.atk.map(a => a * s.power),
+      atk: like.atk.map(a => a * power),
       crit: like.crit,
-      life: like.life * s.power,
+      life: like.life * power,
       hit: type.hit,
       skills: { power: like.skills.power, parts: type.parts, forms: type.forms, areaForms: type.areaForms },
     });
@@ -1457,6 +1476,9 @@ function heroStatistics(h) {
     ['Survival', `${plural(t.potions, 'potion')} drunk · ${plural(t.knockouts, 'knockout')} · ${plural(t.closeCalls, 'close call')}${t.candy > 0 ? ` · ${plural(t.candy, 'candy', 'candies')} eaten` : ''}${t.camps > 0 ? ` · ${plural(t.camps, 'camp')}` : ''}`],
     ['Allies', `${plural(t.allies, 'ally', 'allies')} joined · ${plural(t.allyKills, 'kill')} together`],
   ];
+  if (h.partner) {
+    rows.push(['Catches', `${shortNumber(t.caught)}${perHour(t.caught, h.step)} · ${shortNumber(t.species)} new in the dex · ${plural(t.evolutions, 'evolution')} · ${plural(t.partners || 1, 'partner')}`]);
+  }
   return rows.map(([label, value]) => `    ${label.padEnd(14)}${value}`);
 }
 
@@ -1482,6 +1504,9 @@ function statisticsReport(now) {
   const all = [`${formatDuration((f.workSec || 0) * 1000)} of work`, `${shortNumber(root.stats.tokens)} tokens`, plural(f.kills || 0, 'kill')];
   if (f.turns > 0) {
     all.push(plural(f.turns, 'turn'));
+  }
+  if (f.caught > 0) {
+    all.push(plural(f.caught, 'catch', 'catches'));
   }
   if (root.stats.longestTurn > 0) {
     all.push(`longest turn ${formatDuration(root.stats.longestTurn)}`);
@@ -1529,6 +1554,9 @@ function heroCard(root, h) {
   const skills = h.skills.map(s => `${s.icon} ${s.name} (${s.rarity})`);
   const bosses = zoneOf(h.heroX) + t.minis + t.elders;
   const fights = [whereText(h), `💀 ${plural(h.kills, 'kill')}`, `🏆 ${plural(bosses, 'boss', 'bosses')}`];
+  if (h.partner) {
+    fights.splice(2, 0, `📕 ${caughtCount(root.dex || {})}/${SPECIES.length}`);
+  }
   if (t.maxHit > 0) {
     fights.push(`💥 biggest hit ${shortNumber(t.maxHit)}`);
   }
@@ -2245,6 +2273,9 @@ function counts(h) {
     snowmen: t.snowmen,
     elites: t.elites,
     camps: t.camps,
+    caught: t.caught,
+    partners: t.partners,
+    evolutions: t.evolutions,
   };
 }
 
@@ -2273,6 +2304,9 @@ function achievementFacts(root, now, worked) {
     heldSkills: best(h => h.skills.length),
     heldLegendary: best(h => h.skills.filter(s => s.rarity === 'legendary').length),
     gearWorn: best(h => Object.keys(h.gear).length),
+    dex: caughtCount(root.dex || {}),
+    nightDex: SPECIES.filter(s => s.night && isCaught(root.dex || {}, s.n)).length,
+    legends: SPECIES.filter(s => s.where === 'legend' && isCaught(root.dex || {}, s.n)).length,
     tokens: root.stats.tokens,
     longestTurn: root.stats.longestTurn / 60000,
     night: worked && day.getHours() < 5 ? 1 : 0,

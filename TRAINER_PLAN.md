@@ -1,7 +1,7 @@
 # Plan: the Trainer, a 4th hero unlocked at level 50
 
-Status: every decision is made (2026-10-06). Steps 1 to 9 are done; next is Step 10. Build it one
-step at a time; each step leaves the game working.
+Status: built and released as 1.20.0 on 2026-10-06. All 12 steps are done; each one left the game
+working.
 
 ## The idea
 
@@ -371,7 +371,7 @@ user chose instead: **catches grow to Bash's level.**
   trainer, with a dex, with `all` (151 rows, 103 columns at most) and with a bad argument. Claude Code
   only lists `/vwc:dex` after `/plugin marketplace update vibeworkcompanion` and `/reload-plugins`.
 
-### Step 10: achievements, statistics, journal and card
+### Step 10: achievements, statistics, journal and card ✅ done
 
 - A new achievement group, "Collection": first catch, 25, 75, 150 and 151 caught (151 secret), a
   partner evolves, catch a legendary, 10 different partners, and **Night Shift**: catch all 14
@@ -379,8 +379,14 @@ user chose instead: **catches grow to Bash's level.**
 - Add `caught`, `species`, `partners` and `evolutions` to `counts()` so lifetime totals keep them.
 - `/vwc:statistics` gets a "Catches" row for the trainer: `57 · 37 species · 4 partners · 2 evolutions`.
 - `/vwc:card trainer` shows the partner and `📕 37/151`.
+- **Built.** Collection: First Catch, Collector (25), Field Researcher (75), Almost There (150), Complete
+  Dex (151, secret), Growing Up (a caught critter evolves; a partner evolving almost never happens,
+  see Step 7), Legendary Catch, Night Shift (all 14) and Team Player with **5** partners instead of 10:
+  a trainer has 3 to 5 partners in 40 hours, so 10 would need several trainers. The journal footer
+  stays as it was (it already records catches and new partners). A fresh trainer played for 35 hours
+  earned 8 of the 9 (Team Player at 4/5); the three base classes still play out identically.
 
-### Step 11: balance check
+### Step 11: balance check ✅ done
 
 Use the seeded simulation over 30 hours of work:
 
@@ -389,8 +395,17 @@ Use the seeded simulation over 30 hours of work:
   range and the starter's strength.
 - Catch pacing matches the Step 8 targets (already measured and tuned in Step 8; recheck after any
   other change). Tune `WILD_SHARE`, `CATCH`, `MISSING_WEIGHT`, `NIGHT_BY_DAY` and the ball tiers.
+- **Measured** (12 runs per class, 9:00 to 21:00, no allies): the trainer kept pace for 8 hours but
+  pulled ahead later, +1.3 levels at 24 h and +1.8 at 30 h against the average of the other
+  three, and was almost never knocked out. His late partners (power 1.15 to 1.3) out-hit a warrior
+  with far more life.
+- **Tuned:** `POWER_EFFECT = 0.5`, so a species' power counts half (a 1.3 partner gets +15% attack and
+  life). Now the trainer is within 0.3 levels of that average at 1, 3, 8, 16, 24 and 30 hours
+  (Lv 48.9 at 30 h, between the archer's 48.3 and the mage's 49.1). With it, swaps still never leave
+  him weaker (2 to 4 in 40 hours), and the dex is complete at 29 to 34 hours (Lv 50 to 51) for a
+  day or an evening worker.
 
-### Step 12: docs and release
+### Step 12: docs and release ✅ done
 
 - README: a Trainer section (unlock, partner, catching, swaps, evolution), a Dex section, the
   commands table, the Classes table, the files table and the save file description. Use only the

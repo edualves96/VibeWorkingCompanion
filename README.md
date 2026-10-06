@@ -16,7 +16,10 @@ rest, drinks its potions and gets back up on its own.
 ```
 
 - **Work time is game time:** a 2m45s task is 2m45s of adventure, and the tokens Claude uses give bonus XP.
-- **Three classes:** 🧙 Mage, 🤺 Warrior and 🧝 Archer, each with its own save, weapons and skills.
+- **Three classes, and a fourth to unlock:** 🧙 Mage, 🤺 Warrior and 🧝 Archer, each with its own
+  save, weapons and skills. Reach level 50 with any of them to unlock 🧢 Bash the Trainer: his
+  partner critter fights for him, and he catches critters to fill a dex of 151. See
+  [The Trainer](#the-trainer).
 - **Random skills:** the bosses of levels 5, 10, 15… drop a randomly rolled skill. A hero holds two,
   and a better find replaces the weaker one. Area skills (a Nova, a Volley, a Cleave…) hit a whole
   group of enemies at once.
@@ -42,7 +45,7 @@ rest, drinks its potions and gets back up on its own.
   Winter all December, with snowmen and snow.
 - **Elite enemies:** 1 enemy in 20 (1 in 10 at night) is Swift, Armored, Vampiric or Explosive,
   tougher and better paid.
-- **56 achievements** for kills, groups, bosses, survival, levels, skills, gear, allies, seasons and
+- **66 achievements** for kills, groups, bosses, survival, levels, skills, gear, allies, catches, seasons and
   hours of work, plus a couple of secret ones. 🏅 pops up on the stats row when you earn one.
 - **Seven biomes,** each with its own floor, enemies and a boss every ~17 minutes of work:
   🌼 Meadow, 🌲 Dark Forest, 💎 Caves, 🌴 Coast, 🌵 Desert, 🪦 Graveyard, 🌋 Volcano. After the
@@ -125,14 +128,20 @@ After an update the stats row says `🆕 Updated to <version>` and what's new, f
 `/vwc:commands` shows which version you have. Your heroes are kept: they live in the plugin's
 data folder, which updates don't touch.
 
+**More than one Claude Code window?** Update and reload every one of them. A window still on an
+older version doesn't know newer heroes: while the 🧢 Trainer is your active hero, its status line
+shows `companion error: …` instead of the companion, and work done in that window doesn't count
+until it updates. Your save is safe, since a version that can't read it doesn't write to it. With
+any other hero active, older windows work as before.
+
 ## Commands
 
 | Command | What it does |
 |---------|--------------|
 | `/vwc:setup` | Points your status line at the companion. Your previous status line is saved and shown on top. Only needed if you already had a status line; safe to run again. |
 | `/vwc:setup remove` | Turns the companion's status line off and puts back the one you had before (if any). It won't come back by itself. |
-| `/vwc:chooseclass <mage\|warrior\|archer>` | Switch class. The first time creates that hero; after that you resume its save. With no class, lists your heroes. |
-| `/vwc:createchar <mage\|warrior\|archer>` | Start over with a new level 1 hero of that class. The old one is backed up first. |
+| `/vwc:chooseclass <mage\|warrior\|archer\|trainer>` | Switch class. The first time creates that hero; after that you resume its save. With no class, lists your heroes. The 🧢 trainer (also `bash`) unlocks once any hero reaches level 50. |
+| `/vwc:createchar <mage\|warrior\|archer\|trainer>` | Start over with a new level 1 hero of that class. The old one is backed up first. A trainer's dex is kept. |
 | `/vwc:hide <bar\|companion\|all>` | Hide the status bar (the info row on top), the companion (the hero rows), or both. A hidden hero keeps adventuring in the background. The choice is remembered across restarts. |
 | `/vwc:show <bar\|companion\|all>` | Show them again. |
 | `/vwc:skills` | Every hero's skills with their rarity, power and stats, and which boss drops the next one. |
@@ -156,6 +165,7 @@ result, so they are quick and cheap. Claude never runs them on its own.
 | Mage | 🧙 | 3 tiles | 🔹 magic missile | 🪵 📜 🪄 📖 🔮 💎 🌟 | 🔥 ⚡ 🧊 🌊 💫 🌑 spells |
 | Warrior | 🤺 | 2 tiles (melee) | 💥 | 🔪 🏏 🪓 🔨 🔱 🪝 🌟 | 💪 🌀 💢 🩸 🌋 🔥 strikes |
 | Archer | 🧝 | 5 tiles | 🔸 arrow that flies across the gap | 🪨 🪃 🏹 🪶 🌙 💘 🌟 | 🎯 🍃 🦅 💨 🌠 🔥 shots |
+| Trainer (level 50) | 🧢 | his partner's, by its type | his partner's (⚡ 🔥 💧 🍃…) | 🔴 🟠 🟡 🟢 🔵 🟣 🌟 balls | his partner's type |
 
 The mage hits weakly but rolls the strongest skills, the warrior hits hardest (its skills roll a
 little weaker), and the archer lands double-damage critical shots 20% of the time. The warrior,
@@ -164,6 +174,63 @@ has the least, so bosses are its danger. On average all
 three level up at the same pace (within about a level of each other up to 30 hours of work, checked by
 simulation), so the choice is about style. Skills are random, so luck can put a hero a level or
 two ahead or behind. Only the active class's hero moves; the others wait where you left them.
+The 🧢 Trainer, unlocked at level 50, keeps the same pace (see [The Trainer](#the-trainer)).
+
+## The Trainer
+
+🧢 Bash the Trainer is the fourth class. He unlocks for good once any hero reaches level 50 (the
+Legend achievement, about 30 hours of work), and starts at level 1 in the 🌼 Meadow like any new
+hero: `/vwc:chooseclass trainer`, or `bash`.
+
+```
+🧢 Trainer Lv 21 ▰▰▰▰▱▱▱▱▱▱ 5310/12975 XP · 🐭 Clauchu · 🔵 Context Ball · ⚡🔋 · 🪦 Graveyard III 91% · 💀 1763 · 📕 23/151
+            💗 ▰▰▰▰▰▰▰▰▰▱ 918/1077 · 🧪 3 · 🔩 12/30
+                   🦊🧢🐭  . ⚡ 👻    . 🦴.     .
+```
+
+- **His partner fights for him,** with Bash one tile behind it. He starts with 🐭 Clauchu, an
+  electric critter that never evolves. A partner fights like the class its type matches (electric,
+  fire, water, psychic, ghost and ice like the mage; normal, fighting, rock, ground and dragon like
+  the warrior; flying, bug, poison and grass like the archer), with its type's hit and skills
+  (Overclock Zap, Null Pointer, Core Dump, Tree Shake…). Its species' power makes it a little
+  stronger or weaker. When it loses, it faints and gets back up, like any knocked out hero.
+- **Balls are his weapons:** 🔴 Clau Ball, 🟠 Byte Ball, 🟡 Token Ball, 🟢 Cache Ball, 🔵 Context Ball,
+  🟣 Prompt Ball and 🌟 Star Ball, as strong as the other classes' weapons at the same levels, and
+  each one better at catching.
+- **Wild critters** come out among the usual enemies on his map: 40% of what spawns, always alone.
+  Each biome has its own (Packey and Ramdata in the Meadow, Gitdude in the Caves, Rubberduck and
+  Tentaclaude on the Coast…), a pair that comes out at night (and a quarter as often by day), and a
+  critter as its zone boss (🐻 Blocklax, 🪲 Pinsort…). Evolved forms only show up deeper in the
+  world. The usual enemies, elites and seasonal enemies can't be caught.
+- **Catching happens on its own.** A defeated critter is caught 8% of the time (up to 16% with the
+  🌟 Star Ball) and a boss half the time: `🔵 Caught 🦀 Crabbyte! 📕 17/151`. A catch grows to
+  Bash's level right away, evolving through every evolution level he has passed:
+  `🟢 Caught 🌰 Kakunit, ✨ it evolved into 🐝 Bugdrill! 📕 29/151`. Species you haven't caught yet
+  show up more often.
+- **A stronger catch becomes the partner,** but only if Bash ends up stronger with it, which the
+  game checks first, so a swap never makes him weaker:
+  `🔄 🐻 Blocklax is your new partner, in place of 🐭 Clauchu · its skills: 🔁 Retry Rumble`. The gear
+  stays with Bash and fits whoever fights. The old partner leaves with its skills, and the new one
+  brings its own, as many and as rare. Expect 3 or 4 partners in 40 hours of work.
+- **Level bosses are critters too:** a Giant critter at levels 5, 15, 25…, an Elder one at levels
+  10, 60, 70…, and at levels 20, 30, 40 and 50 the legendaries 🦢 Haikuno, 🦅 Sonnetdos, 🦚 Opustres
+  and 🧬 Clewtwo, which are always caught. Once you have the other 150, a secret last one shows up.
+- **The dex** keeps the critters caught, shared by every trainer, so `/vwc:createchar trainer` never
+  loses it. `/vwc:dex` shows how far along you are, your partner and the last ones new in the dex,
+  and `/vwc:dex all` lists all 151 (one you haven't met yet only shows where to look):
+
+  ```
+  📕 Dex · 107 of 151 caught · 146 seen
+
+    🌼 Meadow 16/19 · 🌲 Dark Forest 20/21 · 💎 Caves 16/22 · 🌴 Coast 12/24
+    🌵 Desert 14/22 · 🪦 Graveyard 16/18 · 🌋 Volcano 13/20 · 🌟 Legendaries 0/5 · 🌙 At night 5/14
+    Partner: 🗿 Gitlem (rock, since 2026-10-06) · 3 partners so far
+  ```
+
+- **Pace:** checked by simulation, a trainer levels like the other classes, has most of the dex
+  after 10 to 13 hours of work, and all of it at about level 50 (30 to 34 hours).
+- **Names:** every critter is a parody, a coding or Claude pun on a famous original and never the
+  original itself. All 151, with their types and where they live, are in `scripts/roster.js`.
 
 ## Skills
 
@@ -418,11 +485,11 @@ update.
 
 ## Achievements
 
-56 achievements, shared by all your heroes. When you earn one, the stats row says
+66 achievements, shared by all your heroes. When you earn one, the stats row says
 `🏅 Achievement: Dragonslayer`. `/vwc:achievements` lists them all, with how close you are:
 
 ```
-🏅 Achievements · 19 of 56 earned
+🏅 Achievements · 19 of 66 earned
 
 Combat
   ✅ First Blood        defeat an enemy                                2026-10-02 🧝
@@ -435,9 +502,10 @@ Combat
 | Combat | defeat 1, 100, 1,000 and 10,000 enemies; land a hit of 250 and of 2,500 damage; a critical hit with a skill; hit 4 enemies with one area skill; defeat 500 groups; defeat 100 elites; defeat 50 creatures of the night; be joined by an ally; defeat 100 enemies with one at your side |
 | Bosses | the first zone boss, a mini boss, an Elder boss, 5 Elder bosses, the Dragon of the Volcano, and of Volcano X |
 | Survival | drink a potion, and 100; win a fight with under 10% life; get knocked out and back up |
-| Journey | levels 5, 10, 20, 30 and 35 (the star weapon); reach all 7 biomes; play every class; every class to level 10 |
+| Journey | levels 5, 10, 20, 30, 35 (the star weapon) and 50 (unlocks the Trainer); reach all 7 biomes; play all three starting classes; all three to level 10 |
 | Skills | find a skill; hold two; replace one; find an epic, and a legendary; hold two legendaries |
 | Gear | find a piece; fill all 6 slots; find an epic, and a legendary; salvage 100 pieces; reforge a piece, and 50 times |
+| Collection | as the Trainer: catch a critter; have 25, 75 and 150 in the dex, and all 151 (a secret); see a catch evolve; catch a legendary; catch all 14 night critters; have 5 different partners |
 | Seasons | eat 31 pieces of Halloween candy; defeat 100 snowmen in December |
 | Work | 1, 8 and 40 hours of work; 1 million and 10 million tokens; one turn of 30 minutes; come back to a full hour of rested XP; make camp 10 times; two secrets |
 
@@ -469,6 +537,8 @@ All heroes · 3h11m of work · 1.5M tokens · 1,141 kills · 61 turns · longest
 ```
 
 - **Work time** is the time the hero spent adventuring: only while Claude works.
+- **A trainer** also gets a Catches row: his catches, how many an hour, how many were new in the
+  dex, how many evolved, and his partners.
 - **Tokens** are the ones used while that hero was active (input, cache writes and output, not
   cache reads, as for XP).
 - **A turn** runs from your message to Claude's answer and counts for the hero that was active
@@ -522,7 +592,8 @@ hero you have:
 
 - **What's on it:** the class and level, the weapon and skills, where the hero is, kills, bosses
   and the biggest hit, the best piece of gear with what all the gear adds, and the hero's work
-  time, tokens and achievements. The last line links to the plugin (the `homepage` in
+  time, tokens and achievements. A trainer's card starts with his partner and counts his dex (📕).
+  The last line links to the plugin (the `homepage` in
   `.claude-plugin/plugin.json`, so a fork links to itself).
 - **Nothing about your work:** only game numbers, plus how long Claude worked and how many tokens
   it used. Nothing is sent anywhere; you copy the card yourself.
@@ -663,6 +734,12 @@ Everything below is in `scripts/companion.js`.
 | `RESTED_AFTER`, `RESTED_RATE` | `300000`, `0.5` | The part of a break that doesn't count (5 minutes), and how much of the rest of it goes into the rested pool. |
 | `RESTED_MAX`, `RESTED_XP` | `3600000`, `1` | The most rested XP a hero can hold (an hour of work), and the extra kill XP while rested (+100%). |
 | `JOURNAL_SIZE`, `JOURNAL_SHOWN` | `100`, `50` | Moments each hero keeps for `/vwc:journal`, and the lines it shows. |
+| `WILD_SHARE` | `0.4` | On the Trainer's map, the share of spawns that are a wild critter (alone) instead of the usual enemies. |
+| `CATCH`, `CATCH_BOSS` | `0.08`, `0.5` | Chance a defeated critter is caught (times the ball's `catch`), and a zone or level boss. Legendaries always are. |
+| `MISSING_WEIGHT`, `NIGHT_BY_DAY` | `6`, `0.25` | How much more often species not caught yet spawn, and how often night critters come out by day compared to the night. |
+| `EVOLVED_FROM` | `{ 2: 3, 3: 8 }` | The zone from which evolved forms (stage 2 and 3) start to spawn. |
+| `SECRET_CHANCE` | `0.01` | Once every other species is caught, the share of wild critters that are the secret one. |
+| `POWER_EFFECT` | `0.5` | How much a species' power changes a partner's attack and life. |
 | `ACHIEVEMENT_GROUPS` | | Every achievement: its name, what to do, the fact it measures (see `achievementFacts()`) and the goal. |
 | `WORLD_TILES` | `24` | Width of the world in tiles (each tile is 2 columns). |
 | `MSG_MS` | `10000` | How long messages like "🎉 Level 5!" stay visible. |
@@ -673,6 +750,10 @@ Difficulty lives in `xpNeed()` (the level curve), `makeEnemy()` (enemy HP and XP
 (hero damage, from the class's `atk`), `rollSkill()` (how strong skills roll at each level) and
 `rollGear()` (how strong gear rolls). If you make fights longer or shorter, change `KILL_XP` the
 opposite way, or levelling slows down or speeds up with them.
+
+The Trainer's critters, their types and evolutions live in `scripts/roster.js`. Run
+`node scripts/check-roster.js` after changing it: it checks the numbering, names, evolutions,
+bosses and emoji.
 
 ### Add a biome
 
@@ -716,8 +797,8 @@ paladin: {
 ```
 
 A new class appears in `/vwc:chooseclass` and `/vwc:createchar` automatically. Every class needs
-a first weapon at level 1. The class picker has room for three heroes, so a fourth class can be
-chosen but isn't drawn there.
+a first weapon at level 1. The class picker draws the classes anyone can start with; a class with
+an `unlock` (an achievement, like the trainer's) waits for it before it can be chosen.
 
 ### Emoji rules (read this before adding icons)
 
@@ -745,7 +826,8 @@ as was done for ⚡ ✨ ⏳ ⛄ ⚪.
   width in `COLUMNS`, pads the status line by 2 columns on each side, and cuts off anything wider.
   If the right edge is cut off in your terminal, increase the `6`.
 - **Narrow terminals:** when the stats row doesn't fit, parts are dropped in priority order (skills
-  first, then kills, the biome with its progress, and weapon), and a long message is cut short with "…". The life row
+  first, then a trainer's 📕 dex count, kills, the biome with its progress, the weapon, and a
+  trainer's partner), and a long message is cut short with "…". The life row
   stays under the XP bar, dropping its extras (shards, then rested XP, then the camp, then rally, then potions) if they don't fit. See the numbers in `statsRow()`.
 
 ### The info row (row 1)
@@ -760,20 +842,23 @@ If you had a status line before `/vwc:setup`, it runs and is shown on top. Other
 | `.claude-plugin/plugin.json` | Plugin manifest (name `vwc`, version). |
 | `.claude-plugin/marketplace.json` | Makes this repository its own marketplace (`vibeworkcompanion`). |
 | `hooks/hooks.json` | The hooks that tell the companion when Claude is working. |
-| `skills/` | The `/vwc:` commands: `setup`, `chooseclass`, `createchar`, `hide`, `show`, `stats`, `showprogress`, `skills`, `gear`, `achievements`, `statistics`, `journal`, `card` and `commands`. |
+| `skills/` | The `/vwc:` commands: `setup`, `chooseclass`, `createchar`, `hide`, `show`, `stats`, `showprogress`, `skills`, `gear`, `achievements`, `statistics`, `journal`, `card`, `dex` and `commands`. |
 | `scripts/companion.js` | The engine: save file, classes, biomes, game rules, rendering. |
 | `scripts/statusline.js` | What the status line runs: info row plus the three companion rows. |
 | `scripts/hook.js` | What the hooks run. Events from subagents go to the allies. |
-| `scripts/cli.js` | Class switching, new characters, hide/show, the stats row's place, showing or hiding the progress rows, the skills, gear, achievements and statistics lists, the journal, the hero card, and the command list. |
+| `scripts/cli.js` | Class switching, new characters, hide/show, the stats row's place, showing or hiding the progress rows, the skills, gear, achievements and statistics lists, the journal, the hero card, the dex, and the command list. |
 | `scripts/setup.js` | Turns the status line on and off in your `settings.json`. |
+| `scripts/roster.js` | The Trainer's critters: the 15 types they fight with and all 151 species. |
+| `scripts/check-roster.js` | Checks `roster.js` after a change: numbering, names, evolutions, bosses and emoji. |
 | `IDEAS.md` | Ideas for later versions that haven't been built yet. |
+| `TRAINER_PLAN.md` | How the Trainer was planned and built, step by step, with what was measured. |
 
 Your saves live in the plugin's data folder, `~/.claude/plugins/data/<plugin id>/`, which survives
 plugin updates:
 
 | File | What it is |
 |------|------------|
-| `state.json` | One hero per class (with its skills, gear, shards, rested XP, camp, journal, and counts for achievements and statistics), which one is active, the allies of the subagents running now, the achievements earned and the totals they need, what `/vwc:hide` has hidden, where `/vwc:stats` put the stats row, whether `/vwc:showprogress` hid it, and the last plugin version it saw (for the update notice). Delete it to start everything over. |
+| `state.json` | One hero per class (with its skills, gear, shards, rested XP, camp, journal, and counts for achievements and statistics), which one is active, the allies of the subagents running now, the achievements earned and the totals they need, the dex of the critters seen and caught, what `/vwc:hide` has hidden, where `/vwc:stats` put the stats row, whether `/vwc:showprogress` hid it, and the last plugin version it saw (for the update notice). Delete it to start everything over. |
 | `backups/` | Heroes replaced by `/vwc:createchar`. To restore one, copy it into `state.json` under `heroes.<class>`. |
 | `statusline.js` | Small launcher that your status line runs; it finds the current plugin version. |
 | `previous-statusline.json` | The status line you had before setup. |
