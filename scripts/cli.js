@@ -1,7 +1,7 @@
 'use strict';
 // Character commands for the companion, used by the /vwc:chooseclass and /vwc:createchar skills:
-//   node cli.js --data <dir> class <mage|warrior|archer>   switch class (each class keeps its own save)
-//   node cli.js --data <dir> new <mage|warrior|archer>     start over with a fresh hero of that class
+//   node cli.js --data <dir> class <class>                 switch class: mage, warrior, archer or trainer (each keeps its own save)
+//   node cli.js --data <dir> new <class>                   start over with a fresh hero of that class
 //   node cli.js --data <dir> status                        list every class's hero
 //   node cli.js --data <dir> hide <bar|companion|all>      stop drawing a part of the status line
 //   node cli.js --data <dir> show <bar|companion|all>      draw it again
@@ -13,6 +13,7 @@
 //   node cli.js --data <dir> statistics                    every hero's work time, tokens, turns, kills and more
 //   node cli.js --data <dir> journal [class] [all]         notable moments by day: one hero's, or everything kept
 //   node cli.js --data <dir> card [class|all]              a card of a hero to paste in a chat or a PR
+//   node cli.js --data <dir> dex [all]                     the trainer's critters: by biome, the partner, the last ones; all 151
 //   node cli.js --data <dir> commands                     list every command, plus the current state
 // --data is the plugin's data folder, where the save lives. Skills don't get it as an
 // environment variable, so they pass it here.
@@ -34,8 +35,8 @@ const usage = `Usage: ${p}chooseclass <${names}> or ${p}createchar <${names}>`;
 const now = Date.now();
 
 const COMMANDS = [
-  ['chooseclass <mage|warrior|archer>', 'switch class; each class keeps its own save'],
-  ['createchar <mage|warrior|archer>', 'start over with a new level 1 hero (the old one is backed up)'],
+  ['chooseclass <mage|warrior|archer|trainer>', 'switch class; each class keeps its own save (the trainer unlocks at level 50)'],
+  ['createchar <mage|warrior|archer|trainer>', 'start over with a new level 1 hero (the old one is backed up)'],
   ['hide <bar|companion|all>', 'hide the status bar, the companion, or both'],
   ['show <bar|companion|all>', 'show them again'],
   ['stats <above|below>', 'put the hero\'s stats row above or below the map (no place: switch)'],
@@ -46,6 +47,7 @@ const COMMANDS = [
   ['statistics', 'each hero\'s work time, tokens, turns (longest, shortest, average), kills and more'],
   ['journal [class] [all]', 'what happened while you worked; a class for one hero, all for everything kept'],
   ['card [class|all]', 'a card of your hero to paste in Slack or a PR'],
+  ['dex [all]', 'the trainer\'s critters: by biome, his partner and the last catches; all lists all 151'],
   ['setup', 'turn the companion status line on (an existing status line stays on top)'],
   ['setup remove', 'turn it off and put back your previous status line'],
   ['commands', 'this list'],
@@ -82,6 +84,9 @@ function run() {
   }
   if (command === 'journal') {
     return companion.journalReport(arg, now);
+  }
+  if (command === 'dex') {
+    return companion.dexReport(arg, now);
   }
   if (command === 'card') {
     return companion.cardReport(arg, now);

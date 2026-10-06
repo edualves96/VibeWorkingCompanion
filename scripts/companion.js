@@ -4,6 +4,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { TYPES, SPECIES } = require('./roster');
 
 // Where the save lives: COMPANION_DIR (set by the status line launcher, cli.js and tests),
 // else the plugin's data folder (Claude Code gives hooks CLAUDE_PLUGIN_DATA), else next to this file.
@@ -176,6 +177,20 @@ const SEASON_ENEMY = 0.12;
 // last JOURNAL_SHOWN lines of all heroes together.
 const JOURNAL_SIZE = 100;
 const JOURNAL_SHOWN = 50;
+// The Trainer's critters (roster.js). WILD_SHARE of the normal spawns on his map are a wild critter
+// of the biome, alone; the rest are the usual enemies. Evolved forms spawn from zone
+// EVOLVED_FROM[stage] on, night critters by day only NIGHT_BY_DAY as often, and species not caught
+// yet MISSING_WEIGHT times as often. A defeated critter is caught CATCH of the time, times the
+// ball's `catch`, and a zone or level boss CATCH_BOSS of the time. The legendaries are the Elder
+// bosses of their levels (`legend` in roster.js) and always caught; once every other species is,
+// the secret one is SECRET_CHANCE of the wild critters, and always caught too.
+const WILD_SHARE = 0.4;
+const EVOLVED_FROM = { 2: 3, 3: 8 };
+const NIGHT_BY_DAY = 0.25;
+const MISSING_WEIGHT = 6;
+const CATCH = 0.08;
+const CATCH_BOSS = 0.5;
+const SECRET_CHANCE = 0.01;
 const ZONE_LENGTH = 600;         // tiles per zone; with the fights, about 17 minutes of work
 const VIEW_AHEAD = 40;
 const WORLD_TILES = 24;           // world strip width; each tile is 2 columns
@@ -266,9 +281,10 @@ const ACHIEVEMENT_GROUPS = {
     { id: 'level-20', name: 'Veteran', what: 'reach level 20', of: 'level', goal: 20 },
     { id: 'level-30', name: 'Champion', what: 'reach level 30', of: 'level', goal: 30 },
     { id: 'star-power', name: 'Star Power', what: 'wield a 🌟 star weapon (level 35)', of: 'level', goal: 35 },
+    { id: 'level-50', name: 'Legend', what: 'reach level 50 (unlocks the 🧢 Trainer)', of: 'level', goal: 50 },
     { id: 'world-walker', name: 'World Walker', what: 'reach all 7 biomes', of: 'zone', goal: 6 },
-    { id: 'full-party', name: 'Full Party', what: 'play every class', of: 'heroes', goal: 3 },
-    { id: 'all-rounder', name: 'All-Rounder', what: 'get every class to level 10', of: 'everyClass', goal: 10 },
+    { id: 'full-party', name: 'Full Party', what: 'play all three starting classes', of: 'heroes', goal: 3 },
+    { id: 'all-rounder', name: 'All-Rounder', what: 'get all three starting classes to level 10', of: 'everyClass', goal: 10 },
   ],
   Skills: [
     { id: 'gifted', name: 'Gifted', what: 'find a skill', of: 'skillsFound', goal: 1 },
@@ -392,7 +408,33 @@ const CLASSES = {
       areaForms: ['Volley', 'Rain', 'Barrage'],
     },
   },
+  // Unlocked by the achievement `unlock` and announced with `unlocked`. Bash (`hero`) doesn't
+  // fight: his partner does, a critter from roster.js that starts as species `starter`. Its type
+  // and power give the range, attack, critical chance, life, basic hit and skills (see classOf).
+  // His weapons are balls, as strong as the other classes' weapons, and `catch` multiplies CATCH.
+  // `alias` also picks the class.
+  trainer: {
+    name: 'Trainer', icon: '🧢', hero: 'Bash', alias: 'bash', blurb: 'his partner fights for him, and he catches critters',
+    unlock: 'level-50', unlocked: `🧢 Bash the Trainer wants to join you: ${COMMAND_PREFIX}chooseclass trainer`,
+    starter: 25,
+    weapons: [
+      { lvl: 1, icon: '🔴', name: 'Clau Ball', atk: 0, catch: 1 },
+      { lvl: 4, icon: '🟠', name: 'Byte Ball', atk: 2, catch: 1.15 },
+      { lvl: 8, icon: '🟡', name: 'Token Ball', atk: 5, catch: 1.3 },
+      { lvl: 13, icon: '🟢', name: 'Cache Ball', atk: 9, catch: 1.45 },
+      { lvl: 19, icon: '🔵', name: 'Context Ball', atk: 14, catch: 1.6 },
+      { lvl: 26, icon: '🟣', name: 'Prompt Ball', atk: 20, catch: 1.8 },
+      { lvl: 35, icon: '🌟', name: 'Star Ball', atk: 28, catch: 2 },
+    ],
+  },
 };
+// The classes anyone can play from the start; the others need unlocking.
+const BASE_CLASSES = Object.keys(CLASSES).filter(k => !CLASSES[k].unlock);
+const SPECIES_BY_NUMBER = new Map(SPECIES.map(s => [s.n, s]));
+// Each biome's wild critters and its boss species.
+const WILD = Object.fromEntries(BIOMES.map(b => [b.name, SPECIES.filter(s => s.where === b.name && !s.boss)]));
+const BOSS_SPECIES = Object.fromEntries(BIOMES.map(b => [b.name, SPECIES.find(s => s.where === b.name && s.boss)]));
+const SECRET = SPECIES.find(s => s.secret);
 
 const WORK_EVENTS = new Set(['UserPromptSubmit', 'PostToolUse', 'PostToolUseFailure']);
 const WAIT_EVENTS = new Set(['Stop', 'StopFailure', 'PermissionRequest', 'PreToolUse']);
@@ -400,10 +442,11 @@ const WAIT_EVENTS = new Set(['Stop', 'StopFailure', 'PermissionRequest', 'PreToo
 // ---------- save file ----------
 
 // The save holds one hero per class; only the `active` one moves. `allies` are the subagents
-// running now, by agent id, and `alliesGone` the ids of the last ones that finished.
+// running now, by agent id, and `alliesGone` the ids of the last ones that finished. `dex` holds
+// the critters seen and caught, shared by every trainer (see see()).
 function newRoot(now) {
   // A new save starts on the current version, so it never shows an "updated" notice.
-  return { v: 2, active: null, heroes: {}, lastTick: now, sessions: {}, seenVersion: pluginVersion(), stats: newStats(), achievements: {}, allies: {}, alliesGone: [] };
+  return { v: 2, active: null, heroes: {}, lastTick: now, sessions: {}, seenVersion: pluginVersion(), stats: newStats(), achievements: {}, allies: {}, alliesGone: [], dex: {} };
 }
 
 // Shared by all heroes: tokens used, the longest turn (ms), and the counts of heroes replaced
@@ -419,7 +462,9 @@ function newStats() {
 // enemies defeated with an ally at the hero's side, `forged` the reforges, `restedXp` the extra
 // XP that rested kills gave and `fullRests` the times the hero came back to a full rested pool and `nightKills` the night
 // creatures defeated, `candy` the candy eaten, `snowmen` the snowmen defeated and `elites` the
-// elite enemies defeated and `camps` the camps made.
+// elite enemies defeated, `camps` the camps made, and for a trainer `caught` the critters caught
+// and `species` how many of those were new in the dex, `evolutions` the critters that evolved for
+// it and `partners` the partners it had.
 // For /vwc:statistics: `tokens` used while the hero was active, and the Claude turns played with
 // it: how many, their total time (ms) and tokens, the longest and shortest (ms, null before the
 // first) and the most tokens in one. Heroes from before 1.10.0 count these from `countedFrom` on.
@@ -427,7 +472,7 @@ function newTally() {
   const byRarity = () => ({ common: 0, rare: 0, epic: 0, legendary: 0 });
   return {
     maxHit: 0, skillCrits: 0, minis: 0, elders: 0, replaced: 0, found: byRarity(), gear: byRarity(), left: 0,
-    knockouts: 0, closeCalls: 0, potions: 0, maxAreaHits: 0, groups: 0, allies: 0, allyKills: 0, forged: 0, restedXp: 0, fullRests: 0, nightKills: 0, candy: 0, snowmen: 0, elites: 0, camps: 0,
+    knockouts: 0, closeCalls: 0, potions: 0, maxAreaHits: 0, groups: 0, allies: 0, allyKills: 0, forged: 0, restedXp: 0, fullRests: 0, nightKills: 0, candy: 0, snowmen: 0, elites: 0, camps: 0, caught: 0, species: 0, evolutions: 0, partners: 0,
     tokens: 0, turns: 0, turnMs: 0, turnTokens: 0, longestTurn: 0, shortestTurn: null, mostTokens: 0,
   };
 }
@@ -439,7 +484,10 @@ function newLife(h) {
 
 function newHero(cls, now) {
   const c = CLASSES[cls];
-  const awakens = `${c.icon} A new ${c.name.toLowerCase()} awakens`;
+  const partner = c.starter ? speciesOf(c.starter) : null;
+  const awakens = partner
+    ? `${c.icon} ${c.hero} the ${c.name} sets out with ${partner.icon} ${partner.name}`
+    : `${c.icon} A new ${c.name.toLowerCase()} awakens`;
   const h = {
     cls,
     level: 1,
@@ -468,6 +516,11 @@ function newHero(cls, now) {
     msg: { text: awakens, at: now },
     journal: [{ at: now, text: awakens }],
   };
+  // The critter that fights for a trainer: its species, and since when.
+  if (partner) {
+    h.partner = { n: partner.n, since: now };
+    h.tally.partners = 1;
+  }
   return Object.assign(h, newLife(h));
 }
 
@@ -478,13 +531,21 @@ function migrate(s, now = Date.now()) {
     const { v, lastTick, sessions, ...hero } = s;
     s = { v: 2, active: 'mage', heroes: { mage: { ...hero, cls: 'mage' } }, lastTick, sessions };
   }
+  if (!s.dex) {
+    s.dex = {};
+  }
   for (const h of Object.values(s.heroes)) {
+    // A trainer from a test build without a partner gets the starter.
+    if (CLASSES[h.cls] && CLASSES[h.cls].starter && !h.partner) {
+      h.partner = { n: CLASSES[h.cls].starter, since: now };
+    }
+    meetPartner(s, h, now);
     if (!h.skills) {
       grantMissedSkills(h);
     }
     for (const sk of h.skills) {
       if (sk.area == null) {
-        sk.area = CLASSES[h.cls].skills.areaForms.includes(sk.name.split(' ').pop());
+        sk.area = classOf(h).skills.areaForms.includes(sk.name.split(' ').pop());
         if (sk.area) {
           sk.mult = areaMult(sk.mult);
         }
@@ -566,7 +627,7 @@ function pastTally(h) {
 function grantMissedSkills(h) {
   h.skills = [];
   for (let level = 5; level <= h.level; level += 5) {
-    learnSkill(h, rollSkill(h.cls, level, level % 10 === 0));
+    learnSkill(h, rollSkill(classOf(h).skills, level, level % 10 === 0));
   }
 }
 
@@ -655,6 +716,71 @@ function activeHero(root) {
   return root.active ? root.heroes[root.active] || null : null;
 }
 
+// What a hero fights with: its class's range, attack, critical chance, life, basic hit, weapons and
+// skills. Every fight and drawing reads them through here. A trainer fights like the class its
+// partner's type is `like`, with that type's hit and skills, and the species' power multiplying
+// its attack and life.
+function classOf(h) {
+  const c = CLASSES[h.cls];
+  if (!c.starter) {
+    return c;
+  }
+  const key = `${h.cls} ${h.partner.n}`;
+  if (!partnerClasses.has(key)) {
+    const s = speciesOf(h.partner.n);
+    const type = TYPES[s.type];
+    const like = CLASSES[type.like];
+    partnerClasses.set(key, {
+      ...c,
+      range: like.range,
+      atk: like.atk.map(a => a * s.power),
+      crit: like.crit,
+      life: like.life * s.power,
+      hit: type.hit,
+      skills: { power: like.skills.power, parts: type.parts, forms: type.forms, areaForms: type.areaForms },
+    });
+  }
+  return partnerClasses.get(key);
+}
+
+// classOf() of a trainer, by class and partner species, built once.
+const partnerClasses = new Map();
+
+// A species of roster.js, by dex number.
+function speciesOf(n) {
+  return SPECIES_BY_NUMBER.get(n);
+}
+
+// "🐭 Clauchu", the critter that fights for a trainer.
+function partnerName(h) {
+  const s = speciesOf(h.partner.n);
+  return `${s.icon} ${s.name}`;
+}
+
+// " · 🐭 Clauchu" to follow a trainer's name, or nothing for the other classes.
+function partnerTag(h) {
+  return h.partner ? ` · ${partnerName(h)}` : '';
+}
+
+// What stands on the hero's tile: the hero, or a trainer's partner.
+function heroIcon(h) {
+  return h.partner ? speciesOf(h.partner.n).icon : classOf(h).icon;
+}
+
+// Whether `cls` can be played: a class with an `unlock` needs that achievement, and keeps it.
+function isUnlocked(root, cls) {
+  const need = CLASSES[cls].unlock;
+  return !need || Boolean(root.achievements && root.achievements[need]);
+}
+
+// What a locked class waits for: "unlocks when any hero reaches level 50 (best so far: …)".
+function unlockText(root, cls) {
+  const a = ACHIEVEMENTS.find(x => x.id === CLASSES[cls].unlock);
+  const best = Object.values(root.heroes).reduce((b, h) => (!b || h.level > b.level ? h : b), null);
+  const sofar = best ? `best so far: ${CLASSES[best.cls].icon} ${CLASSES[best.cls].name} Lv ${best.level}` : 'no heroes yet';
+  return `unlocks when any hero reaches level ${a.goal} (${sofar})`;
+}
+
 // ---------- activity ----------
 
 function session(root, id, now) {
@@ -689,7 +815,7 @@ function settle(root, now) {
   let steps = 0;
   while (h.carryMs >= STEP_MS) {
     h.carryMs -= STEP_MS;
-    step(h, now, allies);
+    step(h, now, allies, root.dex);
     steps++;
   }
   return steps;
@@ -1052,24 +1178,30 @@ function noticeUpdate(root, now) {
 
 // ---------- character commands (cli.js) ----------
 
+// The class a word names, by its key or `alias` ("bash" is the trainer), or null.
 function classKey(name) {
-  const key = String(name || '').trim().split(/\s+/)[0].toLowerCase();
-  return CLASSES[key] ? key : null;
+  const word = String(name || '').trim().split(/\s+/)[0].toLowerCase();
+  return Object.keys(CLASSES).find(k => k === word || CLASSES[k].alias === word) || null;
 }
 
 function describe(h) {
-  const c = CLASSES[h.cls];
+  const c = classOf(h);
   const skills = h.skills.length > 0 ? ` · ${h.skills.map(s => s.icon).join('')}` : '';
-  return `${c.icon} ${c.name} Lv ${h.level} · ${weaponOf(h).icon} ${weaponOf(h).name}${skills} · ${h.kills} kills · ${whereText(h)}`;
+  return `${c.icon} ${c.name} Lv ${h.level}${partnerTag(h)} · ${weaponOf(h).icon} ${weaponOf(h).name}${skills} · ${h.kills} kills · ${whereText(h)}`;
 }
 
 // Switches the active class, creating that hero on first use. Returns a message for the user.
 function chooseClass(cls, now) {
   let text = '';
   const { saved } = update(now, 3000, root => {
+    if (!isUnlocked(root, cls)) {
+      text = `🔒 The ${CLASSES[cls].icon} ${CLASSES[cls].name} ${unlockText(root, cls)}.`;
+      return;
+    }
     const before = activeHero(root);
     if (!root.heroes[cls]) {
       root.heroes[cls] = newHero(cls, now);
+      meetPartner(root, root.heroes[cls], now);
     }
     root.active = cls;
     const h = root.heroes[cls];
@@ -1103,6 +1235,10 @@ function retire(root, h) {
 function createCharacter(cls, now) {
   let text = '';
   const { saved } = update(now, 3000, root => {
+    if (!isUnlocked(root, cls)) {
+      text = `🔒 The ${CLASSES[cls].icon} ${CLASSES[cls].name} ${unlockText(root, cls)}.`;
+      return;
+    }
     const old = root.heroes[cls];
     if (old) {
       fs.mkdirSync(BACKUP_DIR, { recursive: true });
@@ -1111,9 +1247,12 @@ function createCharacter(cls, now) {
       text = `Your previous ${describe(old)} was backed up to ${path.relative(DIR, file)}.\n`;
       retire(root, old);
     }
-    root.heroes[cls] = newHero(cls, now);
+    const h = newHero(cls, now);
+    root.heroes[cls] = h;
+    meetPartner(root, h, now);
     root.active = cls;
-    text += `A new ${CLASSES[cls].icon} ${CLASSES[cls].name} begins at level 1 in the 🌼 Meadow.`;
+    const partner = h.partner ? `, with ${speciesOf(h.partner.n).icon} ${speciesOf(h.partner.n).name}` : '';
+    text += `A new ${CLASSES[cls].icon} ${CLASSES[cls].name} begins at level 1 in the 🌼 Meadow${partner}.`;
     text += announce(checkAchievements(root, now));
   });
   return saved ? text : 'The save file is busy right now. Try again in a moment.';
@@ -1130,7 +1269,13 @@ function status(now) {
   const lines = Object.keys(CLASSES).map(cls => {
     const h = root.heroes[cls];
     const marker = root.active === cls ? '▶' : ' ';
-    return `${marker} ${h ? describe(h) : `${CLASSES[cls].icon} ${CLASSES[cls].name}: no hero yet (${CLASSES[cls].blurb})`}`;
+    const c = CLASSES[cls];
+    if (h) {
+      return `${marker} ${describe(h)}`;
+    }
+    return isUnlocked(root, cls)
+      ? `${marker} ${c.icon} ${c.name}: no hero yet (${c.blurb})`
+      : `${marker} 🔒 ${c.icon} ${c.name}: ${unlockText(root, cls)}`;
   });
   return lines.join('\n');
 }
@@ -1161,7 +1306,7 @@ function skillsReport(now) {
       continue;
     }
     const c = CLASSES[cls];
-    lines.push(`${root.active === cls ? '▶' : ' '} ${c.icon} ${c.name} Lv ${h.level} · ${h.skills.length} of ${MAX_SKILLS} skills`);
+    lines.push(`${root.active === cls ? '▶' : ' '} ${c.icon} ${c.name} Lv ${h.level}${partnerTag(h)} · ${h.skills.length} of ${MAX_SKILLS} skills`);
     for (const s of h.skills) {
       lines.push(`    ${skillLine(s)}`);
     }
@@ -1173,6 +1318,9 @@ function skillsReport(now) {
   lines.push('The mini boss or boss of every 5th level drops a random skill. It takes a free slot,',
     'or replaces your weaker skill if its power is higher. Area skills hit the target and every',
     `enemy up to ${AREA} tiles behind it, for less damage each.`);
+  if (Object.values(root.heroes).some(h => h.partner)) {
+    lines.push('A trainer\'s skills belong to his partner and come from its type: a new partner brings its own.');
+  }
   return lines.join('\n');
 }
 
@@ -1198,7 +1346,7 @@ function gearReport(now) {
       }
     }
     const worn = Object.keys(h.gear).length;
-    lines.push(`${root.active === cls ? '▶' : ' '} ${c.icon} ${c.name} Lv ${h.level} · ${worn} of ${Object.keys(GEAR_SLOTS).length} slots · ${worn > 0 ? statsText(total) : 'no gear yet'} · 💗 ${maxLife(h)} life · 🔩 ${h.shards}/${nextReforge(h).cost} shards`);
+    lines.push(`${root.active === cls ? '▶' : ' '} ${c.icon} ${c.name} Lv ${h.level}${h.partner ? ` · worn by ${partnerName(h)}` : ''} · ${worn} of ${Object.keys(GEAR_SLOTS).length} slots · ${worn > 0 ? statsText(total) : 'no gear yet'} · 💗 ${maxLife(h)} life · 🔩 ${h.shards}/${nextReforge(h).cost} shards`);
     for (const [slot, g] of Object.entries(GEAR_SLOTS)) {
       const item = h.gear[slot];
       const what = item
@@ -1216,6 +1364,9 @@ function gearReport(now) {
     `worn in its slot is equipped; a weaker one is salvaged into 🔩 shards (${shards}).`,
     `Shards reforge your weakest piece: +1 to its biggest stat, and +1 on its name. A piece's first`,
     `reforge costs ${REFORGE_COST} shards, its second ${REFORGE_COST * 2}, its third ${REFORGE_COST * 3}, and so on.`);
+  if (Object.values(root.heroes).some(h => h.partner)) {
+    lines.push('A trainer\'s gear fits whichever partner fights for him, and stays when a new one takes over.');
+  }
   return lines.join('\n');
 }
 
@@ -1320,7 +1471,7 @@ function statisticsReport(now) {
     }
     const c = CLASSES[cls];
     const w = weaponOf(h);
-    lines.push('', `${root.active === cls ? '▶' : ' '} ${c.icon} ${c.name} Lv ${h.level} · ${w.icon} ${w.name} · ${whereText(h)}`, ...heroStatistics(h));
+    lines.push('', `${root.active === cls ? '▶' : ' '} ${c.icon} ${c.name} Lv ${h.level}${partnerTag(h)} · ${w.icon} ${w.name} · ${whereText(h)}`, ...heroStatistics(h));
   }
   if (lines.length === 1) {
     return `No heroes yet. Pick one with ${COMMAND_PREFIX}chooseclass.`;
@@ -1371,7 +1522,7 @@ function cardReport(arg, now) {
 }
 
 function heroCard(root, h) {
-  const c = CLASSES[h.cls];
+  const c = classOf(h);
   const t = h.tally;
   const w = weaponOf(h);
   const title = `${c.icon} ${c.name} · Level ${h.level}`;
@@ -1400,7 +1551,7 @@ function heroCard(root, h) {
   work.push(`🏅 ${earnedCount(root)} of ${ACHIEVEMENTS.length} achievements`);
   const link = String(manifest().homepage || '').replace(/^https?:\/\//, '');
   const footer = ['VibeWorkCompanion', pluginVersion(), link && `· ${link}`].filter(Boolean).join(' ');
-  const lines = [[`${w.icon} ${w.name}`, ...skills].join(' · '), fights.join(' · '), gear, work.join(' · ')];
+  const lines = [[...(h.partner ? [partnerName(h)] : []), `${w.icon} ${w.name}`, ...skills].join(' · '), fights.join(' · '), gear, work.join(' · ')];
   const width = Math.max(displayWidth(title), displayWidth(footer)) + 6;
   const rule = text => `─ ${text} ${'─'.repeat(Math.max(3, width - displayWidth(text)))}`;
   return [`╭${rule(title)}`, ...lines.map(l => `│ ${l}`), `╰${rule(footer)}`].join('\n');
@@ -1477,6 +1628,71 @@ function journalReport(arg, now) {
     lines.push(`${tips.join(', and ')}.`);
   }
   return lines.join('\n');
+}
+
+// /vwc:dex: what the trainers caught, by biome (and at night, and the legendaries), the partner, and
+// the last species new in the dex. `arg` "all" lists every species instead of the last ones:
+// caught (when, and how many times), seen, or not met yet (only where to look).
+function dexReport(arg, now) {
+  const root = loadSaved(now);
+  const word = String(arg || '').trim().toLowerCase();
+  const usage = `Usage: ${COMMAND_PREFIX}dex, or ${COMMAND_PREFIX}dex all for all ${SPECIES.length} critters`;
+  if (word && word !== 'all') {
+    return `"${String(arg).trim()}" is not "all". ${usage}`;
+  }
+  const cls = Object.keys(CLASSES).find(k => CLASSES[k].starter);
+  const c = CLASSES[cls];
+  if (!isUnlocked(root, cls)) {
+    return `📕 Dex · the ${c.icon} ${c.name} ${unlockText(root, cls)}.\n`
+      + `He catches critters as he fights, and the dex keeps all ${SPECIES.length} of them.`;
+  }
+  const dex = root.dex;
+  const caught = s => isCaught(dex, s.n);
+  const lines = [`📕 Dex · ${caughtCount(dex)} of ${SPECIES.length} caught · ${Object.keys(dex).length} seen`, ''];
+  const groups = [
+    ...BIOMES.map(b => [`${b.icon} ${b.name}`, SPECIES.filter(s => s.where === b.name)]),
+    ['🌟 Legendaries', SPECIES.filter(s => s.where === 'legend')],
+    ['🌙 At night', SPECIES.filter(s => s.night)],
+  ].map(([label, list]) => `${label} ${list.filter(caught).length}/${list.length}`);
+  lines.push(`  ${groups.slice(0, 4).join(' · ')}`, `  ${groups.slice(4).join(' · ')}`);
+  const h = root.heroes[cls];
+  if (h) {
+    const s = speciesOf(h.partner.n);
+    lines.push(`  Partner: ${s.icon} ${s.name} (${s.type}, since ${localDate(h.partner.since)}) · ${plural(h.tally.partners || 1, 'partner')} so far`);
+  } else {
+    lines.push(`  No ${c.name.toLowerCase()} yet: ${COMMAND_PREFIX}chooseclass ${cls}`);
+  }
+  if (word === 'all') {
+    lines.push('', ...SPECIES.map(s => dexLine(s, dex)));
+  } else {
+    const recent = SPECIES.filter(caught).sort((a, b) => dex[b.n].at - dex[a.n].at).slice(0, 10);
+    if (recent.length > 0) {
+      lines.push('', 'Last new in the dex:');
+      for (const s of recent) {
+        lines.push(`  ${localDate(dex[s.n].at)} ${localTime(dex[s.n].at)}  #${String(s.n).padStart(3, '0')} ${s.icon} ${s.name}`);
+      }
+    }
+  }
+  lines.push('', `${c.hero} catches critters on his own: now and then a defeated critter is caught, and it grows to his level.`,
+    `Bosses are caught ${CATCH_BOSS * 100}% of the time and legendaries always. Species not caught yet show up more often.`);
+  if (word !== 'all') {
+    lines.push(`${COMMAND_PREFIX}dex all lists all ${SPECIES.length}.`);
+  }
+  return lines.join('\n');
+}
+
+// One species in /vwc:dex all. One not met yet shows only where to look, and the secret one nothing.
+function dexLine(s, dex) {
+  const e = dex[s.n];
+  const number = `#${String(s.n).padStart(3, '0')}`;
+  const b = BIOMES.find(x => x.name === s.where);
+  const where = b ? `${b.icon} ${b.name}` : s.secret ? '' : `🌟 Elder boss, Lv ${s.legend}`;
+  const notes = [s.night && '🌙 night', s.rare && 'rare', s.boss && 'zone boss'].filter(Boolean).join(', ');
+  if (!e) {
+    return `  ${number}    ${padCols('???', 13)} ${''.padEnd(9)} ${s.secret ? 'a secret' : `${padCols(where, 22)}${notes}`}`.trimEnd();
+  }
+  const status = e.caught > 0 ? `✅ ${localDate(e.at)}${e.caught > 1 ? ` ×${e.caught}` : ''}` : '👀 seen';
+  return `  ${number} ${s.icon} ${padCols(s.name, 13)} ${s.type.padEnd(9)} ${padCols(where, 22)}${padCols(status, 17)} ${notes}`.trimEnd();
 }
 
 // ---------- display (cli.js: hide / show / stats / progress) ----------
@@ -1612,11 +1828,11 @@ function xpNeed(level) {
 }
 
 function weaponOf(h) {
-  return CLASSES[h.cls].weapons.filter(w => h.level >= w.lvl).pop();
+  return classOf(h).weapons.filter(w => h.level >= w.lvl).pop();
 }
 
 function attackOf(h) {
-  const [base, perLevel] = CLASSES[h.cls].atk;
+  const [base, perLevel] = classOf(h).atk;
   return Math.round(base + perLevel * h.level) + weaponOf(h).atk;
 }
 
@@ -1655,9 +1871,6 @@ function makeEnemy(x, zone, rank = 'normal', now = Date.now(), forced = null, le
     foe.atk = Math.max(1, Math.round(foe.atk * ahead));
     foe.xp = Math.round(foe.xp * ahead);
   }
-  if (rank === 'normal' && Math.random() < ELITE_CHANCE * (isNight(now) ? 2 : 1)) {
-    makeElite(foe);
-  }
   return foe;
 }
 
@@ -1670,6 +1883,13 @@ function paceLevel(x) {
 function aheadScale(level, x) {
   const ahead = level - paceLevel(x) - PACE_SLACK;
   return 1 + Math.min(AHEAD_MAX, Math.max(0, ahead) * AHEAD_SCALE);
+}
+
+// ELITE_CHANCE of the usual enemies (twice that at night) are elite. Critters never are.
+function rollElite(foe, now) {
+  if (Math.random() < ELITE_CHANCE * (isNight(now) ? 2 : 1)) {
+    makeElite(foe);
+  }
 }
 
 function makeElite(foe) {
@@ -1705,16 +1925,28 @@ function enemyAttack(zone, rank) {
 
 function maxLife(h) {
   const [base, perLevel, power] = HERO_LIFE;
-  return Math.round((base + perLevel * Math.pow(h.level, power)) * CLASSES[h.cls].life * (1 + gearBonus(h, 'life') / 100));
+  return Math.round((base + perLevel * Math.pow(h.level, power)) * classOf(h).life * (1 + gearBonus(h, 'life') / 100));
 }
 
-function spawnAhead(h, now) {
+// Spawns what comes into view: groups of enemies, and each zone's boss at its end. On a trainer's
+// map some spawns are a wild critter instead, the zone boss is a critter too, and `dex` makes the
+// species not caught yet come more often.
+function spawnAhead(h, now, dex = null) {
   while (h.nextSpawnX <= h.heroX + VIEW_AHEAD) {
     const bossX = (h.bossZone + 1) * ZONE_LENGTH;
     if (h.nextSpawnX >= bossX - 3) {
-      h.enemies.push(makeEnemy(bossX, h.bossZone, 'boss', now, null, h.level));
+      h.enemies.push(h.partner
+        ? makeCritter(bossSpecies(h.bossZone), bossX, h.bossZone, 'boss', now, h.level)
+        : makeEnemy(bossX, h.bossZone, 'boss', now, null, h.level));
       h.bossZone++;
       h.nextSpawnX = bossX + randInt(6, 12);
+    } else if (h.partner && Math.random() < WILD_SHARE) {
+      const s = wildSpecies(h.bossZone, now, dex);
+      h.enemies.push(makeCritter(s, h.nextSpawnX, h.bossZone, 'normal', now, h.level));
+      h.nextSpawnX += randInt(5, 12);
+      if (s.secret) {
+        setMsg(h, `✨ Something rare stirs ahead: ${s.icon} ${s.name}`, now);
+      }
     } else {
       // A group's enemies share `group` (where it spawned), so they fight together.
       const size = Math.min(groupSize(), bossX - 1 - h.nextSpawnX);
@@ -1722,6 +1954,7 @@ function spawnAhead(h, now) {
       const wave = size > 1 && s && s.wave && Math.random() < GHOST_WAVE ? s.wave : null;
       for (let i = 0; i < size; i++) {
         const foe = makeEnemy(h.nextSpawnX + i, h.bossZone, 'normal', now, wave, h.level);
+        rollElite(foe, now);
         if (size > 1) {
           foe.group = h.nextSpawnX;
           foe.hp = foe.max = Math.max(1, Math.round(foe.max * GROUP_MEMBER));
@@ -1756,18 +1989,29 @@ function groupOf(h, foe) {
 // in range.
 function summon(h, rank, now) {
   const zoneBossX = (h.bossZone + 1) * ZONE_LENGTH;
-  let x = h.heroX + CLASSES[h.cls].range + 3;
+  let x = h.heroX + classOf(h).range + 3;
   while (x === zoneBossX || h.enemies.some(e => e.x === x)) {
     x++;
   }
-  const foe = makeEnemy(x, zoneOf(x), rank, now, null, h.level);
+  // A trainer's mini boss is a Giant critter of the biome, and his Elder boss its boss species, or
+  // the legendary of that level.
+  const legend = h.partner && rank === 'elder' ? SPECIES.find(s => s.legend === h.level) : null;
+  let foe;
+  if (legend) {
+    foe = makeCritter(legend, x, zoneOf(x), rank, now, h.level);
+    foe.name = legend.name;
+  } else if (h.partner) {
+    foe = makeCritter(rank === 'elder' ? bossSpecies(zoneOf(x)) : wildSpecies(zoneOf(x), now, null), x, zoneOf(x), rank, now, h.level);
+  } else {
+    foe = makeEnemy(x, zoneOf(x), rank, now, null, h.level);
+  }
   foe.drop = h.level;
   h.enemies.push(foe);
   h.enemies.sort((a, b) => a.x - b.x);
   if (x >= h.nextSpawnX) {
     h.nextSpawnX = x + randInt(5, 12);
   }
-  setMsg(h, `${RANKS[rank].news}: ${foe.icon} ${foe.name}`, now);
+  setMsg(h, legend ? `🌟 A legendary appears: ${foe.icon} ${foe.name}` : `${RANKS[rank].news}: ${foe.icon} ${foe.name}`, now);
 }
 
 // ---------- skills ----------
@@ -1800,13 +2044,14 @@ function luckyRarity(lucky) {
 // A random skill found at `level`: a special attack that hits for `mult` x damage every `cd`
 // steps, plus a passive bonus to all damage or to the critical chance. Skills found later roll
 // stronger, so they can replace old ones. A longer cooldown comes with a bigger multiplier.
-// The form decides whether it's an area skill, which hits several enemies for less.
-function rollSkill(cls, level, lucky) {
-  const c = CLASSES[cls].skills;
+// The form decides whether it's an area skill, which hits several enemies for less. `c` is what
+// the hero's class rolls its skills from: `classOf(h).skills`. `fixed` gives the rarity instead
+// of rolling it (a trainer's new partner keeps the rarities of the skills it replaces).
+function rollSkill(c, level, lucky, fixed = null) {
   const [icon, first] = pick(c.parts);
   const form = pick([...c.forms, ...c.areaForms]);
   const area = c.areaForms.includes(form);
-  const rarity = luckyRarity(lucky);
+  const rarity = fixed || luckyRarity(lucky);
   const spread = () => 0.85 + Math.random() * 0.3;
   const cd = randInt(6, 16);
   const strength = (1 + 0.75 * Math.sqrt(level)) * rarity.power * c.power * spread();
@@ -1856,7 +2101,7 @@ function learnSkill(h, s) {
 
 // What the boss of milestone `level` drops; a boss of a 10th level is lucky with rarity.
 function dropSkill(h, level, now) {
-  const s = rollSkill(h.cls, level, level % 10 === 0);
+  const s = rollSkill(classOf(h).skills, level, level % 10 === 0);
   const { kept, replaced } = learnSkill(h, s);
   h.tally.found[s.rarity]++;
   const found = `${s.icon} ${s.name} (${s.rarity})`;
@@ -2023,8 +2268,8 @@ function achievementFacts(root, now, worked) {
     // A zone's boss must be beaten to leave it, so this is also how many zone bosses fell.
     zone: best(h => zoneOf(h.heroX)),
     level: best(h => h.level),
-    heroes: heroes.length,
-    everyClass: Math.min(...Object.keys(CLASSES).map(k => (root.heroes[k] ? root.heroes[k].level : 0))),
+    heroes: BASE_CLASSES.filter(k => root.heroes[k]).length,
+    everyClass: Math.min(...BASE_CLASSES.map(k => (root.heroes[k] ? root.heroes[k].level : 0))),
     heldSkills: best(h => h.skills.length),
     heldLegendary: best(h => h.skills.filter(s => s.rarity === 'legendary').length),
     gearWorn: best(h => Object.keys(h.gear).length),
@@ -2052,6 +2297,9 @@ function checkAchievements(root, now, worked = false) {
   }
   if (h) {
     news(h, `🏅 ${earned.length > 1 ? 'Achievements' : 'Achievement'}: ${earned.map(a => a.name).join(', ')}`, now);
+    for (const c of Object.values(CLASSES).filter(x => earned.some(a => a.id === x.unlock))) {
+      news(h, c.unlocked, now);
+    }
   }
   return earned;
 }
@@ -2088,7 +2336,7 @@ function gainXp(h, xp, now) {
   if (xp <= 0) {
     return 0;
   }
-  const c = CLASSES[h.cls];
+  const c = classOf(h);
   xp = Math.round(xp * (1 + gearBonus(h, 'xp') / 100));
   h.xp += xp;
   h.totalXp += xp;
@@ -2114,7 +2362,7 @@ function gainXp(h, xp, now) {
 
 // The nearest enemy within the class's range, which the hero is fighting.
 function targetOf(h) {
-  return h.enemies.find(e => e.x > h.heroX && e.x <= h.heroX + CLASSES[h.cls].range);
+  return h.enemies.find(e => e.x > h.heroX && e.x <= h.heroX + classOf(h).range);
 }
 
 // The nearest enemy ahead. Only it and its group close in and attack, so fights stay one at a time.
@@ -2130,35 +2378,40 @@ function reachOf(foe) {
 // One second of work: the hero walks, or attacks the nearest enemy within its range (and its
 // `allies` with it); then the nearest enemy closes in or strikes back. Out of combat, life comes
 // back. A knocked out hero only rests, and so does one sitting by its camp's fire. Every step
-// spends a second of rested XP and of a camp's buff.
-function step(h, now, allies = []) {
+// spends a second of rested XP and of a camp's buff. A trainer catches critters into `dex`, and
+// his partner evolves when he reaches its evolution level.
+function step(h, now, allies = [], dex = null) {
   h.step++;
-  spawnAhead(h, now);
+  spawnAhead(h, now, dex);
   if (h.down > 0) {
     h.down--;
     if (h.down === 0) {
       h.life = maxLife(h);
-      setMsg(h, `💪 Back on your feet, +${Math.round(h.rally * RALLY * 100)}% damage until the next win`, now);
+      const up = h.partner ? `${partnerName(h)} is back up` : 'Back on your feet';
+      setMsg(h, `💪 ${up}, +${Math.round(h.rally * RALLY * 100)}% damage until the next win`, now);
     }
   } else if (h.resting > 0) {
     h.resting--;
   } else {
-    const attacked = heroTurn(h, now, allies.length > 0);
+    const attacked = heroTurn(h, now, allies.length > 0, dex);
     if (attacked && allies.length > 0) {
-      allyTurn(h, allies, now);
+      allyTurn(h, allies, now, dex);
     }
     const fought = enemyTurn(h, now) || attacked;
     if (!fought) {
       h.life = Math.min(maxLife(h), h.life + Math.ceil(maxLife(h) * REGEN));
     }
   }
+  if (h.partner && dex && h.down === 0) {
+    growPartner(h, now, dex);
+  }
   h.rested = Math.max(0, h.rested - STEP_MS);
   h.camped = Math.max(0, h.camped - STEP_MS);
 }
 
 // The hero's half of a step. Returns whether it attacked. `allied`: an ally is at its side.
-function heroTurn(h, now, allied) {
-  const c = CLASSES[h.cls];
+function heroTurn(h, now, allied, dex) {
+  const c = classOf(h);
   const foe = targetOf(h);
   if (!foe) {
     h.heroX++;
@@ -2222,7 +2475,7 @@ function heroTurn(h, now, allied) {
       h.tally.closeCalls++;
     }
     for (const e of dead) {
-      defeat(h, e, now, allied);
+      defeat(h, e, now, allied, dex);
     }
   }
   return true;
@@ -2236,7 +2489,7 @@ function basicHit(h) {
 
 // After the hero's attack, each ally strikes the hero's target (the next one in range if that one
 // fell) for ALLY_DAMAGE of the hero's basic hit. Their shots fly like the hero's, a tile apart.
-function allyTurn(h, allies, now) {
+function allyTurn(h, allies, now, dex) {
   const dmg = Math.max(1, Math.round(basicHit(h) * ALLY_DAMAGE));
   const shots = [];
   allies.forEach((a, i) => {
@@ -2251,13 +2504,14 @@ function allyTurn(h, allies, now) {
       if (h.life < maxLife(h) * 0.1) {
         h.tally.closeCalls++;
       }
-      defeat(h, foe, now, true);
+      defeat(h, foe, now, true, dex);
     }
   });
   h.allyFx = { step: h.step, list: shots };
 }
 
-function defeat(h, foe, now, allied = false) {
+// A defeated critter may be caught into `dex` (see tryCatch).
+function defeat(h, foe, now, allied = false, dex = null) {
   h.kills++;
   if (allied) {
     h.tally.allyKills++;
@@ -2283,6 +2537,9 @@ function defeat(h, foe, now, allied = false) {
   if (foe.drop) {
     h.tally[foe.drop % 10 === 0 ? 'elders' : 'minis']++;
     dropSkill(h, foe.drop, now);
+  }
+  if (foe.critter && dex) {
+    tryCatch(h, foe, now, dex);
   }
   if (foe.elite) {
     h.tally.elites++;
@@ -2371,7 +2628,195 @@ function knockOut(h, group, now) {
     foe.hp = foe.max;
   }
   const more = group.length > 1 ? ` and ${group.length - 1} more` : '';
-  news(h, `😵 Knocked out by ${group[0].icon} ${group[0].name}${more}! Resting for ${KO_STEPS} s`, now);
+  const by = `${group[0].icon} ${group[0].name}${more}`;
+  news(h, h.partner ? `😵 ${partnerName(h)} fainted against ${by}! Resting for ${KO_STEPS} s` : `😵 Knocked out by ${by}! Resting for ${KO_STEPS} s`, now);
+}
+
+// ---------- critters ----------
+
+// One of `list`, each as likely as its weight.
+function pickWeighted(list, weight) {
+  const weights = list.map(weight);
+  let r = Math.random() * weights.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < list.length; i++) {
+    if (r < weights[i]) {
+      return list[i];
+    }
+    r -= weights[i];
+  }
+  return list[list.length - 1];
+}
+
+// A wild critter for `zone`: one of its biome's, by spawn weight (`rare`). Evolved forms only
+// spawn from zone EVOLVED_FROM[stage] on, night critters by day only NIGHT_BY_DAY as often, and a
+// species not caught yet in `dex` (when given) MISSING_WEIGHT times as often. Once `dex` has every
+// other species, the secret one is SECRET_CHANCE of them, in any biome.
+function wildSpecies(zone, now, dex) {
+  if (dex && !isCaught(dex, SECRET.n) && caughtCount(dex) >= SPECIES.length - 1 && Math.random() < SECRET_CHANCE) {
+    return SECRET;
+  }
+  const night = isNight(now);
+  const list = WILD[biomeOf(zone).name].filter(s => s.stage === 1 || zone >= EVOLVED_FROM[s.stage]);
+  return pickWeighted(list, s => (s.rare || 1)
+    * (s.night && !night ? NIGHT_BY_DAY : 1)
+    * (dex && !isCaught(dex, s.n) ? MISSING_WEIGHT : 1));
+}
+
+// The species that is `zone`'s boss on a trainer's map.
+function bossSpecies(zone) {
+  return BOSS_SPECIES[biomeOf(zone).name];
+}
+
+// Species `s` as an enemy of rank `rank`, with the usual life, damage and XP. Types that fight
+// from a distance shoot their hit at the hero. `critter` (its species) marks it as one to catch,
+// and `legend` one that is always caught.
+function makeCritter(s, x, zone, rank, now, level) {
+  const type = TYPES[s.type];
+  const foe = makeEnemy(x, zone, rank, now, [s.icon, s.name, type.like === 'warrior' ? null : type.hit], level);
+  foe.critter = s.n;
+  if (s.where === 'legend') {
+    foe.legend = true;
+  }
+  if (s.night) {
+    foe.night = true;
+  }
+  return foe;
+}
+
+// The dex (root.dex) keeps, by species number, when it was first `seen` and first caught (`at`),
+// and how many times it was `caught`. A species is seen once it was fought.
+function see(dex, n, now) {
+  if (!dex[n]) {
+    dex[n] = { seen: now, caught: 0, at: null };
+  }
+  return dex[n];
+}
+
+// Registers a catch of species `n`. Returns whether it's new in the dex.
+function register(dex, n, now) {
+  const e = see(dex, n, now);
+  e.caught++;
+  if (e.at != null) {
+    return false;
+  }
+  e.at = now;
+  return true;
+}
+
+function isCaught(dex, n) {
+  return Boolean(dex[n] && dex[n].caught > 0);
+}
+
+// How many species the dex has caught.
+function caughtCount(dex) {
+  return Object.values(dex).filter(e => e.caught > 0).length;
+}
+
+// A trainer's partner is in the dex, from the starter on.
+function meetPartner(root, h, now) {
+  if (h.partner && !isCaught(root.dex, h.partner.n)) {
+    register(root.dex, h.partner.n, now);
+  }
+}
+
+// A defeated critter is caught CATCH of the time, times the ball's `catch`, a boss CATCH_BOSS of
+// the time, and a legendary always; the ball shows where it fell. A species new in the dex is news, a repeat only shows
+// on the stats row, and one that got away is at least seen. A catch grows to Bash's level (see
+// evolutionOf), and may then take the partner's place (see considerSwap).
+function tryCatch(h, foe, now, dex) {
+  const s = speciesOf(foe.critter);
+  const ball = weaponOf(h);
+  if (!foe.legend && Math.random() >= (foe.boss ? CATCH_BOSS : CATCH * ball.catch)) {
+    see(dex, s.n, now);
+    return;
+  }
+  h.tally.caught++;
+  let fresh = register(dex, s.n, now) ? 1 : 0;
+  // It grows to Bash's level: it goes through every evolution level he has passed, and each form
+  // goes in the dex.
+  const grown = [];
+  for (let next = evolutionOf(h, s, dex); next; next = evolutionOf(h, next, dex)) {
+    grown.push(next);
+    fresh += register(dex, next.n, now) ? 1 : 0;
+  }
+  h.tally.species += fresh;
+  h.tally.evolutions += grown.length;
+  if (!(h.fx && h.fx.hits && h.fx.step === h.step)) {
+    h.fx = { icon: ball.icon, x: foe.x, step: h.step };
+  }
+  const evolved = grown.length > 0 ? `, ✨ it evolved into ${grown.map(g => `${g.icon} ${g.name}`).join(', then ')}` : '';
+  if (fresh > 0) {
+    const the = s.where === 'legend' ? 'the legendary ' : '';
+    news(h, `${ball.icon} Caught ${the}${s.icon} ${s.name}${evolved}! 📕 ${caughtCount(dex)}/${SPECIES.length}`, now);
+    if (caughtCount(dex) === SPECIES.length) {
+      news(h, `📕 The dex is complete: all ${SPECIES.length} critters caught!`, now);
+    }
+  }
+  if (!considerSwap(h, grown.length > 0 ? grown[grown.length - 1] : s, now) && fresh === 0) {
+    setMsg(h, `${ball.icon} Caught another ${s.icon} ${s.name}${evolved}`, now);
+  }
+}
+
+// What species `s` evolves into for trainer `h` now, or null: once he's past its evolution level,
+// one of its forms (one not caught yet first, when it has several). The starter never evolves.
+function evolutionOf(h, s, dex) {
+  if (!s.evolves || s.stays || h.level < s.evolves.at) {
+    return null;
+  }
+  const forms = [].concat(s.evolves.to).map(speciesOf);
+  const missing = forms.filter(f => !isCaught(dex, f.n));
+  return pick(missing.length > 0 ? missing : forms);
+}
+
+// The partner evolves when Bash reaches its evolution level, keeping its skills, and goes in the
+// dex. A caught critter has already grown to his level, so only a later level up does this.
+function growPartner(h, now, dex) {
+  const s = speciesOf(h.partner.n);
+  const next = evolutionOf(h, s, dex);
+  if (!next) {
+    return;
+  }
+  const max = maxLife(h);
+  h.partner = { ...h.partner, n: next.n };
+  h.life = Math.max(1, Math.round((h.life * maxLife(h)) / max));
+  h.tally.evolutions++;
+  if (register(dex, next.n, now)) {
+    h.tally.species++;
+  }
+  news(h, `✨ ${s.icon} ${s.name} evolved into ${next.icon} ${next.name}! 📕 ${caughtCount(dex)}/${SPECIES.length}`, now);
+}
+
+// How strong a hero is in a fight: its damage per step (basic hits, critical hits and skills)
+// times its life.
+function strength(h) {
+  const basic = basicHit(h);
+  const skills = h.skills.reduce((sum, s) => sum + (basic * (s.mult - 1)) / s.cd, 0);
+  const crit = classOf(h).crit + (skillBonus(h, 'crit') + gearBonus(h, 'crit')) / 100;
+  return (basic + skills) * (1 + crit) * maxLife(h);
+}
+
+// A caught species stronger than the partner takes its place if that leaves the hero stronger
+// (see strength). It brings its own skills, as many as the partner had, rolled for its type at the
+// same levels and rarities. The gear stays with Bash and fits the new partner. The old partner
+// leaves with its skills, and stays in the dex. Returns whether it took the partner's place.
+function considerSwap(h, s, now) {
+  const old = speciesOf(h.partner.n);
+  if (s.power <= old.power) {
+    return false;
+  }
+  const next = { ...h, partner: { n: s.n, since: now } };
+  next.skills = h.skills.map(k => rollSkill(classOf(next).skills, k.level, false, RARITIES.find(r => r.name === k.rarity)));
+  if (strength(next) <= strength(h)) {
+    return false;
+  }
+  const max = maxLife(h);
+  h.partner = next.partner;
+  h.skills = next.skills;
+  h.life = Math.max(1, Math.round((h.life * maxLife(h)) / max));
+  h.tally.partners++;
+  const skills = h.skills.length > 0 ? ` · its skills: ${h.skills.map(k => `${k.icon} ${k.name}`).join(', ')}` : '';
+  news(h, `🔄 ${s.icon} ${s.name} is your new partner, in place of ${old.icon} ${old.name}${skills}`, now);
+  return true;
 }
 
 // ---------- day and night ----------
@@ -2561,7 +3006,7 @@ function targetText(h, active) {
 }
 
 function statsRow(root, h, now, active, cols) {
-  const c = CLASSES[h.cls];
+  const c = classOf(h);
   const need = xpNeed(h.level);
   const filled = Math.min(10, Math.floor((h.xp / need) * 10));
   const bar = '▰'.repeat(filled) + '▱'.repeat(10 - filled);
@@ -2587,10 +3032,12 @@ function statsRow(root, h, now, active, cols) {
   // [text, priority]: lower priority is dropped first when the row is too wide.
   const parts = [
     [`${c.icon} ${c.name} ${color(GOLD, `Lv ${h.level}`)} ${color('38;2;167;139;250', bar)} ${h.xp}/${need} XP`, 6],
+    [h.partner ? partnerName(h) : null, 4.4],
     [`${w.icon} ${w.name}`, 4],
     [skills, 1],
     [color(b.color, whereText(h)) + (isNight(now) ? ' 🌙' : '') + (season(now) ? ` ${season(now).icon}` : ''), 3],
     [`💀 ${h.kills}`, 2],
+    [h.partner ? `📕 ${caughtCount(root.dex || {})}/${SPECIES.length}` : null, 1.5],
     [targetText(h, active), 4.5],
     [status && color(...status), 5],
   ].filter(p => p[0]);
@@ -2645,7 +3092,7 @@ function lifeRow(h, active, room, now) {
   }
   const parts = [text];
   if (h.down > 0) {
-    parts.push(color(ENEMY_RED, `😵 knocked out, back up in ${h.down} s`));
+    parts.push(color(ENEMY_RED, `😵 ${h.partner ? 'fainted' : 'knocked out'}, back up in ${h.down} s`));
   }
   if (h.potions > 0) {
     parts.push(`🧪 ${h.potions}`);
@@ -2677,9 +3124,11 @@ function worldTiles(cols) {
   return Math.max(10, Math.min(WORLD_TILES, Math.floor(cols / 2)));
 }
 
-// Allies walk right behind the hero, the first to arrive closest.
+// Allies walk right behind the hero, the first to arrive closest. A trainer's partner stands on the
+// hero's tile, with Bash right behind it, and the allies and a camp one tile further back.
 function worldRow(h, active, cols, allies, now) {
   const tiles = worldTiles(cols);
+  const behind = h.partner ? 1 : 0;
   let row = '';
   for (let i = 0; i < tiles; i++) {
     const x = h.heroX - HERO_COL + i;
@@ -2687,9 +3136,11 @@ function worldRow(h, active, cols, allies, now) {
     const fx = active && h.fx && h.fx.step === h.step ? h.fx : null;
     const shot = active && h.shots && h.shots.step === h.step ? h.shots.list.find(s => s.x === x) : null;
     const allyShot = active && h.allyFx && h.allyFx.step === h.step ? h.allyFx.list.find(s => s.x === x) : null;
-    const ally = allies[h.heroX - 1 - x];
+    const ally = allies[h.heroX - 1 - behind - x];
     if (x === h.heroX) {
-      row += h.down > 0 ? '😵' : CLASSES[h.cls].icon;
+      row += h.down > 0 ? '😵' : heroIcon(h);
+    } else if (h.partner && x === h.heroX - 1) {
+      row += classOf(h).icon;
     } else if (fx && fx.hits && fx.hits.includes(x)) {
       row += fx.icon;
     } else if (foe) {
@@ -2704,9 +3155,9 @@ function worldRow(h, active, cols, allies, now) {
       row += allyShot.icon;
     } else if (ally) {
       row += ally.icon;
-    } else if (h.camp && x === h.camp.x - 1) {
+    } else if (h.camp && x === h.camp.x - 1 - behind) {
       row += '⛺';
-    } else if (h.camp && x === h.camp.x - 2) {
+    } else if (h.camp && x === h.camp.x - 2 - behind) {
       row += '🔥';
     } else if (h.loot.some(l => l.x === x)) {
       row += h.loot.find(l => l.x === x).icon;
@@ -2761,7 +3212,7 @@ function floorRow(heroX, cols, now) {
 
 // Before the first class is chosen: the three heroes wait in the meadow.
 function pickerRows(cols, now) {
-  const keys = Object.keys(CLASSES);
+  const keys = BASE_CLASSES;
   const title = color(GOLD, `🎭 Choose your hero: ${COMMAND_PREFIX}chooseclass ${keys.join(' | ')}`);
   let world = '';
   for (let i = 0; i < worldTiles(cols); i++) {
@@ -2787,7 +3238,7 @@ function render(root, now, cols) {
       const stats = statsRow(root, h, now, active, cols);
       // The life bar sits right under the XP bar, which follows "<icon> <class> Lv <level> " in the
       // right-aligned stats row; if the life row still doesn't fit there, it ends at the right edge.
-      const c = CLASSES[h.cls];
+      const c = classOf(h);
       const xpCol = cols - displayWidth(stats) + displayWidth(`${c.icon} ${c.name} Lv ${h.level} `);
       const at = Math.max(0, xpCol - displayWidth('💗 '));
       const life = lifeRow(h, active, cols - at, now);
@@ -2801,12 +3252,12 @@ function render(root, now, cols) {
 }
 
 module.exports = {
-  DIR, COMMAND_PREFIX, CLASSES, classKey, chooseClass, createCharacter, status,
+  DIR, COMMAND_PREFIX, CLASSES, BASE_CLASSES, classKey, isUnlocked, speciesOf, chooseClass, createCharacter, status,
   display, partKey, setVisible, placeKey, setStatsPlace, progressKey, setProgress, load, loadSaved,
   pluginVersion, skillsReport,
-  gearReport, achievementsReport, statisticsReport, journalReport, cardReport, earnedCount, ACHIEVEMENTS,
+  gearReport, achievementsReport, statisticsReport, journalReport, cardReport, dexReport, earnedCount, ACHIEVEMENTS,
   onHookEvent, onAgentEvent, onStatusLine, render, displayWidth,
-  newRoot, newHero, migrate, step, xpNeed, attackOf, weaponOf, rollSkill, skillPower, learnSkill,
+  newRoot, newHero, migrate, step, xpNeed, attackOf, weaponOf, classOf, rollSkill, skillPower, learnSkill,
   rollGear, gearPower, gearBonus, gainXp, checkAchievements, achievementFacts, maxLife,
-  makeEnemy, isNight, daylight, season, TRAITS, paceLevel, aheadScale, baseLife,
+  makeEnemy, wildSpecies, caughtCount, strength, evolutionOf, isNight, daylight, season, TRAITS, BIOMES, paceLevel, aheadScale, baseLife,
 };

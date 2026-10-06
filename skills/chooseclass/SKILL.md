@@ -1,7 +1,7 @@
 ---
 name: chooseclass
-description: Switch the VibeWorkCompanion hero to another class (mage, warrior or archer). Each class keeps its own save, so switching back resumes where it left off.
-argument-hint: "[mage|warrior|archer]"
+description: Switch the VibeWorkCompanion hero to another class (mage, warrior or archer, or the trainer once any hero reaches level 50). Each class keeps its own save, so switching back resumes where it left off.
+argument-hint: "[mage|warrior|archer|trainer]"
 disable-model-invocation: true
 model: haiku
 effort: low

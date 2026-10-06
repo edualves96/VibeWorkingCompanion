@@ -1,7 +1,7 @@
 ---
 name: card
 description: Show a short card of a VibeWorkCompanion hero (class, level, weapon, skills, where it is, kills, bosses, best gear, work time and achievements) to paste in Slack or a pull request.
-argument-hint: "[mage|warrior|archer|all]"
+argument-hint: "[mage|warrior|archer|trainer|all]"
 disable-model-invocation: true
 model: haiku
 effort: low
