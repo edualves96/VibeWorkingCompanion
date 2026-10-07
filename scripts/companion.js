@@ -222,6 +222,7 @@ const UPDATE_MSG_MS = 30000;      // the "updated" notice stays longer than othe
 const WHATS_NEW = {
   '1.3.0': 'enemies have life now, and every 5th level summons a boss',
   '1.4.0': `skills are random now, dropped by level bosses: ${COMMAND_PREFIX}skills`,
+  '1.22.1': '🎁 shorter messages for finds, bounties and goblins on the stats row',
   '1.22.0': root => (olderThan(root.seenVersion, '1.21.0')
     ? '🐸 three new biomes (Swamp, Tundra, Sky Islands), 📋 bounties and 💰 treasure goblins'
     : '🐸 three new biomes after the Volcano: 🐸 Swamp, 🧊 Tundra and 🌈 Sky Islands'),
@@ -2018,7 +2019,7 @@ function spawnAhead(h, now, dex = null) {
     } else if (Math.random() < GOBLIN_CHANCE) {
       h.enemies.push(makeGoblin(h.nextSpawnX, h.bossZone, now, h.level));
       h.nextSpawnX += randInt(5, 12);
-      setMsg(h, '💰 A Treasure Goblin ahead: catch it before it gets away', now);
+      setMsg(h, '💰 Treasure Goblin ahead!', now);
     } else if (h.partner && Math.random() < WILD_SHARE) {
       const s = wildSpecies(h.bossZone, now, dex);
       h.enemies.push(makeCritter(s, h.nextSpawnX, h.bossZone, 'normal', now, h.level));
@@ -2186,11 +2187,11 @@ function dropSkill(h, level, now) {
   const found = `${s.icon} ${s.name} (${s.rarity})`;
   if (replaced) {
     h.tally.replaced++;
-    news(h, `🎁 ${found} replaces ${replaced.icon} ${replaced.name}`, now);
+    news(h, `🎁 ${found} ⇄ ${replaced.icon}`, now);
   } else if (kept) {
-    news(h, `🎁 New skill: ${found}`, now);
+    news(h, `🎁 ${found}`, now);
   } else {
-    news(h, `🎁 Found ${found}, weaker than your skills`, now);
+    news(h, `🎁 ${found} (weaker, skipped)`, now);
   }
 }
 
@@ -2242,13 +2243,13 @@ function dropGear(h, x, lucky, now) {
   const old = h.gear[item.slot];
   if (gearPower(item) > gearPower(old)) {
     h.gear[item.slot] = item;
-    news(h, `🎁 ${found} ${old ? `replaces ${gearName(old)}` : 'equipped'}`, now);
+    news(h, `🎁 ${found}${old ? ' ⇄' : ''}`, now);
   } else {
     const shards = RARITIES.find(r => r.name === item.rarity).shards;
     h.tally.left++;
     h.shards += shards;
     h.loot.push({ x, icon: '🔩' });
-    const text = `🎁 ${found} salvaged for 🔩 ${shards}, yours is better`;
+    const text = `🔩 +${shards} ${found}`;
     // Only the salvage of a rare find is worth a line in the journal.
     if (shards >= RARITIES[2].shards) {
       news(h, text, now);
@@ -2512,7 +2513,7 @@ function goblinTurn(h, now) {
     g.ran = (g.ran || 0) + 1;
     if (g.ran > GOBLIN_RUN) {
       h.enemies = h.enemies.filter(e => e !== g);
-      news(h, `💨 The ${g.icon} ${g.name} got away`, now);
+      news(h, `💨 ${g.icon} got away`, now);
     } else if (g.ran % GOBLIN_SPEED === 0 && g.x + 1 < (h.bossZone + 1) * ZONE_LENGTH && !h.enemies.some(e => e.x === g.x + 1)) {
       g.x++;
     }
@@ -2659,7 +2660,7 @@ function defeat(h, foe, now, allied = false, dex = null) {
     h.tally.goblins++;
     h.shards += GOBLIN.shards;
     h.loot.push({ x: foe.x, icon: '💰' });
-    news(h, `💰 Caught the ${foe.name}! 🔩 ${GOBLIN.shards} and a lucky find`, now);
+    news(h, `💰 Goblin caught! 🔩 +${GOBLIN.shards} 🎁`, now);
   }
   // An explosive elite's blast hurts but can't knock the hero out.
   const t = TRAITS[foe.trait];
@@ -2754,17 +2755,6 @@ function knockOut(h, group, now) {
 
 // ---------- bounties ----------
 
-// "Wolf" -> "Wolves", "Rat" -> "Rats".
-function pluralName(name) {
-  if (/f$/.test(name)) {
-    return `${name.slice(0, -1)}ves`;
-  }
-  if (/(s|x|ch|sh)$/.test(name)) {
-    return `${name}es`;
-  }
-  return /[^aeiou]y$/.test(name) ? `${name.slice(0, -1)}ies` : `${name}s`;
-}
-
 // Each biome sets one bounty the hero works on by itself, as it enters (and for a save from before
 // them, at once): defeat some of one of the biome's enemies, defeat a few elites, or beat the
 // zone's boss without a potion or without a knockout. A new zone replaces a bounty not finished;
@@ -2793,17 +2783,17 @@ function rollBounty(h, zone) {
 
 function bountyText(b, h) {
   if (b.kind === 'kill') {
-    return `defeat ${b.goal} ${b.icon} ${pluralName(b.name)}`;
+    return `${b.icon} ×${b.goal}`;
   }
   if (b.kind === 'elite') {
-    return `defeat ${b.goal} elite enemies`;
+    return `💠 ×${b.goal}`;
   }
-  const without = b.rule === 'potion' ? 'a potion' : h.partner ? 'fainting' : 'a knockout';
-  return `beat the ${b.icon} ${b.name} without ${without}`;
+  const without = b.rule === 'potion' ? 'no potion' : h.partner ? 'no fainting' : 'no knockout';
+  return `${b.icon} ${b.name}, ${without}`;
 }
 
 function rewardText(b) {
-  return b.reward === 'shards' ? `🔩 ${BOUNTY_SHARDS}` : b.reward === 'potion' ? '🧪 a potion' : '🎁 a lucky find';
+  return b.reward === 'shards' ? `🔩 ${BOUNTY_SHARDS}` : b.reward === 'potion' ? '🧪' : '🎁';
 }
 
 // The short form on the stats row: "🐺 7/15", "💠 0/2", "🦍 no potion".
@@ -2820,7 +2810,7 @@ function setBounty(h, now) {
   const zone = zoneOf(h.heroX);
   h.bountyZone = zone;
   h.bounty = rollBounty(h, zone);
-  news(h, `📋 Bounty: ${bountyText(h.bounty, h)} · ${rewardText(h.bounty)}`, now);
+  news(h, `📋 ${bountyText(h.bounty, h)} · ${rewardText(h.bounty)}`, now);
 }
 
 // Counts a defeated enemy toward the bounty, and finishes it. The zone's boss is the one boss
@@ -2848,7 +2838,7 @@ function finishBounty(h, now) {
   h.tally.bounties++;
   // A full potion belt turns the potion into shards.
   const reward = b.reward === 'potion' && h.potions >= MAX_POTIONS ? 'shards' : b.reward;
-  news(h, `📋 Bounty done: ${bountyText(b, h)}! ${rewardText({ reward })}`, now);
+  news(h, `📋 ✓ ${bountyText(b, h)} · ${rewardText({ reward })}`, now);
   if (reward === 'potion') {
     h.potions++;
   } else if (reward === 'shards') {
@@ -2864,7 +2854,7 @@ function breakBounty(h, rule, now) {
   const b = h.bounty;
   if (b && b.kind === 'boss' && b.rule === rule) {
     h.bounty = null;
-    news(h, `📋 Bounty failed: ${rule === 'potion' ? 'drank a potion' : h.partner ? `${partnerName(h)} fainted` : 'knocked out'}`, now);
+    news(h, `📋 ✗ ${rule === 'potion' ? 'drank a potion' : h.partner ? `${partnerName(h)} fainted` : 'knocked out'}`, now);
   }
 }
 

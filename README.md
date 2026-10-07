@@ -243,8 +243,8 @@ Every hero starts with no skills. Reaching levels 5, 15, 25… summons a mini bo
 30… a boss; defeating it drops a random skill:
 
 ```
-🏆 Defeated 🦖 Elder Sand Rex! · 🎁 New skill: ⚡ Storm Lance (rare)
-🏆 Defeated 🦅 Giant Vulture! · 🎁 💫 Star Ray (epic) replaces 🌑 Shadow Bolt
+🏆 Defeated 🦖 Elder Sand Rex! · 🎁 ⚡ Storm Lance (rare)
+🏆 Defeated 🦅 Giant Vulture! · 🎁 💫 Star Ray (epic) ⇄ 🌑
 ```
 
 - **What a skill does:** it's a special attack that fires every few seconds for several times the
@@ -284,11 +284,14 @@ time (about one every 3 minutes of work, counting the bosses) and every boss dro
 the rarity twice like a skill from a level 10 boss. Nothing to do on your side:
 
 ```
-🎁 🧤 Iron Grips (rare) equipped
-🎁 🥾 Steel Treads (epic) replaces Iron Boots
-🏆 Defeated 🦍 Ape King! · 🎁 🧣 Steel Spaulders (rare) salvaged for 🔩 2, yours is better
-🎁 🪖 Steel Hood (common) salvaged for 🔩 1, yours is better · 🔩 Reforged 🧤 Iron Grips +1 (+1% damage)
+🎁 🧤 Iron Grips (rare)
+🎁 🥾 Steel Treads (epic) ⇄
+🏆 Defeated 🦍 Ape King! · 🔩 +2 🧣 Steel Spaulders (rare)
+🔩 +1 🪖 Steel Hood (common) · 🔩 Reforged 🧤 Iron Grips +1 (+1% damage)
 ```
+
+The messages are short: 🎁 is a find that was equipped, ⇄ after it that it replaced a piece (or, for a
+skill, the 🎁 skill that it replaced), and 🔩 +N a piece salvaged for N shards because yours is better.
 
 - **What's rolled:** the slot, the rarity (same chances as skills), and the stats: `+% damage`,
   `+% critical chance`, `+% XP` or `+% life`, sometimes two of them. Gear found at higher levels rolls
@@ -356,7 +359,7 @@ The hero's life bar sits right under its XP bar, with the potions it carries, th
   to defeat a number of one of the biome's enemies (about a third of what shows up), to defeat 2
   elites, or to beat the zone's boss without drinking a potion or being knocked out. The reward is
   12 shards, a potion or a lucky piece of gear. The stats row shows it when set and when done, the
-  journal keeps it, and `📋 🐺 7/11` follows the kills on the row while it's open. Break a boss
+  journal keeps it (`📋 🐺 ×11 · 🔩 12`, then `📋 ✓ …` when done), and `📋 🐺 7/11` follows the kills on the row while it's open. Break a boss
   bounty's rule and it fails right then; a bounty not finished when you leave the biome just ends.
   Nothing is taken away. A trainer's bounties ask for critters (and no elites).
 - **Treasure goblins:** about 1 spawn in 80 is a lone 💰 Treasure Goblin with 2 times the life of a
@@ -575,10 +578,10 @@ right above your prompt:
 
 Friday 2026-10-02
   14:21 🧝 🏆 Defeated 🦖 Sand Rex! · Entered 🪦 Graveyard
-  14:25 🧝 🎁 🧤 Iron Grips (epic) salvaged for 🔩 3, yours is better · 🎉 Level 11!
+  14:25 🧝 🔩 +3 🧤 Iron Grips (epic) · 🎉 Level 11!
   14:31 🧝 🔩 Reforged 🥋 Bronze Robe +1 (+1% damage)
   15:01 🧝 🎉 Level 13! · New weapon: 🪶 Fletched Bow
-  15:44 🧝 🏆 Defeated 🦅 Giant Vulture! · 🎁 🔥 Fire Shot (epic) replaces 🔥 Fire Barrage
+  15:44 🧝 🏆 Defeated 🦅 Giant Vulture! · 🎁 🔥 Fire Shot (epic) ⇄ 🔥
 ```
 
 - **What's written down:** level ups, new weapons, new biomes, defeated bosses, skills found, gear
