@@ -45,11 +45,16 @@ rest, drinks its potions and gets back up on its own.
   Winter all December, with snowmen and snow.
 - **Elite enemies:** 1 enemy in 20 (1 in 10 at night) is Swift, Armored, Vampiric or Explosive,
   tougher and better paid.
-- **66 achievements** for kills, groups, bosses, survival, levels, skills, gear, allies, catches, seasons and
+- **Bounties:** each biome sets a short goal on its own (defeat 11 🐺 Wolves, defeat 2 elites, beat
+  the 🦍 Ape King without a potion), paid in shards, a potion or a lucky piece of gear.
+- **Treasure goblins:** now and then a 💰 runs from the hero instead of fighting. Catch it in time
+  and it drops 20 shards and a lucky piece of gear.
+- **70 achievements** for kills, groups, bosses, survival, levels, skills, gear, allies, catches, seasons and
   hours of work, plus a couple of secret ones. 🏅 pops up on the stats row when you earn one.
-- **Seven biomes,** each with its own floor, enemies and a boss every ~17 minutes of work:
-  🌼 Meadow, 🌲 Dark Forest, 💎 Caves, 🌴 Coast, 🌵 Desert, 🪦 Graveyard, 🌋 Volcano. After the
-  Volcano the world loops back to the Meadow, "II", with tougher enemies. The stats row shows how
+- **Ten biomes,** each with its own floor, enemies and a boss every ~17 minutes of work:
+  🌼 Meadow, 🌲 Dark Forest, 💎 Caves, 🌴 Coast, 🌵 Desert, 🪦 Graveyard, 🌋 Volcano, 🐸 Swamp,
+  🧊 Tundra, 🌈 Sky Islands. After the Sky Islands the world loops back to the Meadow, "II", with
+  tougher enemies. The stats row shows how
   far through the current biome you are (`🌴 Coast 37%`); its boss waits at 100%. A 🌙 after it
   means it's night (when elites are twice as common), and a 🎃 or 🎄 that a seasonal event is on.
 - **Level milestones bring bosses:** a ⭐ mini boss (a "Giant" version of a zone enemy) at levels
@@ -347,6 +352,17 @@ The hero's life bar sits right under its XP bar, with the potions it carries, th
   ```
   🤺 Warrior Lv 12 ▰▰▱▱▱▱▱▱▱▱ 512/2429 XP · 🪓 Axe · 🌲 Dark Forest II 64% · 💀 587 · 🐺 Armored Wolf ▰▰▰▰▰▰▰▱▱▱ 590/760 -96
   ```
+- **Bounties:** entering a biome sets one bounty, and the hero works on it by itself. It is either
+  to defeat a number of one of the biome's enemies (about a third of what shows up), to defeat 2
+  elites, or to beat the zone's boss without drinking a potion or being knocked out. The reward is
+  12 shards, a potion or a lucky piece of gear. The stats row shows it when set and when done, the
+  journal keeps it, and `📋 🐺 7/11` follows the kills on the row while it's open. Break a boss
+  bounty's rule and it fails right then; a bounty not finished when you leave the biome just ends.
+  Nothing is taken away. A trainer's bounties ask for critters (and no elites).
+- **Treasure goblins:** about 1 spawn in 80 is a lone 💰 Treasure Goblin with 2 times the life of a
+  normal enemy. It never attacks: once the hero is within 8 tiles it runs a tile every 2 seconds,
+  and after 24 seconds it's gone. Caught, it drops 🔩 20 shards, a lucky piece of gear (rarity
+  rolled twice) and 4 times the XP. About 8 in 10 get caught.
 - **Range matters:** the archer gets about 4 free shots at an enemy walking up to it, the mage 2,
   the warrior 1.
 - **Life** grows with the level and with gear's `+% life`. It comes back while walking between
@@ -485,11 +501,11 @@ update.
 
 ## Achievements
 
-66 achievements, shared by all your heroes. When you earn one, the stats row says
+70 achievements, shared by all your heroes. When you earn one, the stats row says
 `🏅 Achievement: Dragonslayer`. `/vwc:achievements` lists them all, with how close you are:
 
 ```
-🏅 Achievements · 19 of 66 earned
+🏅 Achievements · 19 of 70 earned
 
 Combat
   ✅ First Blood        defeat an enemy                                2026-10-02 🧝
@@ -499,12 +515,12 @@ Combat
 
 | Group | Achievements |
 |-------|--------------|
-| Combat | defeat 1, 100, 1,000 and 10,000 enemies; land a hit of 250 and of 2,500 damage; a critical hit with a skill; hit 4 enemies with one area skill; defeat 500 groups; defeat 100 elites; defeat 50 creatures of the night; be joined by an ally; defeat 100 enemies with one at your side |
-| Bosses | the first zone boss, a mini boss, an Elder boss, 5 Elder bosses, the Dragon of the Volcano, and of Volcano X |
+| Combat | defeat 1, 100, 1,000 and 10,000 enemies; land a hit of 250 and of 2,500 damage; a critical hit with a skill; hit 4 enemies with one area skill; defeat 500 groups; defeat 100 elites; defeat 50 creatures of the night; be joined by an ally; defeat 100 enemies with one at your side; finish a bounty, and 25 |
+| Bosses | the first zone boss, a mini boss, an Elder boss, 5 Elder bosses, the Dragon of the Volcano, and of Volcano X (the 10th time round) |
 | Survival | drink a potion, and 100; win a fight with under 10% life; get knocked out and back up |
-| Journey | levels 5, 10, 20, 30, 35 (the star weapon) and 50 (unlocks the Trainer); reach all 7 biomes; play all three starting classes; all three to level 10 |
+| Journey | levels 5, 10, 20, 30, 35 (the star weapon) and 50 (unlocks the Trainer); reach all 10 biomes; play all three starting classes; all three to level 10 |
 | Skills | find a skill; hold two; replace one; find an epic, and a legendary; hold two legendaries |
-| Gear | find a piece; fill all 6 slots; find an epic, and a legendary; salvage 100 pieces; reforge a piece, and 50 times |
+| Gear | find a piece; fill all 6 slots; find an epic, and a legendary; salvage 100 pieces; reforge a piece, and 50 times; catch a treasure goblin, and 10 |
 | Collection | as the Trainer: catch a critter; have 25, 75 and 150 in the dex, and all 151 (a secret); see a catch evolve; catch a legendary; catch all 14 night critters; have 5 different partners |
 | Seasons | eat 31 pieces of Halloween candy; defeat 100 snowmen in December |
 | Work | 1, 8 and 40 hours of work; 1 million and 10 million tokens; one turn of 30 minutes; come back to a full hour of rested XP; make camp 10 times; two secrets |
@@ -532,6 +548,7 @@ kills, zones, hours of work, level bosses passed and skills held.
     Gear found    13 · 1 epic · 1 legendary · 6 salvaged · 1 reforge
     Survival      2 potions drunk · 0 knockouts · 0 close calls
     Allies        14 allies joined · 287 kills together
+    Bounties      9 bounties done · 2 Treasure Goblins caught
 
 All heroes · 3h11m of work · 1.5M tokens · 1,141 kills · 61 turns · longest turn 15m18s
 ```
@@ -565,7 +582,8 @@ Friday 2026-10-02
 ```
 
 - **What's written down:** level ups, new weapons, new biomes, defeated bosses, skills found, gear
-  equipped, epic and legendary gear salvaged, reforges, knockouts, achievements and updates.
+  equipped, epic and legendary gear salvaged, reforges, knockouts, bounties, treasure goblins,
+  achievements and updates.
   Potions, allies joining and common salvages are left out, since they come often.
 - **One line a minute:** a hero's moments from the same minute share a line, with its icon, so
   the journal of every hero reads as one.
@@ -715,6 +733,8 @@ Everything below is in `scripts/companion.js`.
 | `GROUP_SIZES` | `[0.6, 0.2, 0.12, 0.08]` | Chances that enemies come alone, or in a group of 2, 3 or 4. |
 | `ELITE_CHANCE`, `ELITE` | `0.05` | The share of normal enemies that are elite (twice that at night), and an elite's life, XP, gear and potion multipliers. |
 | `TRAITS` | | The elite traits: name, what it does, and its number (`dodge`, `armor`, `drain`, `blast`). |
+| `GOBLIN_CHANCE`, `GOBLIN`, `GOBLIN_SPEED`, `GOBLIN_RUN` | `0.012`, `{ hp: 2, xp: 4, shards: 20 }`, `2`, `24` | The share of spawns that are a treasure goblin, its life and XP multipliers and its shards, the steps per tile it runs and the steps before it gets away. |
+| `BOUNTY_SHARDS`, `BOUNTY_KILLS`, `BOUNTY_SHARE`, `BOUNTY_ELITES` | `12`, `90`, `0.35`, `2` | A shard bounty's reward, the kills guessed per zone, the share of one enemy's kills a bounty asks for, and the elites an elite bounty asks for. |
 | `GROUP_MEMBER`, `GROUP_GAP` | `0.65`, `3` | A group member's life, damage and XP compared to an enemy alone, and the extra tiles after a group per extra enemy. |
 | `AREA`, `AREA_MULT` | `3`, `0.85` | How many tiles behind the target an area skill reaches, and its share of a single-target skill's extra damage. |
 | `KO_STEPS`, `RALLY` | `15`, `0.25` | Seconds a knocked out hero rests, and the extra damage per knockout until its next win. |
@@ -757,14 +777,19 @@ bosses and emoji.
 
 ### Add a biome
 
-Add an entry to `BIOMES`. Zones cycle through the list in order:
+Add an entry to `BIOMES`. Zones cycle through the list in order, so add it at the end to keep
+existing saves' achievements right:
 
 ```js
-{ name: 'Swamp', icon: '🐸', color: '38;2;101;163;13',
-  decor: ['🌿', '🍄', '🪵'], enemies: [['🐊', 'Croc'], ['🦟', 'Mosquito', '🟢'], ['🐍', 'Snake']],
+{ name: 'Swamp', icon: '🐸', color: '38;2;132;204;22', critters: 'Coast',
+  decor: ['🌿', '🍄', '🌱'], enemies: [['🐊', 'Croc'], ['🦟', 'Mosquito', '🟢'], ['🐍', 'Snake']],
   night: ['🐸', 'Giant Toad'], boss: ['🦕', 'Bog Beast'],
   floor: { bg: '48;2;40;60;30', fg: '38;2;132;204;22', marks: ['~', ','] } },
 ```
+
+`critters` names the biome whose critters (and zone boss) the 🧢 Trainer meets there. The dex has
+a fixed 151 species, so the Swamp, Tundra and Sky Islands borrow the Coast's, the Caves' and the
+Desert's. A biome without `critters` needs species of its own in `roster.js`.
 
 An enemy with a third icon, like the mosquito's `🟢`, shoots it from a distance instead of
 walking up to the hero. `night` is the creature that joins the enemies at night. `color` is an ANSI color (`38;2;R;G;B`) for the zone name. In `floor`, `bg` is the ground color

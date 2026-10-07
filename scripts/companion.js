@@ -84,6 +84,22 @@ const TRAITS = {
   vampiric: { name: 'Vampiric', what: 'heals by half the damage it deals', drain: 0.5 },
   explosive: { name: 'Explosive', what: 'explodes when defeated, for 15% of the hero\'s life', blast: 0.15 },
 };
+// Treasure goblins: GOBLIN_CHANCE of the spawns are a lone 💰 that doesn't fight. Once the hero is
+// within GOBLIN_SPOT tiles it runs a tile every GOBLIN_SPEED steps, and gets away after GOBLIN_RUN
+// steps. Caught, it drops GOBLIN.shards shards and a lucky piece of gear. It has GOBLIN.hp times
+// the life and gives GOBLIN.xp times the XP of a normal enemy.
+const GOBLIN_CHANCE = 0.012;
+const GOBLIN = { hp: 2, xp: 4, shards: 20 };
+const GOBLIN_SPOT = AGGRO;
+const GOBLIN_SPEED = 2;
+const GOBLIN_RUN = 24;
+// Each biome sets a bounty (see rollBounty), worth BOUNTY_SHARDS shards, a potion or a lucky piece
+// of gear. BOUNTY_KILLS is a guess at the kills in a zone, and a bounty asks for BOUNTY_SHARE of
+// the ones of its enemy (at least 5, at most 25). An elite bounty asks for BOUNTY_ELITES.
+const BOUNTY_SHARDS = 12;
+const BOUNTY_KILLS = 90;
+const BOUNTY_SHARE = 0.35;
+const BOUNTY_ELITES = 2;
 // Area skills hit the target and every enemy up to AREA tiles behind it, adding AREA_MULT of the
 // extra damage a single-target skill of the same strength would.
 const AREA = 3;
@@ -206,6 +222,12 @@ const UPDATE_MSG_MS = 30000;      // the "updated" notice stays longer than othe
 const WHATS_NEW = {
   '1.3.0': 'enemies have life now, and every 5th level summons a boss',
   '1.4.0': `skills are random now, dropped by level bosses: ${COMMAND_PREFIX}skills`,
+  '1.22.0': root => (olderThan(root.seenVersion, '1.21.0')
+    ? '🐸 three new biomes (Swamp, Tundra, Sky Islands), 📋 bounties and 💰 treasure goblins'
+    : '🐸 three new biomes after the Volcano: 🐸 Swamp, 🧊 Tundra and 🌈 Sky Islands'),
+  '1.21.0': root => (olderThan(root.seenVersion, '1.20.0')
+    ? `📋 bounties, 💰 treasure goblins, 🧢 the Trainer at level 50 (${COMMAND_PREFIX}dex)`
+    : '📋 each biome sets a bounty, and 💰 treasure goblins run from you: catch them for loot'),
   '1.20.0': root => (olderThan(root.seenVersion, '1.19.0')
     ? `🧢 Bash the Trainer unlocks at level 50 (${COMMAND_PREFIX}dex), and 💀 tougher enemies`
     : `🧢 Bash the Trainer unlocks at level 50: his partner fights, and he catches 151 critters (${COMMAND_PREFIX}dex)`),
@@ -266,6 +288,8 @@ const ACHIEVEMENT_GROUPS = {
     { id: 'fellowship', name: 'Fellowship', what: 'be joined by an ally (a subagent)', of: 'allies', goal: 1 },
     { id: 'elite-hunter', name: 'Elite Hunter', what: 'defeat 100 elite enemies', of: 'elites', goal: 100 },
     { id: 'night-stalker', name: 'Night Stalker', what: 'defeat 50 creatures of the night', of: 'nightKills', goal: 50 },
+    { id: 'bounty-hunter', name: 'Bounty Hunter', what: 'finish a bounty', of: 'bounties', goal: 1 },
+    { id: 'most-wanted', name: 'Most Wanted', what: 'finish 25 bounties', of: 'bounties', goal: 25 },
     { id: 'better-together', name: 'Better Together', what: 'defeat 100 enemies with an ally at your side', of: 'allyKills', goal: 100 },
   ],
   Bosses: [
@@ -274,7 +298,7 @@ const ACHIEVEMENT_GROUPS = {
     { id: 'elder-hunter', name: 'Elder Hunter', what: 'defeat an Elder boss (levels 10, 20, 30…)', of: 'elders', goal: 1 },
     { id: 'kingslayer', name: 'Kingslayer', what: 'defeat 5 Elder bosses', of: 'elders', goal: 5 },
     { id: 'dragonslayer', name: 'Dragonslayer', what: 'defeat the 🐉 Dragon of the 🌋 Volcano', of: 'zone', goal: 7 },
-    { id: 'dragon-bane', name: 'Dragon Bane', what: 'defeat the 🐉 Dragon of 🌋 Volcano X', of: 'zone', goal: 70 },
+    { id: 'dragon-bane', name: 'Dragon Bane', what: 'defeat the 🐉 Dragon of 🌋 Volcano X', of: 'zone', goal: 97 },
   ],
   Survival: [
     { id: 'first-aid', name: 'First Aid', what: 'drink a potion', of: 'potions', goal: 1 },
@@ -289,7 +313,7 @@ const ACHIEVEMENT_GROUPS = {
     { id: 'level-30', name: 'Champion', what: 'reach level 30', of: 'level', goal: 30 },
     { id: 'star-power', name: 'Star Power', what: 'wield a 🌟 star weapon (level 35)', of: 'level', goal: 35 },
     { id: 'level-50', name: 'Legend', what: 'reach level 50 (unlocks the 🧢 Trainer)', of: 'level', goal: 50 },
-    { id: 'world-walker', name: 'World Walker', what: 'reach all 7 biomes', of: 'zone', goal: 6 },
+    { id: 'world-walker', name: 'World Walker', what: 'reach all 10 biomes', of: 'zone', goal: 9 },
     { id: 'full-party', name: 'Full Party', what: 'play all three starting classes', of: 'heroes', goal: 3 },
     { id: 'all-rounder', name: 'All-Rounder', what: 'get all three starting classes to level 10', of: 'everyClass', goal: 10 },
   ],
@@ -306,6 +330,8 @@ const ACHIEVEMENT_GROUPS = {
     { id: 'fully-equipped', name: 'Fully Equipped', what: 'wear gear in all 6 slots', of: 'gearWorn', goal: 6 },
     { id: 'shiny', name: 'Shiny', what: 'find an epic or legendary piece of gear', of: 'gearEpic', goal: 1 },
     { id: 'treasure-hunter', name: 'Treasure Hunter', what: 'find a legendary piece of gear', of: 'gearLegendary', goal: 1 },
+    { id: 'gold-rush', name: 'Gold Rush', what: 'catch a 💰 Treasure Goblin before it gets away', of: 'goblins', goal: 1 },
+    { id: 'goblin-hunter', name: 'Goblin Hunter', what: 'catch 10 Treasure Goblins', of: 'goblins', goal: 10 },
     { id: 'picky', name: 'Picky', what: 'salvage 100 pieces of gear', of: 'gearLeft', goal: 100 },
     { id: 'tinkerer', name: 'Tinkerer', what: 'reforge a piece of gear', of: 'forged', goal: 1 },
     { id: 'master-smith', name: 'Master Smith', what: 'reforge gear 50 times', of: 'forged', goal: 50 },
@@ -342,6 +368,7 @@ const ACHIEVEMENTS = Object.entries(ACHIEVEMENT_GROUPS).flatMap(([group, list]) 
 
 // enemies and boss: [icon, name], plus the icon of what it shoots for an enemy that attacks from
 // SHOT_RANGE tiles instead of walking up to the hero. night: the enemy that joins them at night.
+// critters: the biome whose critters (and zone boss) a trainer meets here, for a biome with none of its own.
 // floor: background and mark colors plus the ASCII marks scattered on about 1 cell in 3
 // (1 column each, so the floor lines up under the 2-column world tiles in every font).
 const BIOMES = [
@@ -359,6 +386,12 @@ const BIOMES = [
     floor: { bg: '48;2;46;30;66', fg: '38;2;120;100;140', marks: ['.', ',', '+'] } },
   { name: 'Volcano', icon: '🌋', color: '38;2;248;113;113', hot: true, decor: ['🌋', '🔥', '🪨'], enemies: [['👹', 'Demon'], ['🦎', 'Salamander'], ['🐲', 'Drake', '🔴']], night: ['🧞', 'Ifrit', '🔴'], boss: ['🐉', 'Dragon', '🔴'],
     floor: { bg: '48;2;100;20;20', fg: '38;2;251;146;60', marks: ['^', '~'] } },
+  { name: 'Swamp', icon: '🐸', color: '38;2;132;204;22', critters: 'Coast', decor: ['🌿', '🍄', '🌱'], enemies: [['🐊', 'Croc'], ['🦟', 'Mosquito', '🟢'], ['🐍', 'Snake']], night: ['🐸', 'Giant Toad'], boss: ['🦕', 'Bog Beast'],
+    floor: { bg: '48;2;40;60;30', fg: '38;2;132;204;22', marks: ['~', ','] } },
+  { name: 'Tundra', icon: '🧊', color: '38;2;186;230;253', critters: 'Caves', decor: ['🧊', '🌲', '🪨'], enemies: [['🐧', 'Penguin'], ['🦭', 'Seal'], ['🦌', 'Elk']], night: ['🐺', 'Dire Wolf'], boss: ['🦣', 'Mammoth'],
+    floor: { bg: '48;2;120;144;165', fg: '38;2;241;245;249', marks: ['.', '*', ','] } },
+  { name: 'Sky Islands', icon: '🌈', color: '38;2;125;211;252', critters: 'Desert', decor: ['🎈', '🌈', '🪁'], enemies: [['🦅', 'Harpy'], ['🐝', 'Hornet', '🟡'], ['🦜', 'Parrot']], night: ['🦉', 'Owl'], boss: ['🐲', 'Storm Drake', '⚡'],
+    floor: { bg: '48;2;56;132;200', fg: '38;2;224;242;254', marks: ['-', '.'] } },
 ];
 
 // range: how many tiles ahead the hero starts fighting. atk: [base, per level].
@@ -450,8 +483,8 @@ const CLASSES = {
 const BASE_CLASSES = Object.keys(CLASSES).filter(k => !CLASSES[k].unlock);
 const SPECIES_BY_NUMBER = new Map(SPECIES.map(s => [s.n, s]));
 // Each biome's wild critters and its boss species.
-const WILD = Object.fromEntries(BIOMES.map(b => [b.name, SPECIES.filter(s => s.where === b.name && !s.boss)]));
-const BOSS_SPECIES = Object.fromEntries(BIOMES.map(b => [b.name, SPECIES.find(s => s.where === b.name && s.boss)]));
+const WILD = Object.fromEntries(BIOMES.map(b => [b.name, SPECIES.filter(s => s.where === (b.critters || b.name) && !s.boss)]));
+const BOSS_SPECIES = Object.fromEntries(BIOMES.map(b => [b.name, SPECIES.find(s => s.where === (b.critters || b.name) && s.boss)]));
 const SECRET = SPECIES.find(s => s.secret);
 
 const WORK_EVENTS = new Set(['UserPromptSubmit', 'PostToolUse', 'PostToolUseFailure']);
@@ -482,7 +515,8 @@ function newStats() {
 // creatures defeated, `candy` the candy eaten, `snowmen` the snowmen defeated and `elites` the
 // elite enemies defeated, `camps` the camps made, and for a trainer `caught` the critters caught
 // and `species` how many of those were new in the dex, `evolutions` the critters that evolved for
-// it and `partners` the partners it had.
+// it and `partners` the partners it had, `goblins` the treasure goblins caught and `bounties` the
+// bounties done.
 // For /vwc:statistics: `tokens` used while the hero was active, and the Claude turns played with
 // it: how many, their total time (ms) and tokens, the longest and shortest (ms, null before the
 // first) and the most tokens in one. Heroes from before 1.10.0 count these from `countedFrom` on.
@@ -490,7 +524,7 @@ function newTally() {
   const byRarity = () => ({ common: 0, rare: 0, epic: 0, legendary: 0 });
   return {
     maxHit: 0, skillCrits: 0, minis: 0, elders: 0, replaced: 0, found: byRarity(), gear: byRarity(), left: 0,
-    knockouts: 0, closeCalls: 0, potions: 0, maxAreaHits: 0, groups: 0, allies: 0, allyKills: 0, forged: 0, restedXp: 0, fullRests: 0, nightKills: 0, candy: 0, snowmen: 0, elites: 0, camps: 0, caught: 0, species: 0, evolutions: 0, partners: 0,
+    knockouts: 0, closeCalls: 0, potions: 0, maxAreaHits: 0, groups: 0, allies: 0, allyKills: 0, forged: 0, restedXp: 0, fullRests: 0, nightKills: 0, candy: 0, snowmen: 0, elites: 0, camps: 0, caught: 0, species: 0, evolutions: 0, partners: 0, goblins: 0, bounties: 0,
     tokens: 0, turns: 0, turnMs: 0, turnTokens: 0, longestTurn: 0, shortestTurn: null, mostTokens: 0,
   };
 }
@@ -527,6 +561,8 @@ function newHero(cls, now) {
     lastWorked: null, // when the hero last worked, so a break can be measured
     camp: null,      // where the hero last made camp ({ x })
     camped: 0,       // ms of the camp's extra damage left
+    bounty: null,    // the bounty being worked on (see rollBounty)
+    bountyZone: null, // the zone the bounty was set in, so each zone sets one
     resting: 0,      // steps left sitting by the camp's fire
     tally: newTally(),
     cooldowns: {},   // unused now; read by older versions that may still run in another window
@@ -1475,6 +1511,7 @@ function heroStatistics(h) {
     ['Gear found', `${foundText(t.gear)} · ${shortNumber(t.left)} salvaged · ${plural(t.forged, 'reforge')}`],
     ['Survival', `${plural(t.potions, 'potion')} drunk · ${plural(t.knockouts, 'knockout')} · ${plural(t.closeCalls, 'close call')}${t.candy > 0 ? ` · ${plural(t.candy, 'candy', 'candies')} eaten` : ''}${t.camps > 0 ? ` · ${plural(t.camps, 'camp')}` : ''}`],
     ['Allies', `${plural(t.allies, 'ally', 'allies')} joined · ${plural(t.allyKills, 'kill')} together`],
+    ['Bounties', `${plural(t.bounties, 'bounty', 'bounties')} done · ${plural(t.goblins, 'Treasure Goblin')} caught`],
   ];
   if (h.partner) {
     rows.push(['Catches', `${shortNumber(t.caught)}${perHour(t.caught, h.step)} · ${shortNumber(t.species)} new in the dex · ${plural(t.evolutions, 'evolution')} · ${plural(t.partners || 1, 'partner')}`]);
@@ -1626,7 +1663,7 @@ function journalReport(arg, now) {
     }
   }
   const what = 'Level ups, new weapons and biomes, bosses, skills, gear worn, epic and legendary gear salvaged,'
-    + '\nreforges, knockouts, camps and achievements';
+    + '\nreforges, knockouts, camps, bounties, treasure goblins and achievements';
   const whose = only ? ` · ${CLASSES[only].icon} ${CLASSES[only].name}` : '';
   if (moments.length === 0) {
     return `📜 Journal${whose} · nothing written yet\n\n${what} are written down as they happen.`;
@@ -1678,7 +1715,7 @@ function dexReport(arg, now) {
   const caught = s => isCaught(dex, s.n);
   const lines = [`📕 Dex · ${caughtCount(dex)} of ${SPECIES.length} caught · ${Object.keys(dex).length} seen`, ''];
   const groups = [
-    ...BIOMES.map(b => [`${b.icon} ${b.name}`, SPECIES.filter(s => s.where === b.name)]),
+    ...BIOMES.filter(b => !b.critters).map(b => [`${b.icon} ${b.name}`, SPECIES.filter(s => s.where === b.name)]),
     ['🌟 Legendaries', SPECIES.filter(s => s.where === 'legend')],
     ['🌙 At night', SPECIES.filter(s => s.night)],
   ].map(([label, list]) => `${label} ${list.filter(caught).length}/${list.length}`);
@@ -1902,6 +1939,16 @@ function makeEnemy(x, zone, rank = 'normal', now = Date.now(), forced = null, le
   return foe;
 }
 
+// A treasure goblin: it never attacks (see goblinTurn), and has more life than a normal enemy.
+function makeGoblin(x, zone, now, level) {
+  const foe = makeEnemy(x, zone, 'normal', now, ['💰', 'Treasure Goblin'], level);
+  foe.hp = foe.max = Math.round(foe.max * GOBLIN.hp);
+  foe.xp = Math.round(foe.xp * GOBLIN.xp);
+  foe.atk = 0;
+  foe.goblin = true;
+  return foe;
+}
+
 // The level of a hero on pace at tile `x` of the world (see PACE).
 function paceLevel(x) {
   return PACE[0] + PACE[1] * Math.pow(Math.max(0, x) / ZONE_LENGTH, PACE[2]);
@@ -1968,6 +2015,10 @@ function spawnAhead(h, now, dex = null) {
         : makeEnemy(bossX, h.bossZone, 'boss', now, null, h.level));
       h.bossZone++;
       h.nextSpawnX = bossX + randInt(6, 12);
+    } else if (Math.random() < GOBLIN_CHANCE) {
+      h.enemies.push(makeGoblin(h.nextSpawnX, h.bossZone, now, h.level));
+      h.nextSpawnX += randInt(5, 12);
+      setMsg(h, '💰 A Treasure Goblin ahead: catch it before it gets away', now);
     } else if (h.partner && Math.random() < WILD_SHARE) {
       const s = wildSpecies(h.bossZone, now, dex);
       h.enemies.push(makeCritter(s, h.nextSpawnX, h.bossZone, 'normal', now, h.level));
@@ -2276,6 +2327,8 @@ function counts(h) {
     caught: t.caught,
     partners: t.partners,
     evolutions: t.evolutions,
+    goblins: t.goblins,
+    bounties: t.bounties,
   };
 }
 
@@ -2399,9 +2452,10 @@ function targetOf(h) {
   return h.enemies.find(e => e.x > h.heroX && e.x <= h.heroX + classOf(h).range);
 }
 
-// The nearest enemy ahead. Only it and its group close in and attack, so fights stay one at a time.
+// The nearest enemy ahead that fights (not a goblin). Only it and its group close in and attack, so
+// fights stay one at a time.
 function frontOf(h) {
-  return h.enemies.find(e => e.x > h.heroX);
+  return h.enemies.find(e => e.x > h.heroX && !e.goblin);
 }
 
 // How close an enemy must be to attack: next to the hero, or SHOT_RANGE tiles for one that shoots.
@@ -2417,6 +2471,9 @@ function reachOf(foe) {
 function step(h, now, allies = [], dex = null) {
   h.step++;
   spawnAhead(h, now, dex);
+  if (h.bountyZone !== zoneOf(h.heroX)) {
+    setBounty(h, now);
+  }
   if (h.down > 0) {
     h.down--;
     if (h.down === 0) {
@@ -2427,6 +2484,7 @@ function step(h, now, allies = [], dex = null) {
   } else if (h.resting > 0) {
     h.resting--;
   } else {
+    goblinTurn(h, now);
     const attacked = heroTurn(h, now, allies.length > 0, dex);
     if (attacked && allies.length > 0) {
       allyTurn(h, allies, now, dex);
@@ -2443,6 +2501,24 @@ function step(h, now, allies = [], dex = null) {
   h.camped = Math.max(0, h.camped - STEP_MS);
 }
 
+// A goblin within GOBLIN_SPOT tiles of the hero runs: a tile ahead every GOBLIN_SPEED steps, unless
+// another enemy or the zone's boss tile is in the way, and after GOBLIN_RUN steps it's gone.
+// Running costs the hero nothing but the chance.
+function goblinTurn(h, now) {
+  for (const g of h.enemies.filter(e => e.goblin)) {
+    if (!g.ran && g.x - h.heroX > GOBLIN_SPOT) {
+      continue;
+    }
+    g.ran = (g.ran || 0) + 1;
+    if (g.ran > GOBLIN_RUN) {
+      h.enemies = h.enemies.filter(e => e !== g);
+      news(h, `💨 The ${g.icon} ${g.name} got away`, now);
+    } else if (g.ran % GOBLIN_SPEED === 0 && g.x + 1 < (h.bossZone + 1) * ZONE_LENGTH && !h.enemies.some(e => e.x === g.x + 1)) {
+      g.x++;
+    }
+  }
+}
+
 // The hero's half of a step. Returns whether it attacked. `allied`: an ally is at its side.
 function heroTurn(h, now, allied, dex) {
   const c = classOf(h);
@@ -2452,6 +2528,7 @@ function heroTurn(h, now, allied, dex) {
     if (h.heroX % ZONE_LENGTH === 0) {
       const b = biomeOf(zoneOf(h.heroX));
       news(h, `Entered ${b.icon} ${b.name}${cycleSuffix(zoneOf(h.heroX))}`, now);
+      setBounty(h, now);
     }
     h.enemies = h.enemies.filter(e => e.x > h.heroX - 10);
     h.loot = h.loot.filter(l => l.x > h.heroX - 10);
@@ -2578,6 +2655,12 @@ function defeat(h, foe, now, allied = false, dex = null) {
   if (foe.elite) {
     h.tally.elites++;
   }
+  if (foe.goblin) {
+    h.tally.goblins++;
+    h.shards += GOBLIN.shards;
+    h.loot.push({ x: foe.x, icon: '💰' });
+    news(h, `💰 Caught the ${foe.name}! 🔩 ${GOBLIN.shards} and a lucky find`, now);
+  }
   // An explosive elite's blast hurts but can't knock the hero out.
   const t = TRAITS[foe.trait];
   if (t && t.blast) {
@@ -2586,8 +2669,8 @@ function defeat(h, foe, now, allied = false, dex = null) {
     h.hurt = { step: h.step, dmg: blast };
     h.fx = { icon: '💥', x: foe.x, step: h.step };
   }
-  if (foe.boss || Math.random() < (foe.elite ? ELITE.gear : GEAR_DROP)) {
-    dropGear(h, foe.x, foe.boss || foe.elite, now);
+  if (foe.goblin || foe.boss || Math.random() < (foe.elite ? ELITE.gear : GEAR_DROP)) {
+    dropGear(h, foe.x, foe.goblin || foe.boss || foe.elite, now);
   }
   if (h.potions < MAX_POTIONS && (foe.boss || Math.random() < POTION_DROP * (foe.elite ? ELITE.potion : 1))) {
     h.potions++;
@@ -2596,6 +2679,7 @@ function defeat(h, foe, now, allied = false, dex = null) {
   if (h.rested > 0) {
     h.tally.restedXp += gainXp(h, foe.xp * RESTED_XP, now);
   }
+  bountyKill(h, foe, now);
 }
 
 // The enemy's half of a step: the nearest enemy ahead, with the rest of its group, notices the
@@ -2648,6 +2732,7 @@ function enemyTurn(h, now) {
     h.tally.potions++;
     h.life = Math.min(maxLife(h), h.life + Math.round(maxLife(h) * POTION_HEAL));
     setMsg(h, `🧪 Drank a potion`, now);
+    breakBounty(h, 'potion', now);
   }
   return true;
 }
@@ -2658,12 +2743,129 @@ function knockOut(h, group, now) {
   h.down = KO_STEPS;
   h.rally++;
   h.tally.knockouts++;
+  breakBounty(h, 'ko', now);
   for (const foe of group) {
     foe.hp = foe.max;
   }
   const more = group.length > 1 ? ` and ${group.length - 1} more` : '';
   const by = `${group[0].icon} ${group[0].name}${more}`;
   news(h, h.partner ? `😵 ${partnerName(h)} fainted against ${by}! Resting for ${KO_STEPS} s` : `😵 Knocked out by ${by}! Resting for ${KO_STEPS} s`, now);
+}
+
+// ---------- bounties ----------
+
+// "Wolf" -> "Wolves", "Rat" -> "Rats".
+function pluralName(name) {
+  if (/f$/.test(name)) {
+    return `${name.slice(0, -1)}ves`;
+  }
+  if (/(s|x|ch|sh)$/.test(name)) {
+    return `${name}es`;
+  }
+  return /[^aeiou]y$/.test(name) ? `${name.slice(0, -1)}ies` : `${name}s`;
+}
+
+// Each biome sets one bounty the hero works on by itself, as it enters (and for a save from before
+// them, at once): defeat some of one of the biome's enemies, defeat a few elites, or beat the
+// zone's boss without a potion or without a knockout. A new zone replaces a bounty not finished;
+// nothing is taken away. `n` of `goal` done; `rule` is the boss's condition.
+function rollBounty(h, zone) {
+  const b = biomeOf(zone);
+  const trainer = Boolean(h.partner);
+  const kind = pickWeighted(trainer ? ['kill', 'boss'] : ['kill', 'elite', 'boss'], k => (k === 'kill' ? 5 : k === 'elite' ? 2 : 3));
+  if (kind === 'elite') {
+    return { kind, goal: BOUNTY_ELITES, n: 0, reward: 'gear' };
+  }
+  if (kind === 'boss') {
+    const [icon, name] = trainer ? [bossSpecies(zone).icon, bossSpecies(zone).name] : b.boss;
+    return { kind, icon, name, goal: 1, n: 0, rule: pick(['potion', 'ko']), reward: 'gear' };
+  }
+  // A kind of enemy, and how many of the zone's kills it should be.
+  const list = trainer
+    ? WILD[b.name].filter(s => s.stage === 1 || zone >= EVOLVED_FROM[s.stage]).map(s => ({ icon: s.icon, name: s.name, weight: s.rare || 1 }))
+    : b.enemies.map(([icon, name]) => ({ icon, name, weight: 1 }));
+  const total = list.reduce((sum, e) => sum + e.weight, 0);
+  const target = pickWeighted(list, e => e.weight);
+  const share = (target.weight / total) * (trainer ? WILD_SHARE : 1);
+  const goal = Math.max(trainer ? 2 : 5, Math.min(25, Math.round(BOUNTY_KILLS * share * BOUNTY_SHARE)));
+  return { kind, icon: target.icon, name: target.name, goal, n: 0, reward: pick(['shards', 'potion']) };
+}
+
+function bountyText(b, h) {
+  if (b.kind === 'kill') {
+    return `defeat ${b.goal} ${b.icon} ${pluralName(b.name)}`;
+  }
+  if (b.kind === 'elite') {
+    return `defeat ${b.goal} elite enemies`;
+  }
+  const without = b.rule === 'potion' ? 'a potion' : h.partner ? 'fainting' : 'a knockout';
+  return `beat the ${b.icon} ${b.name} without ${without}`;
+}
+
+function rewardText(b) {
+  return b.reward === 'shards' ? `🔩 ${BOUNTY_SHARDS}` : b.reward === 'potion' ? '🧪 a potion' : '🎁 a lucky find';
+}
+
+// The short form on the stats row: "🐺 7/15", "💠 0/2", "🦍 no potion".
+function bountyChip(h) {
+  const b = h.bounty;
+  if (!b) {
+    return null;
+  }
+  const rule = b.rule === 'potion' ? 'no potion' : h.partner ? 'no fainting' : 'no knockout';
+  return `📋 ${b.kind === 'boss' ? `${b.icon} ${rule}` : `${b.kind === 'elite' ? '💠' : b.icon} ${b.n}/${b.goal}`}`;
+}
+
+function setBounty(h, now) {
+  const zone = zoneOf(h.heroX);
+  h.bountyZone = zone;
+  h.bounty = rollBounty(h, zone);
+  news(h, `📋 Bounty: ${bountyText(h.bounty, h)} · ${rewardText(h.bounty)}`, now);
+}
+
+// Counts a defeated enemy toward the bounty, and finishes it. The zone's boss is the one boss
+// without a skill drop.
+function bountyKill(h, foe, now) {
+  const b = h.bounty;
+  if (!b) {
+    return;
+  }
+  if (b.kind === 'kill' && !foe.boss && foe.icon === b.icon) {
+    b.n++;
+  } else if (b.kind === 'elite' && foe.elite) {
+    b.n++;
+  } else if (b.kind === 'boss' && foe.boss && !foe.drop && zoneOf(h.heroX) === h.bountyZone) {
+    b.n++;
+  }
+  if (b.n >= b.goal) {
+    finishBounty(h, now);
+  }
+}
+
+function finishBounty(h, now) {
+  const b = h.bounty;
+  h.bounty = null;
+  h.tally.bounties++;
+  // A full potion belt turns the potion into shards.
+  const reward = b.reward === 'potion' && h.potions >= MAX_POTIONS ? 'shards' : b.reward;
+  news(h, `📋 Bounty done: ${bountyText(b, h)}! ${rewardText({ reward })}`, now);
+  if (reward === 'potion') {
+    h.potions++;
+  } else if (reward === 'shards') {
+    h.shards += BOUNTY_SHARDS;
+    reforge(h, now);
+  } else {
+    dropGear(h, h.heroX + 1, true, now);
+  }
+}
+
+// A boss bounty is over when the hero breaks its rule: `rule` is 'potion' (drank one) or 'ko'.
+function breakBounty(h, rule, now) {
+  const b = h.bounty;
+  if (b && b.kind === 'boss' && b.rule === rule) {
+    h.bounty = null;
+    news(h, `📋 Bounty failed: ${rule === 'potion' ? 'drank a potion' : h.partner ? `${partnerName(h)} fainted` : 'knocked out'}`, now);
+  }
 }
 
 // ---------- critters ----------
@@ -3071,6 +3273,7 @@ function statsRow(root, h, now, active, cols) {
     [skills, 1],
     [color(b.color, whereText(h)) + (isNight(now) ? ' 🌙' : '') + (season(now) ? ` ${season(now).icon}` : ''), 3],
     [`💀 ${h.kills}`, 2],
+    [bountyChip(h), 1.2],
     [h.partner ? `📕 ${caughtCount(root.dex || {})}/${SPECIES.length}` : null, 1.5],
     [targetText(h, active), 4.5],
     [status && color(...status), 5],
@@ -3293,5 +3496,5 @@ module.exports = {
   onHookEvent, onAgentEvent, onStatusLine, render, displayWidth,
   newRoot, newHero, migrate, step, xpNeed, attackOf, weaponOf, classOf, rollSkill, skillPower, learnSkill,
   rollGear, gearPower, gearBonus, gainXp, checkAchievements, achievementFacts, maxLife,
-  makeEnemy, wildSpecies, caughtCount, strength, evolutionOf, isNight, daylight, season, TRAITS, BIOMES, paceLevel, aheadScale, baseLife,
+  makeEnemy, makeGoblin, rollBounty, wildSpecies, caughtCount, strength, evolutionOf, isNight, daylight, season, TRAITS, BIOMES, paceLevel, aheadScale, baseLife,
 };

@@ -3,8 +3,9 @@
 Ideas for later versions that haven't been built yet. Built so far from this list: the journal,
 subagent allies and salvage with reforging (1.11.0), rested XP (1.12.0), day and night
 (1.13.0), seasonal events (1.14.0), elite enemies (1.15.0),
-`/vwc:card` (1.16.0), `/vwc:journal <class>` (1.17.0), campfires on compaction (1.18.0) and, for
-the endgame, the 🧢 Trainer unlocked at level 50 (1.20.0, see `TRAINER_PLAN.md`).
+`/vwc:card` (1.16.0), `/vwc:journal <class>` (1.17.0), campfires on compaction (1.18.0), for
+the endgame the 🧢 Trainer unlocked at level 50 (1.20.0, see `TRAINER_PLAN.md`) and, in 1.21.0,
+bounties and the treasure goblin, and in 1.22.0 the Swamp, Tundra and Sky Islands.
 
 ## Rules every idea has to follow
 
@@ -29,8 +30,6 @@ the endgame, the 🧢 Trainer unlocked at level 50 (1.20.0, see `TRAINER_PLAN.md
 
 ## Loot and progression
 
-- **Treasure goblin.** A rare 💰 enemy that runs away from the hero instead of fighting. Killed
-  before it gets out of range, it drops a pile of shards and a lucky gear roll.
 - **Unique legendaries.** Named legendary pieces with an effect on top of their stats: boots that walk
   2 tiles per step between fights, a 🪶 feather that cancels one knockout an hour, gloves whose
   critical hits splash to the next enemy.
@@ -42,12 +41,6 @@ the endgame, the 🧢 Trainer unlocked at level 50 (1.20.0, see `TRAINER_PLAN.md
   levels up with kills: Star Bow +1, +2…) or endless small "paragon" bonuses every few levels.
 - **Inactive heroes train at camp.** The heroes not being played earn about 10% of the XP the active
   one does, so players with all three classes don't leave two of them behind.
-- **Bounties.** Each biome sets an automatic short goal ("defeat 20 🐺 Wolves", "beat the Ape King
-  without a potion") with a reward: shards, a potion or a lucky gear roll. Shown on the stats row
-  when set and when done, and in the journal.
-- **New biomes.** The Swamp from the README example (🐊 🦟 🐸, 🦕 Bog Beast), a Tundra (🐧 🦭, 🦣
-  Mammoth) and Sky Islands (🦅 🪽, 🐲 Storm Drake), so the world loops less often. Check each emoji
-  against the rules above (🪽 is Unicode 15, which some terminals don't draw yet).
 
 ## Turned down
 

@@ -30,7 +30,8 @@ for (const [key, t] of Object.entries(TYPES)) {
   }
 }
 
-const biomes = BIOMES.map(b => b.name);
+// A biome with `critters` borrows another's, so only the others need critters of their own.
+const biomes = BIOMES.filter(b => !b.critters).map(b => b.name);
 const byNumber = new Map(SPECIES.map(s => [s.n, s]));
 const names = new Set();
 const evolvesFrom = new Map();
