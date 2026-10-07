@@ -84,6 +84,11 @@ const TRAITS = {
   vampiric: { name: 'Vampiric', what: 'heals by half the damage it deals', drain: 0.5 },
   explosive: { name: 'Explosive', what: 'explodes when defeated, for 15% of the hero\'s life', blast: 0.15 },
 };
+// Weapon mastery: a hero wielding its last weapon (the 🌟 one, from level 35) ranks it up with kills.
+// Rank 1 takes MASTERY_KILLS kills and each rank MASTERY_KILLS more than the one before, and every
+// rank adds MASTERY_DAMAGE percent to the hero's damage, with no end.
+const MASTERY_KILLS = 100;
+const MASTERY_DAMAGE = 2;
 // Treasure goblins: GOBLIN_CHANCE of the spawns are a lone 💰 that doesn't fight. Once the hero is
 // within GOBLIN_SPOT tiles it runs a tile every GOBLIN_SPEED steps, and gets away after GOBLIN_RUN
 // steps. Caught, it drops GOBLIN.shards shards and a lucky piece of gear. It has GOBLIN.hp times
@@ -222,6 +227,12 @@ const UPDATE_MSG_MS = 30000;      // the "updated" notice stays longer than othe
 const WHATS_NEW = {
   '1.3.0': 'enemies have life now, and every 5th level summons a boss',
   '1.4.0': `skills are random now, dropped by level bosses: ${COMMAND_PREFIX}skills`,
+  '1.24.0': root => (olderThan(root.seenVersion, '1.23.0')
+    ? '🌟 star weapon ranks, 📆 work streaks, 🐸 three new biomes, 📋 bounties and 💰 treasure goblins'
+    : `📆 days in a row with work now count toward achievements (${COMMAND_PREFIX}statistics)`),
+  '1.23.0': root => (olderThan(root.seenVersion, '1.22.0')
+    ? '🌟 star weapons rank up with kills, 🐸 three new biomes, 📋 bounties and 💰 treasure goblins'
+    : '🌟 your star weapon ranks up with kills (+2% damage each rank, no end)'),
   '1.22.1': '🎁 shorter messages for finds, bounties and goblins on the stats row',
   '1.22.0': root => (olderThan(root.seenVersion, '1.21.0')
     ? '🐸 three new biomes (Swamp, Tundra, Sky Islands), 📋 bounties and 💰 treasure goblins'
@@ -312,6 +323,8 @@ const ACHIEVEMENT_GROUPS = {
     { id: 'level-10', name: 'Seasoned', what: 'reach level 10', of: 'level', goal: 10 },
     { id: 'level-20', name: 'Veteran', what: 'reach level 20', of: 'level', goal: 20 },
     { id: 'level-30', name: 'Champion', what: 'reach level 30', of: 'level', goal: 30 },
+    { id: 'weapon-master', name: 'Weapon Master', what: 'rank your 🌟 star weapon up to +5', of: 'mastery', goal: 5 },
+    { id: 'grandmaster', name: 'Grandmaster', what: 'rank your 🌟 star weapon up to +10', of: 'mastery', goal: 10 },
     { id: 'star-power', name: 'Star Power', what: 'wield a 🌟 star weapon (level 35)', of: 'level', goal: 35 },
     { id: 'level-50', name: 'Legend', what: 'reach level 50 (unlocks the 🧢 Trainer)', of: 'level', goal: 50 },
     { id: 'world-walker', name: 'World Walker', what: 'reach all 10 biomes', of: 'zone', goal: 9 },
@@ -361,6 +374,9 @@ const ACHIEVEMENT_GROUPS = {
     { id: 'well-rested', name: 'Well Rested', what: 'come back to a full hour of rested XP', of: 'fullRests', goal: 1 },
     { id: 'deep-work', name: 'Deep Work', what: 'a single Claude turn that runs for 30 minutes', of: 'longestTurn', goal: 30 },
     { id: 'happy-camper', name: 'Happy Camper', what: 'make camp 10 times (when Claude compacts)', of: 'camps', goal: 10 },
+    { id: 'regular', name: 'Regular', what: 'work 5 days in a row', of: 'streak', goal: 5 },
+    { id: 'dedicated', name: 'Dedicated', what: 'work 20 days in a row', of: 'streak', goal: 20 },
+    { id: 'centurion', name: 'Centurion', what: 'work 100 days in a row', of: 'streak', goal: 100 },
     { id: 'night-owl', name: 'Night Owl', what: 'work between midnight and 5 a.m.', of: 'night', goal: 1, secret: true },
     { id: 'weekend-warrior', name: 'Weekend Warrior', what: 'work on a Saturday or Sunday', of: 'weekend', goal: 1, secret: true },
   ],
@@ -501,8 +517,8 @@ function newRoot(now) {
   return { v: 2, active: null, heroes: {}, lastTick: now, sessions: {}, seenVersion: pluginVersion(), stats: newStats(), achievements: {}, allies: {}, alliesGone: [], dex: {} };
 }
 
-// Shared by all heroes: tokens used, the longest turn (ms), and the counts of heroes replaced
-// by /vwc:createchar, so lifetime totals keep what they did.
+// Shared by all heroes: tokens used, the longest turn (ms), the work streak (see noteWorkDay), and
+// the counts of heroes replaced by /vwc:createchar, so lifetime totals keep what they did.
 function newStats() {
   return { tokens: 0, longestTurn: 0, retired: {} };
 }
@@ -562,6 +578,8 @@ function newHero(cls, now) {
     lastWorked: null, // when the hero last worked, so a break can be measured
     camp: null,      // where the hero last made camp ({ x })
     camped: 0,       // ms of the camp's extra damage left
+    mastery: 0,      // the rank of the last weapon (see MASTERY_KILLS)
+    masteryKills: 0, // kills toward the next rank
     bounty: null,    // the bounty being worked on (see rollBounty)
     bountyZone: null, // the zone the bounty was set in, so each zone sets one
     resting: 0,      // steps left sitting by the camp's fire
@@ -622,6 +640,10 @@ function migrate(s, now = Date.now()) {
     }
     if (!h.journal) {
       h.journal = [];
+    }
+    if (h.mastery == null) {
+      h.mastery = 0;
+      h.masteryKills = 0;
     }
     if (h.camped == null) {
       h.camp = null;
@@ -1168,6 +1190,29 @@ function countTurn(h, turn) {
   t.mostTokens = Math.max(t.mostTokens, turn.tokens);
 }
 
+// The streak of days in a row with work, by local calendar day: `day` is the last day worked (days
+// since 1970), `days` the streak that ends on it and `best` the longest ever. Missing a day starts
+// a new streak at 1, and takes nothing else away. Only that a day had work counts.
+function noteWorkDay(root, now) {
+  const d = new Date(now);
+  const day = Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000);
+  const s = root.stats.streak || (root.stats.streak = { day: null, days: 0, best: 0 });
+  if (s.day != null && day <= s.day) {
+    return;
+  }
+  s.days = s.day === day - 1 ? s.days + 1 : 1;
+  s.day = day;
+  s.best = Math.max(s.best, s.days);
+}
+
+// The streak still alive today (or yesterday, until today's work): the days, or 0.
+function currentStreak(root, now) {
+  const s = root.stats.streak;
+  const d = new Date(now);
+  const day = Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000);
+  return s && s.day != null && day - s.day <= 1 ? s.days : 0;
+}
+
 function onStatusLine(data, now) {
   return update(now, 150, root => {
     if (data.session_id) {
@@ -1175,6 +1220,9 @@ function onStatusLine(data, now) {
       ingestTranscript(root, ss, data.transcript_path, now);
     }
     const worked = settle(root, now) > 0;
+    if (worked) {
+      noteWorkDay(root, now);
+    }
     prune(root, now);
     // Before the update notice, which reports what a save from an older version already earned.
     checkAchievements(root, now, worked);
@@ -1243,7 +1291,7 @@ function classKey(name) {
 function describe(h) {
   const c = classOf(h);
   const skills = h.skills.length > 0 ? ` · ${h.skills.map(s => s.icon).join('')}` : '';
-  return `${c.icon} ${c.name} Lv ${h.level}${partnerTag(h)} · ${weaponOf(h).icon} ${weaponOf(h).name}${skills} · ${h.kills} kills · ${whereText(h)}`;
+  return `${c.icon} ${c.name} Lv ${h.level}${partnerTag(h)} · ${weaponOf(h).icon} ${weaponName(h)}${skills} · ${h.kills} kills · ${whereText(h)}`;
 }
 
 // Switches the active class, creating that hero on first use. Returns a message for the user.
@@ -1508,6 +1556,7 @@ function heroStatistics(h) {
     // A zone's boss must be beaten to leave it, so the zone is also how many zone bosses fell.
     ['Bosses', `${plural(zoneOf(h.heroX), 'zone boss', 'zone bosses')} · ${plural(t.minis, 'mini boss', 'mini bosses')} · ${plural(t.elders, 'Elder boss', 'Elder bosses')}`],
     ['Hits', `biggest ${shortNumber(t.maxHit)} · ${plural(t.skillCrits, 'critical skill hit')}`],
+    ...(isMaster(h) ? [['Mastery', `${weaponOf(h).icon} ${weaponName(h)} · +${h.mastery * MASTERY_DAMAGE}% damage · ${h.masteryKills}/${masteryNeed(h.mastery)} kills to the next rank`]] : []),
     ['Skills found', `${foundText(t.found)} · ${shortNumber(t.replaced)} replaced`],
     ['Gear found', `${foundText(t.gear)} · ${shortNumber(t.left)} salvaged · ${plural(t.forged, 'reforge')}`],
     ['Survival', `${plural(t.potions, 'potion')} drunk · ${plural(t.knockouts, 'knockout')} · ${plural(t.closeCalls, 'close call')}${t.candy > 0 ? ` · ${plural(t.candy, 'candy', 'candies')} eaten` : ''}${t.camps > 0 ? ` · ${plural(t.camps, 'camp')}` : ''}`],
@@ -1531,7 +1580,7 @@ function statisticsReport(now) {
     }
     const c = CLASSES[cls];
     const w = weaponOf(h);
-    lines.push('', `${root.active === cls ? '▶' : ' '} ${c.icon} ${c.name} Lv ${h.level}${partnerTag(h)} · ${w.icon} ${w.name} · ${whereText(h)}`, ...heroStatistics(h));
+    lines.push('', `${root.active === cls ? '▶' : ' '} ${c.icon} ${c.name} Lv ${h.level}${partnerTag(h)} · ${w.icon} ${weaponName(h)} · ${whereText(h)}`, ...heroStatistics(h));
   }
   if (lines.length === 1) {
     return `No heroes yet. Pick one with ${COMMAND_PREFIX}chooseclass.`;
@@ -1548,6 +1597,9 @@ function statisticsReport(now) {
   }
   if (root.stats.longestTurn > 0) {
     all.push(`longest turn ${formatDuration(root.stats.longestTurn)}`);
+  }
+  if (root.stats.streak) {
+    all.push(`${plural(currentStreak(root, now), 'day')} in a row (best ${root.stats.streak.best})`);
   }
   lines.push('', `All heroes · ${all.join(' · ')}`, '',
     'Work time counts only while Claude works. A turn runs from your message to Claude\'s answer;',
@@ -1617,7 +1669,7 @@ function heroCard(root, h) {
   work.push(`🏅 ${earnedCount(root)} of ${ACHIEVEMENTS.length} achievements`);
   const link = String(manifest().homepage || '').replace(/^https?:\/\//, '');
   const footer = ['VibeWorkCompanion', pluginVersion(), link && `· ${link}`].filter(Boolean).join(' ');
-  const lines = [[...(h.partner ? [partnerName(h)] : []), `${w.icon} ${w.name}`, ...skills].join(' · '), fights.join(' · '), gear, work.join(' · ')];
+  const lines = [[...(h.partner ? [partnerName(h)] : []), `${w.icon} ${weaponName(h)}`, ...skills].join(' · '), fights.join(' · '), gear, work.join(' · ')];
   const width = Math.max(displayWidth(title), displayWidth(footer)) + 6;
   const rule = text => `─ ${text} ${'─'.repeat(Math.max(3, width - displayWidth(text)))}`;
   return [`╭${rule(title)}`, ...lines.map(l => `│ ${l}`), `╰${rule(footer)}`].join('\n');
@@ -1664,7 +1716,7 @@ function journalReport(arg, now) {
     }
   }
   const what = 'Level ups, new weapons and biomes, bosses, skills, gear worn, epic and legendary gear salvaged,'
-    + '\nreforges, knockouts, camps, bounties, treasure goblins and achievements';
+    + '\nreforges, weapon ranks, knockouts, camps, bounties, treasure goblins and achievements';
   const whose = only ? ` · ${CLASSES[only].icon} ${CLASSES[only].name}` : '';
   if (moments.length === 0) {
     return `📜 Journal${whose} · nothing written yet\n\n${what} are written down as they happen.`;
@@ -1895,6 +1947,34 @@ function xpNeed(level) {
 
 function weaponOf(h) {
   return classOf(h).weapons.filter(w => h.level >= w.lvl).pop();
+}
+
+// The weapon's name with its rank: "Star Bow +3".
+function weaponName(h) {
+  const w = weaponOf(h);
+  return h.mastery > 0 ? `${w.name} +${h.mastery}` : w.name;
+}
+
+function masteryNeed(rank) {
+  return MASTERY_KILLS * (rank + 1);
+}
+
+// Whether the hero wields its last weapon, which kills rank up.
+function isMaster(h) {
+  const weapons = classOf(h).weapons;
+  return weaponOf(h) === weapons[weapons.length - 1];
+}
+
+function masteryKill(h, now) {
+  if (!isMaster(h)) {
+    return;
+  }
+  h.masteryKills++;
+  if (h.masteryKills >= masteryNeed(h.mastery)) {
+    h.masteryKills -= masteryNeed(h.mastery);
+    h.mastery++;
+    news(h, `${weaponOf(h).icon} ${weaponName(h)}: +${h.mastery * MASTERY_DAMAGE}% damage`, now);
+  }
 }
 
 function attackOf(h) {
@@ -2353,6 +2433,8 @@ function achievementFacts(root, now, worked) {
     // A zone's boss must be beaten to leave it, so this is also how many zone bosses fell.
     zone: best(h => zoneOf(h.heroX)),
     level: best(h => h.level),
+    streak: root.stats.streak ? root.stats.streak.best : 0,
+    mastery: best(h => h.mastery || 0),
     heroes: BASE_CLASSES.filter(k => root.heroes[k]).length,
     everyClass: Math.min(...BASE_CLASSES.map(k => (root.heroes[k] ? root.heroes[k].level : 0))),
     heldSkills: best(h => h.skills.length),
@@ -2596,7 +2678,7 @@ function heroTurn(h, now, allied, dex) {
 // The damage of a basic hit, before rally, skills and critical hits, with a camp's extra damage.
 function basicHit(h) {
   const camp = h.camped > 0 ? 1 + CAMP_DAMAGE : 1;
-  return attackOf(h) * (1 + (skillBonus(h, 'damage') + gearBonus(h, 'damage')) / 100) * camp;
+  return attackOf(h) * (1 + (skillBonus(h, 'damage') + gearBonus(h, 'damage') + (h.mastery || 0) * MASTERY_DAMAGE) / 100) * camp;
 }
 
 // After the hero's attack, each ally strikes the hero's target (the next one in range if that one
@@ -2625,6 +2707,7 @@ function allyTurn(h, allies, now, dex) {
 // A defeated critter may be caught into `dex` (see tryCatch).
 function defeat(h, foe, now, allied = false, dex = null) {
   h.kills++;
+  masteryKill(h, now);
   if (allied) {
     h.tally.allyKills++;
   }
@@ -3259,7 +3342,7 @@ function statsRow(root, h, now, active, cols) {
   const parts = [
     [`${c.icon} ${c.name} ${color(GOLD, `Lv ${h.level}`)} ${color('38;2;167;139;250', bar)} ${h.xp}/${need} XP`, 6],
     [h.partner ? partnerName(h) : null, 4.4],
-    [`${w.icon} ${w.name}`, 4],
+    [`${w.icon} ${weaponName(h)}`, 4],
     [skills, 1],
     [color(b.color, whereText(h)) + (isNight(now) ? ' 🌙' : '') + (season(now) ? ` ${season(now).icon}` : ''), 3],
     [`💀 ${h.kills}`, 2],
@@ -3486,5 +3569,5 @@ module.exports = {
   onHookEvent, onAgentEvent, onStatusLine, render, displayWidth,
   newRoot, newHero, migrate, step, xpNeed, attackOf, weaponOf, classOf, rollSkill, skillPower, learnSkill,
   rollGear, gearPower, gearBonus, gainXp, checkAchievements, achievementFacts, maxLife,
-  makeEnemy, makeGoblin, rollBounty, wildSpecies, caughtCount, strength, evolutionOf, isNight, daylight, season, TRAITS, BIOMES, paceLevel, aheadScale, baseLife,
+  noteWorkDay, currentStreak, makeEnemy, makeGoblin, rollBounty, wildSpecies, caughtCount, strength, evolutionOf, isNight, daylight, season, TRAITS, BIOMES, paceLevel, aheadScale, baseLife,
 };

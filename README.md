@@ -49,7 +49,11 @@ rest, drinks its potions and gets back up on its own.
   the 🦍 Ape King without a potion), paid in shards, a potion or a lucky piece of gear.
 - **Treasure goblins:** now and then a 💰 runs from the hero instead of fighting. Catch it in time
   and it drops 20 shards and a lucky piece of gear.
-- **70 achievements** for kills, groups, bosses, survival, levels, skills, gear, allies, catches, seasons and
+- **Weapon mastery:** from level 35 on, kills rank up your 🌟 star weapon (`Star Bow +3`), each
+  rank adding 2% damage, with no end.
+- **Work streaks:** days in a row with work count toward three achievements (5, 20 and 100 days).
+  Missing a day just starts a new streak; nothing is taken away.
+- **75 achievements** for kills, groups, bosses, survival, levels, skills, gear, allies, catches, seasons and
   hours of work, plus a couple of secret ones. 🏅 pops up on the stats row when you earn one.
 - **Ten biomes,** each with its own floor, enemies and a boss every ~17 minutes of work:
   🌼 Meadow, 🌲 Dark Forest, 💎 Caves, 🌴 Coast, 🌵 Desert, 🪦 Graveyard, 🌋 Volcano, 🐸 Swamp,
@@ -180,6 +184,15 @@ three level up at the same pace (within about a level of each other up to 30 hou
 simulation), so the choice is about style. Skills are random, so luck can put a hero a level or
 two ahead or behind. Only the active class's hero moves; the others wait where you left them.
 The 🧢 Trainer, unlocked at level 50, keeps the same pace (see [The Trainer](#the-trainer)).
+
+## Weapon mastery
+
+Nothing new drops for the weapon after level 35, so from then on it gets better with use. Every
+kill made with the 🌟 star weapon (the Mage's, Warrior's, Archer's or Trainer's) counts toward its
+next rank: the first takes 100 kills, the second 200, the third 300, and so on. Each rank adds 2%
+to the hero's damage, and nothing stops it. The weapon shows its rank on the stats row
+(`🌟 Star Bow +3`), the journal writes down each new rank, and `/vwc:statistics` shows the kills
+left for the next one. A hero at level 35 or more when it updates starts at rank 0.
 
 ## The Trainer
 
@@ -504,11 +517,11 @@ update.
 
 ## Achievements
 
-70 achievements, shared by all your heroes. When you earn one, the stats row says
+75 achievements, shared by all your heroes. When you earn one, the stats row says
 `🏅 Achievement: Dragonslayer`. `/vwc:achievements` lists them all, with how close you are:
 
 ```
-🏅 Achievements · 19 of 70 earned
+🏅 Achievements · 19 of 75 earned
 
 Combat
   ✅ First Blood        defeat an enemy                                2026-10-02 🧝
@@ -521,12 +534,12 @@ Combat
 | Combat | defeat 1, 100, 1,000 and 10,000 enemies; land a hit of 250 and of 2,500 damage; a critical hit with a skill; hit 4 enemies with one area skill; defeat 500 groups; defeat 100 elites; defeat 50 creatures of the night; be joined by an ally; defeat 100 enemies with one at your side; finish a bounty, and 25 |
 | Bosses | the first zone boss, a mini boss, an Elder boss, 5 Elder bosses, the Dragon of the Volcano, and of Volcano X (the 10th time round) |
 | Survival | drink a potion, and 100; win a fight with under 10% life; get knocked out and back up |
-| Journey | levels 5, 10, 20, 30, 35 (the star weapon) and 50 (unlocks the Trainer); reach all 10 biomes; play all three starting classes; all three to level 10 |
+| Journey | levels 5, 10, 20, 30, 35 (the star weapon) and 50 (unlocks the Trainer); star weapon +5 and +10; reach all 10 biomes; play all three starting classes; all three to level 10 |
 | Skills | find a skill; hold two; replace one; find an epic, and a legendary; hold two legendaries |
 | Gear | find a piece; fill all 6 slots; find an epic, and a legendary; salvage 100 pieces; reforge a piece, and 50 times; catch a treasure goblin, and 10 |
 | Collection | as the Trainer: catch a critter; have 25, 75 and 150 in the dex, and all 151 (a secret); see a catch evolve; catch a legendary; catch all 14 night critters; have 5 different partners |
 | Seasons | eat 31 pieces of Halloween candy; defeat 100 snowmen in December |
-| Work | 1, 8 and 40 hours of work; 1 million and 10 million tokens; one turn of 30 minutes; come back to a full hour of rested XP; make camp 10 times; two secrets |
+| Work | 1, 8 and 40 hours of work; 1 million and 10 million tokens; one turn of 30 minutes; come back to a full hour of rested XP; make camp 10 times; work 5, 20 and 100 days in a row; two secrets |
 
 Kills, hours and other totals add up all your heroes, including ones replaced by
 `/vwc:createchar`. A save from before 1.5.0 gets credit right away for what it shows: levels,
@@ -547,15 +560,19 @@ kills, zones, hours of work, level bosses passed and skills held.
     Kills         1,011 · 58 groups · 49 elites · 356 an hour
     Bosses        13 zone bosses · 2 mini bosses · 1 Elder boss
     Hits          biggest 450 · 212 critical skill hits
+    Mastery       🌟 Star Bow +3 · +6% damage · 120/400 kills to the next rank
     Skills found  3 · 1 legendary · 1 replaced
     Gear found    13 · 1 epic · 1 legendary · 6 salvaged · 1 reforge
     Survival      2 potions drunk · 0 knockouts · 0 close calls
     Allies        14 allies joined · 287 kills together
     Bounties      9 bounties done · 2 Treasure Goblins caught
 
-All heroes · 3h11m of work · 1.5M tokens · 1,141 kills · 61 turns · longest turn 15m18s
+All heroes · 3h11m of work · 1.5M tokens · 1,141 kills · 61 turns · longest turn 15m18s · 4 days in a row (best 9)
 ```
 
+- **A streak** counts the days in a row with any work, by your local calendar. The totals line shows
+  the one you're on (it stays until the end of the next day) and your best. It starts when you
+  update to 1.24.0.
 - **Work time** is the time the hero spent adventuring: only while Claude works.
 - **A trainer** also gets a Catches row: his catches, how many an hour, how many were new in the
   dex, how many evolved, and his partners.
@@ -585,7 +602,7 @@ Friday 2026-10-02
 ```
 
 - **What's written down:** level ups, new weapons, new biomes, defeated bosses, skills found, gear
-  equipped, epic and legendary gear salvaged, reforges, knockouts, bounties, treasure goblins,
+  equipped, epic and legendary gear salvaged, reforges, weapon ranks, knockouts, bounties, treasure goblins,
   achievements and updates.
   Potions, allies joining and common salvages are left out, since they come often.
 - **One line a minute:** a hero's moments from the same minute share a line, with its icon, so
@@ -737,6 +754,7 @@ Everything below is in `scripts/companion.js`.
 | `ELITE_CHANCE`, `ELITE` | `0.05` | The share of normal enemies that are elite (twice that at night), and an elite's life, XP, gear and potion multipliers. |
 | `TRAITS` | | The elite traits: name, what it does, and its number (`dodge`, `armor`, `drain`, `blast`). |
 | `GOBLIN_CHANCE`, `GOBLIN`, `GOBLIN_SPEED`, `GOBLIN_RUN` | `0.012`, `{ hp: 2, xp: 4, shards: 20 }`, `2`, `24` | The share of spawns that are a treasure goblin, its life and XP multipliers and its shards, the steps per tile it runs and the steps before it gets away. |
+| `MASTERY_KILLS`, `MASTERY_DAMAGE` | `100`, `2` | The kills for a star weapon's first rank (each rank takes this many more), and the percent of damage each rank adds. |
 | `BOUNTY_SHARDS`, `BOUNTY_KILLS`, `BOUNTY_SHARE`, `BOUNTY_ELITES` | `12`, `90`, `0.35`, `2` | A shard bounty's reward, the kills guessed per zone, the share of one enemy's kills a bounty asks for, and the elites an elite bounty asks for. |
 | `GROUP_MEMBER`, `GROUP_GAP` | `0.65`, `3` | A group member's life, damage and XP compared to an enemy alone, and the extra tiles after a group per extra enemy. |
 | `AREA`, `AREA_MULT` | `3`, `0.85` | How many tiles behind the target an area skill reaches, and its share of a single-target skill's extra damage. |

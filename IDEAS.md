@@ -5,7 +5,7 @@ subagent allies and salvage with reforging (1.11.0), rested XP (1.12.0), day and
 (1.13.0), seasonal events (1.14.0), elite enemies (1.15.0),
 `/vwc:card` (1.16.0), `/vwc:journal <class>` (1.17.0), campfires on compaction (1.18.0), for
 the endgame the 🧢 Trainer unlocked at level 50 (1.20.0, see `TRAINER_PLAN.md`) and, in 1.21.0,
-bounties and the treasure goblin, and in 1.22.0 the Swamp, Tundra and Sky Islands.
+bounties and the treasure goblin, in 1.22.0 the Swamp, Tundra and Sky Islands in 1.23.0 weapon mastery after level 35 and, in 1.24.0, work streaks.
 
 ## Rules every idea has to follow
 
@@ -23,11 +23,6 @@ bounties and the treasure goblin, and in 1.22.0 the Swamp, Tundra and Sky Island
   `PostToolUseFailure` resets it. Only the event type counts, never the tool or what it did. A
   failure must only end the streak, never hurt the hero.
 
-## Time and calendar
-
-- **Work streaks.** Days in a row with work, for achievements only (5, 20, 100 days). Missing a day
-  starts a new streak but takes nothing away.
-
 ## Loot and progression
 
 - **Unique legendaries.** Named legendary pieces with an effect on top of their stats: boots that walk
@@ -36,9 +31,6 @@ bounties and the treasure goblin, and in 1.22.0 the Swamp, Tundra and Sky Island
 - **Biome gear sets.** Each biome's boss can drop its set (a Coral set from the Coast, an Ember set
   from the Volcano), with bonuses for wearing 2, 4 or all 6 pieces. Equipping stays automatic, so a
   set piece needs to count its set bonus in its power.
-- **Endgame after level 35.** Nothing new unlocks after the 🌟 weapon until the 🧢 Trainer at level
-  50, and nothing for the three starting classes after it. Weapon mastery (the weapon
-  levels up with kills: Star Bow +1, +2…) or endless small "paragon" bonuses every few levels.
 - **Inactive heroes train at camp.** The heroes not being played earn about 10% of the XP the active
   one does, so players with all three classes don't leave two of them behind.
 
