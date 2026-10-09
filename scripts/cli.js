@@ -14,6 +14,8 @@
 //   node cli.js --data <dir> journal [class] [all]         notable moments by day: one hero's, or everything kept
 //   node cli.js --data <dir> card [class|all]              a card of a hero to paste in a chat or a PR
 //   node cli.js --data <dir> dex [all]                     the trainer's critters: by biome, the partner, the last ones; all 151
+//   node cli.js --data <dir> game [adventure|survival]     switch the game on display (no choice: switch)
+//   node cli.js --data <dir> shelter                       the survival game's shelter, inside
 //   node cli.js --data <dir> commands                     list every command, plus the current state
 // --data is the plugin's data folder, where the save lives. Skills don't get it as an
 // environment variable, so they pass it here.
@@ -27,6 +29,7 @@ if (dataAt >= 0) {
 }
 
 const companion = require('./companion');
+const survival = require('./survival');
 
 const [command, arg] = args;
 const names = Object.keys(companion.CLASSES).join(' | ');
@@ -48,6 +51,8 @@ const COMMANDS = [
   ['journal [class] [all]', 'what happened while you worked; a class for one hero, all for everything kept'],
   ['card [class|all]', 'a card of your hero to paste in Slack or a PR'],
   ['dex [all]', 'the trainer\'s critters: by biome, his partner and the last catches; all lists all 151'],
+  ['game <adventure|survival>', 'switch the game on display; only that one advances (no choice: switch)'],
+  ['shelter', "the survival game: the shelter's walls, turrets, scrap, weapon and waves"],
   ['setup', 'turn the companion status line on (an existing status line stays on top)'],
   ['setup remove', 'turn it off and put back your previous status line'],
   ['commands', 'this list'],
@@ -90,6 +95,12 @@ function run() {
   }
   if (command === 'card') {
     return companion.cardReport(arg, now);
+  }
+  if (command === 'game') {
+    return survival.setGame(arg, now);
+  }
+  if (command === 'shelter') {
+    return survival.shelterReport(now);
   }
   if (command === 'commands') {
     return commands();

@@ -34,6 +34,26 @@ bounties and the treasure goblin, in 1.22.0 the Swamp, Tundra and Sky Islands in
 - **Inactive heroes train at camp.** The heroes not being played earn about 10% of the XP the active
   one does, so players with all three classes don't leave two of them behind.
 
+## A second game
+
+- **Survival mode (first version built in 1.25.0).** The switch, the strip, walkers and brutes, fists and an axe,
+  gathering, fifteen blueprints to find, barricades, traps and spikes set up from inside the shelter, a survivor that builds, sews and cooks, wears the best clothes, explores buildings, lakes, lost shelters and bunkers, rides a tank and a helicopter near the endgame, more zombie kinds with a tyrant every 10th wave, skills it learns by doing and `/vwc:shelter` are in. Still to come: more
+  places and encounters (caves, a harbor, survivors to meet) and more shelter visuals. A second game you switch to with a command. It only advances while it is the one
+  on display, so it ticks on the render, with no offline catch-up.
+  - The character patrols back and forth along a wide, short strip and fights zombies, weak ones
+    and strong ones. The shelter sits in the center, with some visual upgrades around it.
+  - While the character is away, zombies attack the shelter, so the shelter defends itself
+    (auto-turrets that improve as it levels).
+  - The character gathers resources that upgrade the shelter. A command shows the inside of the
+    shelter. Like every other command, it only shows info.
+  - Weapon ladder: fists, melee, ranged, tanks, aircraft, and so on.
+  - Open questions: keep its progression separate from the main game and the Trainer (easier to
+    balance, with at most one small cross-reward). Losing the shelter should be a soft setback (lose
+    some resources, restart the wave), never permadeath.
+  - First version: the switch command, one strip, 2 zombie types, fists and one melee weapon,
+    gathering that levels the shelter, auto-turrets and the inside-shelter command. Ranged, tanks and
+    aircraft come in later releases, one per version.
+
 ## Turned down
 
 - **Leaderboards:** they need network access, which breaks "nothing leaves your machine".

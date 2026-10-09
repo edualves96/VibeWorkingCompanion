@@ -162,6 +162,8 @@ any other hero active, older windows work as before.
 | `/vwc:dex [all]` | The 🧢 Trainer's dex: how many of the 151 critters he has caught, by biome, at night and legendary, his partner, and the last ones new in the dex. `all` lists all 151: caught (and when), seen, or not met yet. |
 | `/vwc:stats <above\|below>` | Put the hero's stats row (level, XP, weapon, zone, kills) above the map, where it starts, or below it. With no argument it switches to the other place. The choice is remembered across restarts. |
 | `/vwc:showprogress <on\|off>` | `off` hides the hero's progress (the stats row with name, level, XP, weapon, zone and kills, and the 💗 life bar) so only the map is shown; `on` brings it back. With no argument it switches. Level-ups, loot and other news are shown on the stats row, so you won't see them while it's hidden. The choice is remembered across restarts. |
+| `/vwc:game <adventure\|survival>` | Switch the game on display. Only the one on display advances, so the other waits where it was. With no argument it switches. See [Survival](#survival). |
+| `/vwc:shelter` | The inside of the Survival game's shelter: walls, turrets, scrap, weapon, waves and totals. |
 | `/vwc:commands` | List every command, your heroes, how many achievements you have, and what is currently shown or hidden. |
 
 The commands run a small script before Claude sees anything, and then use Haiku to repeat the
@@ -249,6 +251,75 @@ hero: `/vwc:chooseclass trainer`, or `bash`.
   after 10 to 13 hours of work, and all of it at about level 50 (30 to 34 hours).
 - **Names:** every critter is a parody, a coding or Claude pun on a famous original and never the
   original itself. All 151, with their types and where they live, are in `scripts/roster.js`.
+
+## Survival
+
+A second game, switched on with `/vwc:game survival` (and off with `/vwc:game adventure`). Only the
+game on display advances, so the other waits where it was. Like the adventure it needs no input:
+it takes one step per second of Claude's work.
+
+- The 🧑 survivor patrols a strip around the 🏠 shelter in the center, fighting 🧟 zombies. Crossing
+  the shelter's tile means going inside, where nothing can reach him: when he is badly hurt he goes
+  home and rests until he is better. The shelter grows with its walls (🏠 → 🏡 → 🏰 → 🏯) and gets
+  a 🔥 cooking fire and a 🚩 flag as it develops.
+- **Zombies:** 🧟 walkers, 👹 brutes (from wave 2), 🐺 runners (wave 4), 🦠 spitters that attack the
+  walls from a distance (wave 8), and a 👺 tyrant every 10th wave, who drops better clothes. From
+  wave 3 a whole group may arrive at once ("a horde of 5 comes from the left").
+- **He sizes up every fight.** Before he charges, he weighs the zombies in sight (how tough they
+  are, how many, how fast) against what he has: his weapon, whether he has bullets for a gun and
+  how many, his clothes, and the turrets that reach the fight. A knife against a crowd of brutes is
+  a fight he can't win, so when three or more are coming and the turrets can hold the walls, he
+  falls back to the shelter (🏃, then 🧱 holed up) and uses the time to build or make bullets. With a
+  gun and enough bullets, the same crowd is worth facing. A fresh survivor misjudges, thinking
+  fights are easier than they are; the 🧠 Tactics skill, learned from falling back and from getting
+  hurt, makes him a better judge. If the walls are failing or the standoff drags on, he goes out
+  anyway. `/vwc:shelter` shows his last call.
+- **He is an ordinary man.** He can nail boards together for the walls, but he has to find a 📜
+  blueprint before he can build, craft or cook anything else. They turn up in crates and when he
+  explores, once their time has come, and every find without one makes the next likelier to bring
+  one. There are fifteen: 🗼 Turrets, 🧵 Sewing, 🍳 Cooking, 🪓 Axe, 🔫 Pistol, 🧨 Bullets, 🧥 Leather,
+  🚧 Barricades, 🪤 Traps, 📌 Spikes, 🧰 Heavy turrets, 🔭 Rifle, 🦺 Kevlar and, late on, 🚜 Tank and
+  🚁 Helicopter. Until he finds the
+  turret blueprint, the waves hold back and he fights with his fists.
+- **He explores.** Places turn up along the strip, and when he is healthy, the walls hold and
+  nothing is near, he goes to look, at his own risk: a 🏢 abandoned building may hide an ambush, a
+  🌊 lake can hurt him (or nearly drown him) but may hold finds, a ⛺ lost shelter is a safe stop
+  that heals him, and a 🚪 bunker is always guarded but holds the best loot, often a blueprint.
+  The search takes a few seconds (🔍) and a bad one can leave him hurt, so he may rest after.
+- **Nothing is there until he builds it.** He gathers 🔩 scrap (from zombies and 📦 crates), 🪵 wood,
+  🧵 cloth and 🥩 food. With enough, he heads home and works inside for a few seconds (shown as 🔨):
+  🗼 turrets, one per free slot, then the next weapon, then stronger 🧱 walls, which add turret
+  slots and let the shelter grow. He only goes home to build once the zombies are off the doorstep.
+- **Defenses.** From inside the shelter, once he has found how, he sets up defenses along the
+  approach, in slots that open with the shelter's level: 🚧 barricades close in (a zombie stops to
+  chew through one, under the turrets' fire), 🪤 traps further out (the first zombie to step on one
+  is caught, hurt and held for a few seconds; the trap is used up, and a standing trap also catches
+  game now and then, for food) and 📌 spikes beyond (every zombie that crosses them is hurt). He
+  replaces what gets destroyed, with a pause between jobs. The 🪤 Trapping skill makes them last
+  and hit harder. A fallen shelter loses its defenses.
+- **Weapons:** 👊 fists, a 🪓 axe (shelter level 3), a 🔫 pistol (level 5, reach 4 tiles), a 🔭
+  rifle (level 9, reach 6) and, near the endgame, a 🚜 tank (level 14, reach 8) and a 🚁 helicopter
+  (level 20, reach 10) that he rides on the map and whose shots hit the zombies around the target
+  too. Each needs its own blueprint. Guns need 🧨 bullets, which he makes from scrap (a vehicle uses
+  3 or 5 a shot); when they run out he goes back to the next weapon down until he has made more.
+- **Clothes:** four slots (🪖 helmet, 🦺 vest, 🧤 gloves, 🥾 boots). Zombies and the places he
+  searches sometimes give a piece (better ones deeper into the waves), and with a sewing blueprint
+  he makes his own from cloth and scrap: Cloth, then Leather and Kevlar with their blueprints. A
+  better piece always replaces the one worn in that slot, and the worse one is torn up for cloth.
+  They stop up to half of every bite.
+- **Cooking:** with the blueprint, he turns food into 🍲 meals. Hurt, he eats one on the move: it
+  heals him and makes him hit harder for a while (😋).
+- While he is away or building, the turrets he has built defend the shelter.
+- **He learns by doing.** Each skill has three tiers, earned from what he has done: 🎒 Scavenging
+  (crates gathered), 🥊 Combat (zombies killed by hand), 🔧 Engineering (things built), 🧱 Fortifying
+  (waves survived), 🩹 First aid (times he had to rest), 🧵 Tailoring (clothes made), 🍳 Cooking (meals
+  cooked), 🔍 Scouting (places explored: fewer ambushes, bigger finds), 🏊 Diving (lake dives: less
+  damage, more finds), 🧨 Gunsmithing (bullets made: more a batch, harder hits), 🪤 Trapping (defenses set up) and 🧠 Tactics (hard lessons).
+- Waves hold at the shelter's pace. If the shelter falls anyway, you lose a quarter of the materials
+  and a wave, the zombies thin out for a few minutes, and it is rebuilt in a few seconds.
+  Turrets, blueprints, clothes, skills and levels are never lost.
+- `/vwc:shelter` shows the inside: what is built, what he is saving for, what he wears, his
+  blueprints and what he has learned. The save is its own file, `survival.json`.
 
 ## Skills
 
@@ -888,11 +959,12 @@ If you had a status line before `/vwc:setup`, it runs and is shown on top. Other
 | `.claude-plugin/plugin.json` | Plugin manifest (name `vwc`, version). |
 | `.claude-plugin/marketplace.json` | Makes this repository its own marketplace (`vibeworkcompanion`). |
 | `hooks/hooks.json` | The hooks that tell the companion when Claude is working. |
-| `skills/` | The `/vwc:` commands: `setup`, `chooseclass`, `createchar`, `hide`, `show`, `stats`, `showprogress`, `skills`, `gear`, `achievements`, `statistics`, `journal`, `card`, `dex` and `commands`. |
+| `skills/` | The `/vwc:` commands: `setup`, `chooseclass`, `createchar`, `hide`, `show`, `stats`, `showprogress`, `skills`, `gear`, `achievements`, `statistics`, `journal`, `card`, `dex`, `game`, `shelter` and `commands`. |
 | `scripts/companion.js` | The engine: save file, classes, biomes, game rules, rendering. |
 | `scripts/statusline.js` | What the status line runs: info row plus the three companion rows. |
 | `scripts/hook.js` | What the hooks run. Events from subagents go to the allies. |
 | `scripts/cli.js` | Class switching, new characters, hide/show, the stats row's place, showing or hiding the progress rows, the skills, gear, achievements and statistics lists, the journal, the hero card, the dex, and the command list. |
+| `scripts/survival.js` | The Survival game: its rules, rendering and the `/vwc:game` and `/vwc:shelter` commands. |
 | `scripts/setup.js` | Turns the status line on and off in your `settings.json`. |
 | `scripts/roster.js` | The Trainer's critters: the 15 types they fight with and all 151 species. |
 | `scripts/check-roster.js` | Checks `roster.js` after a change: numbering, names, evolutions, bosses and emoji. |
@@ -905,6 +977,8 @@ plugin updates:
 | File | What it is |
 |------|------------|
 | `state.json` | One hero per class (with its skills, gear, shards, rested XP, camp, journal, and counts for achievements and statistics), which one is active, the allies of the subagents running now, the achievements earned and the totals they need, the dex of the critters seen and caught, what `/vwc:hide` has hidden, where `/vwc:stats` put the stats row, whether `/vwc:showprogress` hid it, and the last plugin version it saw (for the update notice). Delete it to start everything over. |
+| `survival.json` | The Survival game's save: shelter, scrap, weapon, wave and totals. |
+| `game` | Exists only while the Survival game is the one on display. |
 | `backups/` | Heroes replaced by `/vwc:createchar`. To restore one, copy it into `state.json` under `heroes.<class>`. |
 | `statusline.js` | Small launcher that your status line runs; it finds the current plugin version. |
 | `previous-statusline.json` | The status line you had before setup. |

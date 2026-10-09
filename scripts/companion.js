@@ -5,6 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const { TYPES, SPECIES } = require('./roster');
+const survival = require('./survival');
 
 // Where the save lives: COMPANION_DIR (set by the status line launcher, cli.js and tests),
 // else the plugin's data folder (Claude Code gives hooks CLAUDE_PLUGIN_DATA), else next to this file.
@@ -227,6 +228,7 @@ const UPDATE_MSG_MS = 30000;      // the "updated" notice stays longer than othe
 const WHATS_NEW = {
   '1.3.0': 'enemies have life now, and every 5th level summons a boss',
   '1.4.0': `skills are random now, dropped by level bosses: ${COMMAND_PREFIX}skills`,
+  '1.25.0': `🏠 a second game: survive zombies with a shelter, ${COMMAND_PREFIX}game survival`,
   '1.24.0': root => (olderThan(root.seenVersion, '1.23.0')
     ? '🌟 star weapon ranks, 📆 work streaks, 🐸 three new biomes, 📋 bounties and 💰 treasure goblins'
     : `📆 days in a row with work now count toward achievements (${COMMAND_PREFIX}statistics)`),
@@ -1219,7 +1221,15 @@ function onStatusLine(data, now) {
       const ss = session(root, data.session_id, now);
       ingestTranscript(root, ss, data.transcript_path, now);
     }
-    const worked = settle(root, now) > 0;
+    // Only the game on display advances: with the survival game shown, the adventure waits.
+    let worked;
+    if (survival.isShown()) {
+      root.lastTick = now;
+      worked = anyActive(root, now);
+      survival.tick(worked, now);
+    } else {
+      worked = settle(root, now) > 0;
+    }
     if (worked) {
       noteWorkDay(root, now);
     }
@@ -3535,6 +3545,9 @@ function pickerRows(cols, now) {
 function render(root, now, cols) {
   const h = activeHero(root);
   const show = display(root);
+  if (survival.isShown()) {
+    return survival.render(survival.load(now), { now, cols, show, active: anyActive(root, now), displayWidth, alignRight: row => alignRight(row, cols) });
+  }
   let text = [];
   let map;
   if (!h) {
