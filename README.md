@@ -163,7 +163,7 @@ any other hero active, older windows work as before.
 | `/vwc:stats <above\|below>` | Put the hero's stats row (level, XP, weapon, zone, kills) above the map, where it starts, or below it. With no argument it switches to the other place. The choice is remembered across restarts. |
 | `/vwc:showprogress <on\|off>` | `off` hides the hero's progress (the stats row with name, level, XP, weapon, zone and kills, and the 💗 life bar) so only the map is shown; `on` brings it back. With no argument it switches. Level-ups, loot and other news are shown on the stats row, so you won't see them while it's hidden. The choice is remembered across restarts. |
 | `/vwc:game <adventure\|survival>` | Switch the game on display. Only the one on display advances, so the other waits where it was. With no argument it switches. See [Survival](#survival). |
-| `/vwc:shelter` | The inside of the Survival game's shelter: walls, turrets, scrap, weapon, waves and totals. |
+| `/vwc:shelter` | The inside of the Survival game's shelter: the day count, the next blood moon, the generator, walls, turrets, scrap, weapon, the people living there, the lab, waves and totals. |
 | `/vwc:commands` | List every command, your heroes, how many achievements you have, and what is currently shown or hidden. |
 
 The commands run a small script before Claude sees anything, and then use Haiku to repeat the
@@ -261,10 +261,23 @@ it takes one step per second of Claude's work.
 - The 🧑 survivor patrols a strip around the 🏠 shelter in the center, fighting 🧟 zombies. Crossing
   the shelter's tile means going inside, where nothing can reach him: when he is badly hurt he goes
   home and rests until he is better. The shelter grows with its walls (🏠 → 🏡 → 🏰 → 🏯) and gets
-  a 🔥 cooking fire and a 🚩 flag as it develops.
+  a 🔥 cooking fire, a ⚡ generator, a 🚩 flag and a 🧪 lab as it develops.
 - **Zombies:** 🧟 walkers, 👹 brutes (from wave 2), 🐺 runners (wave 4), 🦠 spitters that attack the
   walls from a distance (wave 8), and a 👺 tyrant every 10th wave, who drops better clothes. From
   wave 3 a whole group may arrive at once ("a horde of 5 comes from the left").
+- **🌙 Nights.** Night follows the same clock as the adventure's (20:00 to 06:00): the ground
+  darkens, more zombies come (runners from wave 2), and the turrets, drifters and lookout only see 5
+  tiles unless the generator lights the strip. On the night of the full moon, worked out from the
+  date, a 🌕 blood moon rises: the ground turns red, more zombies still come, and they drop twice as
+  much. `/vwc:shelter` says when the next one is.
+- **⚡ The generator.** With its blueprint, he builds a generator, which runs on the tokens Claude
+  uses while Survival is on display: every 500 tokens are a second of power, and it holds 15
+  minutes' worth. While it runs, an electric fence shocks the zombies at the walls and, at night,
+  lights reach 3 tiles either side of the shelter, so the guns see as far as by day. Big turns
+  charge it more; tokens used while the adventure is on display don't count.
+- **📅 Days.** The stats row counts the days he has been out there (each day with Survival played
+  is one), and the 🪧 sign counts the days in a row the shelter has stood. A fall puts the sign back
+  to 0; `/vwc:shelter` keeps the best run.
 - **He sizes up every fight.** Before he charges, he weighs the zombies in sight (how tough they
   are, how many, how fast) against what he has: his weapon, whether he has bullets for a gun and
   how many, his clothes, and the turrets that reach the fight. A knife against a crowd of brutes is
@@ -277,9 +290,9 @@ it takes one step per second of Claude's work.
 - **He is an ordinary man.** He can nail boards together for the walls, but he has to find a 📜
   blueprint before he can build, craft or cook anything else. They turn up in crates and when he
   explores, once their time has come, and every find without one makes the next likelier to bring
-  one. There are fifteen: 🗼 Turrets, 🧵 Sewing, 🍳 Cooking, 🪓 Axe, 🔫 Pistol, 🧨 Bullets, 🧥 Leather,
-  🚧 Barricades, 🪤 Traps, 📌 Spikes, 🧰 Heavy turrets, 🔭 Rifle, 🦺 Kevlar and, late on, 🚜 Tank and
-  🚁 Helicopter. Until he finds the
+  one. There are sixteen: 🗼 Turrets, 🧵 Sewing, 🍳 Cooking, 🪓 Axe, 🔫 Pistol, 🧨 Bullets, 🧥 Leather,
+  🚧 Barricades, 🪤 Traps, 📌 Spikes, 🧰 Heavy turrets, ⚡ Generator, 🔭 Rifle, 🦺 Kevlar and, late on,
+  🚜 Tank and 🚁 Helicopter. Until he finds the
   turret blueprint, the waves hold back and he fights with his fists.
 - **He explores.** Places turn up along the strip, and when he is healthy, the walls hold and
   nothing is near, he goes to look, at his own risk: a 🏢 abandoned building may hide an ambush, a
@@ -310,6 +323,28 @@ it takes one step per second of Claude's work.
 - **Cooking:** with the blueprint, he turns food into 🍲 meals. Hurt, he eats one on the move: it
   heals him and makes him hit harder for a while (😋).
 - While he is away or building, the turrets he has built defend the shelter.
+- **🤠 Drifters.** Every subagent Claude runs sends a drifter to the shelter (two at a time at
+  most). Drifters stand on the walls and shoot the nearest zombie until their subagent finishes.
+- **🪂 Supply drops.** When Claude compacts the conversation while Survival is on display, a supply
+  drop comes down somewhere on the strip (on the adventure, the hero makes camp instead). It holds
+  more than a crate, bullets once he makes them, and often a blueprint or a piece of clothing. A
+  drop still out there survives a fall of the shelter.
+- **👷 People move in.** Survivors he meets on his searches (most often at a lost shelter) move in
+  while there is a bed for them, one every 3 shelter levels, and each takes the role nobody has yet:
+  🔧 a mechanic mends the walls twice as fast, 🩹 a medic makes his rests heal twice as fast and
+  knockouts shorter, 🍳 a cook makes meals from the food in the pantry, 🔭 a lookout shoots from the
+  roof like another turret, and 🎒 a scavenger goes on runs and comes back with materials, now and
+  then a blueprint. They stay inside, so nothing can hurt them.
+- **🐕 A dog.** Once he has explored a few places, a search may turn up a dog that follows him from
+  then on: it trots behind him, fetches a crate lying close by every so often, and barks before an
+  ambush, so fewer of them catch him.
+- **🧪 The cure.** Once he flies the helicopter, brutes and spitters now and then carry a sample of
+  the virus, a tyrant several, and a bunker may hold one. He builds a lab at the shelter, and it
+  studies the samples one stage at a time, each one for good: 🧫 Antibodies (bites hurt him 15%
+  less), 🔬 Weak spot (he, the turrets and the drifters hit 15% harder), 🩸 Serum (zombies come with
+  10% less life), 🧴 Repellent (hordes and ambushes a third smaller) and 💉 the cure itself. The cure
+  puts a ✨ on the shelter, worth 10% more damage and walls, and a new strain follows: every cure
+  after that takes more samples and adds another ✨.
 - **He learns by doing.** Each skill has three tiers, earned from what he has done: 🎒 Scavenging
   (crates gathered), 🥊 Combat (zombies killed by hand), 🔧 Engineering (things built), 🧱 Fortifying
   (waves survived), 🩹 First aid (times he had to rest), 🧵 Tailoring (clothes made), 🍳 Cooking (meals
@@ -318,8 +353,8 @@ it takes one step per second of Claude's work.
 - Waves hold at the shelter's pace. If the shelter falls anyway, you lose a quarter of the materials
   and a wave, the zombies thin out for a few minutes, and it is rebuilt in a few seconds.
   Turrets, blueprints, clothes, skills and levels are never lost.
-- `/vwc:shelter` shows the inside: what is built, what he is saving for, what he wears, his
-  blueprints and what he has learned. The save is its own file, `survival.json`.
+- `/vwc:shelter` shows the inside: what is built, what he is saving for, who lives there, the lab,
+  what he wears, his blueprints and what he has learned. The save is its own file, `survival.json`.
 
 ## Skills
 
@@ -722,8 +757,8 @@ The hero takes one step per second of **working time**. Hooks tell it when Claud
 | Claude needs your permission (`PermissionRequest`) | waits |
 | Claude asks you a question (`AskUserQuestion`, `ExitPlanMode`) | waits |
 | You press Esc | waits (read from the transcript, since no hook fires) |
-| A subagent starts or stops (`SubagentStart`, `SubagentStop`) | an [ally](#allies) joins or leaves |
-| Claude compacts the conversation (`PreCompact`) | makes [camp](#campfire) |
+| A subagent starts or stops (`SubagentStart`, `SubagentStop`) | an [ally](#allies) joins or leaves (in [Survival](#survival), a drifter) |
+| Claude compacts the conversation (`PreCompact`) | makes [camp](#campfire) (in [Survival](#survival), a supply drop lands) |
 
 - **One hero for all your windows:** it walks while at least one Claude Code session is working.
 - **Subagents don't move the hero:** only the main conversation does. A subagent brings an ally
@@ -977,7 +1012,7 @@ plugin updates:
 | File | What it is |
 |------|------------|
 | `state.json` | One hero per class (with its skills, gear, shards, rested XP, camp, journal, and counts for achievements and statistics), which one is active, the allies of the subagents running now, the achievements earned and the totals they need, the dex of the critters seen and caught, what `/vwc:hide` has hidden, where `/vwc:stats` put the stats row, whether `/vwc:showprogress` hid it, and the last plugin version it saw (for the update notice). Delete it to start everything over. |
-| `survival.json` | The Survival game's save: shelter, scrap, weapon, wave and totals. |
+| `survival.json` | The Survival game's save: shelter, scrap, weapon, wave, the people living there, the lab and totals. |
 | `game` | Exists only while the Survival game is the one on display. |
 | `backups/` | Heroes replaced by `/vwc:createchar`. To restore one, copy it into `state.json` under `heroes.<class>`. |
 | `statusline.js` | Small launcher that your status line runs; it finds the current plugin version. |

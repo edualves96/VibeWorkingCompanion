@@ -11,6 +11,12 @@
 // would lose. Like the adventure it needs no
 // input: it moves one step per second of work, and only while it is the game on display.
 //
+// He is not alone for long: Claude's subagents send drifters who shoot from the walls, a compaction
+// brings a supply drop, survivors he meets move in and take a role each, and a dog may follow him
+// home. Once he flies the helicopter, a lab studies the virus for a cure. Nights are harder (and a
+// blood moon harder still), a generator running on Claude's tokens lights them and electrifies the
+// walls, and the days he has been out there are counted.
+//
 // It has its own save (survival.json) and is chosen by a small `game` file, so it never touches
 // the heroes' save. Companion.js passes in the helpers it needs.
 
@@ -64,6 +70,7 @@ const BLUEPRINTS = {
   spikes: { icon: '📌', name: 'Spikes', chance: 0.02, after: sv => sv.blueprints.includes('barricade') && sv.shelter.level >= 4 },
   rifle: { icon: '🔭', name: 'Rifle', chance: 0.012, after: sv => sv.weapon >= 2 },
   kevlar: { icon: '🦺', name: 'Kevlar', chance: 0.012, after: sv => sv.blueprints.includes('leather') && sv.shelter.level >= 8 },
+  generator: { icon: '⚡', name: 'Generator', chance: 0.02, after: sv => sv.turrets >= 2 && sv.shelter.level >= 4 },
   // The endgame: vehicles, found only once the shelter is well established and the rifle is in hand.
   tank: { icon: '🚜', name: 'Tank', chance: 0.006, after: sv => sv.weapon >= 3 && sv.shelter.level >= 12 },
   helicopter: { icon: '🚁', name: 'Helicopter', chance: 0.004, after: sv => sv.weapon >= 4 && sv.shelter.level >= 18 },
@@ -139,19 +146,88 @@ const SKILLS = {
   gunsmithing: { icon: '🧨', name: 'Gunsmithing', counter: 'bulletsMade', unit: 'bullets made', tiers: [200, 1000, 4000], text: 'more bullets a batch, guns hit 10% harder' },
 };
 
-const JOB_STEPS = { turret: 8, walls: 10, weapon: 6, ammo: 3, clothes: 6, cook: 4, explore: 5, defense: 5 };
-const JOB_NAMES = { turret: 'turret', walls: 'walls', weapon: 'crafting', ammo: 'bullets', clothes: 'sewing', cook: 'cooking', explore: 'searching', defense: 'defenses' };
+const JOB_STEPS = { turret: 8, walls: 10, weapon: 6, ammo: 3, clothes: 6, cook: 4, explore: 5, defense: 5, lab: 20, research: 12, generator: 10 };
+const JOB_NAMES = { turret: 'turret', walls: 'walls', weapon: 'crafting', ammo: 'bullets', clothes: 'sewing', cook: 'cooking', explore: 'searching', defense: 'defenses', lab: 'the lab', research: 'research', generator: 'generator' };
 
 // Places to explore. He goes when he is healthy and the shelter is quiet, and takes his chances:
 // a building may hide an ambush, a lake may nearly drown him, a bunker is always guarded but holds
 // the best finds, and a lost shelter is a safe stop. `loot` is [min, max] per material, the chance
-// of a blueprint (`bp`) and of a piece of clothing (`gear`).
+// of a blueprint (`bp`) and of a piece of clothing (`gear`); `meet` the chance of meeting someone
+// who would move in (see ROLES).
 const SITES = {
-  building: { icon: '🏢', name: 'abandoned building', weight: 0.4, ambush: 0.35, loot: { scrap: [10, 25], cloth: [3, 7], food: [2, 5], bp: 0.2, gear: 0.15 } },
-  lake: { icon: '🌊', name: 'lake', weight: 0.2, loot: { wood: [8, 18], scrap: [10, 30], bp: 0.15, gear: 0.25 } },
-  shelter: { icon: '⛺', name: 'lost shelter', weight: 0.25, loot: { wood: [8, 15], scrap: [10, 20], food: [3, 6], bp: 0.2, gear: 0 } },
-  bunker: { icon: '🚪', name: 'bunker', weight: 0.15, ambush: 1, loot: { scrap: [40, 80], cloth: [5, 10], food: [4, 8], bp: 0.7, gear: 0.4, tier: 1 } },
+  building: { icon: '🏢', name: 'abandoned building', weight: 0.4, ambush: 0.35, meet: 0.1, loot: { scrap: [10, 25], cloth: [3, 7], food: [2, 5], bp: 0.2, gear: 0.15 } },
+  lake: { icon: '🌊', name: 'lake', weight: 0.2, meet: 0, loot: { wood: [8, 18], scrap: [10, 30], bp: 0.15, gear: 0.25 } },
+  shelter: { icon: '⛺', name: 'lost shelter', weight: 0.25, meet: 0.35, loot: { wood: [8, 15], scrap: [10, 20], food: [3, 6], bp: 0.2, gear: 0 } },
+  bunker: { icon: '🚪', name: 'bunker', weight: 0.15, ambush: 1, meet: 0.2, loot: { scrap: [40, 80], cloth: [5, 10], food: [4, 8], bp: 0.7, gear: 0.4, tier: 1 } },
 };
+
+// Every subagent Claude runs sends a drifter to the shelter (the adventure's allies, from the same
+// hook events, two at a time at most). It stands on the walls and shoots the nearest zombie within
+// DRIFTER_RANGE every step, until its subagent finishes.
+const DRIFTER_TILES = [2, -2];
+const DRIFTER_RANGE = 6;
+// When Claude compacts the conversation, a supply drop lands by parachute somewhere on the strip.
+// It holds more than a crate (`more` per wave), bullets once he makes them, and good odds of a
+// blueprint and a piece of clothing.
+const SUPPLY = { scrap: [25, 45], wood: [15, 30], cloth: [4, 8], food: [4, 8], more: 0.1, ammo: 30, bp: 0.5, gear: 0.3 };
+
+// Survivors he meets on his searches move in while there is a bed for them (one every BED_EVERY
+// shelter levels), and each takes the role nobody has yet. They stay inside, so nothing can hurt
+// them, and a fallen shelter is rebuilt around them.
+const BED_EVERY = 3;
+const ROLES = {
+  mechanic: { icon: '🔧', name: 'mechanic', text: 'mends the walls twice as fast' },
+  medic: { icon: '🩹', name: 'medic', text: 'rests heal twice as fast, and knockouts end sooner' },
+  cook: { icon: '🍳', name: 'cook', text: 'cooks meals from the food in the pantry' },
+  lookout: { icon: '🔭', name: 'lookout', text: 'shoots from the roof like another turret, a little farther' },
+  scavenger: { icon: '🎒', name: 'scavenger', text: 'goes on runs and comes back with materials' },
+};
+const NAMES = ['Maria', 'Joe', 'Ana', 'Sam', 'Rosa', 'Ken', 'Lucia', 'Tom', 'Nadia', 'Ivan', 'Mei', 'Omar'];
+const LOOKOUT_RANGE = 8;
+const COOK_EVERY = 40;       // steps between the cook's meals, while there is food
+const RUN_EVERY = 150;       // steps between the scavenger's runs
+const RUN_BLUEPRINT = 0.05;
+// A dog he finds on a search (once he has explored DOG.after places) follows him from then on. It
+// fetches a crate within DOG.fetch tiles of him (then rests DOG.rest steps) and barks before an
+// ambush, so fewer catch him.
+const DOG = { chance: 0.12, after: 4, fetch: 3, rest: 30, bark: 0.15 };
+const DOG_NAMES = ['Biscuit', 'Rex', 'Scout', 'Pepper', 'Ranger', 'Lucky'];
+
+// The endgame, once he flies the helicopter: zombies carry samples of the virus (SAMPLES: under 1
+// the chance of one, from 1 how many; a bunker may hold one too), and a lab at the shelter
+// studies them, one stage of CURE at a time. Each stage helps for good, and the last cures the
+// outbreak: a ✨ on the shelter, worth CURE_BONUS more damage and walls. A new strain follows, and
+// curing it takes CURE_AGAIN more samples each time.
+const LAB = { scrap: 4000, wood: 1500 };
+const SAMPLES = { brute: 0.01, spitter: 0.015, boss: 5, bunker: 0.3 };
+const CURE = [
+  { icon: '🧫', name: 'Antibodies', samples: 10, scrap: 500, text: 'bites hurt him 15% less' },
+  { icon: '🔬', name: 'Weak spot', samples: 20, scrap: 1000, text: 'he, the turrets and the drifters hit 15% harder' },
+  { icon: '🩸', name: 'Serum', samples: 30, scrap: 1500, text: 'zombies come with 10% less life' },
+  { icon: '🧴', name: 'Repellent', samples: 40, scrap: 2000, text: 'hordes and ambushes are a third smaller' },
+  { icon: '💉', name: 'The cure', samples: 60, scrap: 3000, text: 'ends the outbreak' },
+];
+const CURE_BONUS = 0.1;
+const CURE_AGAIN = 0.5;
+
+// Night follows the adventure's clock (companion.js passes it in). In the dark NIGHT_SPAWN as many
+// zombies come and NIGHT_CROWD more can be about at once, more of them runners, and the shelter's
+// guns only see NIGHT_RANGE tiles unless the generator powers the lights. On the night of the full
+// moon a blood moon rises: more zombies still (BLOOD), and twice what they drop. The moon's age
+// comes from the date (MOON: its mean month and a known new moon), at 1 a.m. that night, so each
+// full moon has one blood moon night.
+const NIGHT_RANGE = 5;
+const NIGHT_SPAWN = 1.2;
+const NIGHT_CROWD = 1;
+const BLOOD = { spawn: 1.5, crowd: 2, drops: 2 };
+const MOON = { month: 29.530588853, newAt: Date.UTC(2000, 0, 6, 18, 14) };
+// The generator, built once he has its blueprint, runs on the tokens Claude uses while this game
+// is on display: TOKENS_PER_FUEL of them make a second of power, it holds FUEL_MAX, and it burns a
+// second's worth every step. While it runs it lights the strip around the shelter at night and
+// powers an electric fence that shocks the zombies at the walls.
+const GENERATOR = { scrap: 150, wood: 60 };
+const TOKENS_PER_FUEL = 500;
+const FUEL_MAX = 900;
 const BULLETS = { scrap: 10, made: 40, low: 10 };   // 10 scrap make 40 bullets, made when under 10 are left
 const MEAL = { food: 3, heal: 0.4, fed: 60, bonus: 0.15, below: 0.5 };   // 3 food make a meal
 
@@ -168,11 +244,86 @@ function newSave(now) {
     kills: 0, wave: 1, waveKills: 0, bestWave: 1, weapon: 0, turrets: 0, job: null,
     learned: {}, blueprints: [], misses: 0, sites: [], gear: {}, resting: false, grace: 0, boss: false, mode: null, hole: 0, call: null, defenses: [], defReady: 0,
     shelter: { level: 1, hp: wallsMax(1, 0) }, rebuild: 0, zombies: [], crates: [], fx: null, msg: null,
+    // `drifters` are the subagents at the shelter, each known by when it arrived; `residents` the
+    // survivors who moved in ({ name, role }); `facing` the way he last moved, for the dog.
+    drifters: [], residents: [], dog: null, facing: 1, samples: 0, lab: false, stage: 0, cures: 0,
+    // Whether it was night (and a blood moon) at the last tick; the generator's fuel and the token
+    // total last counted toward it ({ total, at }); the days played (`day` is the last one, in days
+    // since 1970) and how many of them in a row the shelter has stood (`safeDays`, best `bestSafe`).
+    night: null, blood: false, generator: false, fuel: 0, tokens: null, day: null, days: 0, safeDays: 0, bestSafe: 0,
     totals: {
       scrapFound: 0, woodFound: 0, falls: 0, brutes: 0, bosses: 0, turretKills: 0, crates: 0, handKills: 0, builds: 0, waves: 0,
       knockouts: 0, rests: 0, retreats: 0, lessons: 0, defenses: 0, trapKills: 0, game: 0, sites: 0, dives: 0, hordes: 0, clothes: 0, meals: 0, bulletsMade: 0, gearFound: 0,
+      drifters: 0, allyKills: 0, drops: 0, fetched: 0, runs: 0, samples: 0, fenceKills: 0, bloodMoons: 0,
     },
   };
+}
+
+// Whether the night that `now` falls in (local time) is the full moon's: the moon's age at 1 a.m.
+// that night is within half a day of full.
+function bloodMoon(now) {
+  const mid = new Date(now);
+  if (mid.getHours() >= 12) {
+    mid.setDate(mid.getDate() + 1);
+  }
+  mid.setHours(1, 0, 0, 0);
+  const age = (((mid.getTime() - MOON.newAt) / 86400000) % MOON.month + MOON.month) % MOON.month;
+  return Math.abs(age - MOON.month / 2) <= 0.5;
+}
+
+// The generator has fuel to run on.
+function powered(sv) {
+  return sv.generator && sv.fuel >= 1;
+}
+
+// How far the shelter's guns see: in the dark, only NIGHT_RANGE, unless the lights are on.
+function sees(sv, range) {
+  return sv.night && !powered(sv) ? Math.min(range, NIGHT_RANGE) : range;
+}
+
+function fenceDamage(sv) {
+  return Math.round((4 + sv.shelter.level) * strength(sv));
+}
+
+// More damage and walls for every cure (see CURE_BONUS), and the Weak spot stage's on top.
+function cureBonus(sv) {
+  return 1 + CURE_BONUS * sv.cures;
+}
+
+// Whether the lab has finished CURE stage `n` (1 is the first). After the first cure, all of them.
+function researched(sv, n) {
+  return sv.cures > 0 || sv.stage >= n;
+}
+
+function strength(sv) {
+  return cureBonus(sv) * (researched(sv, 2) ? 1.15 : 1);
+}
+
+// Samples only turn up once he flies the helicopter.
+function flying(sv) {
+  return sv.weapon >= WEAPONS.length - 1;
+}
+
+// What the lab studies next: the next stage of the first cure, then each new strain's cure, which
+// takes CURE_AGAIN more samples every time.
+function nextStage(sv) {
+  if (sv.cures === 0) {
+    return CURE[sv.stage];
+  }
+  const cure = CURE[CURE.length - 1];
+  return { ...cure, samples: Math.round(cure.samples * (1 + CURE_AGAIN * sv.cures)) };
+}
+
+function hasRole(sv, role) {
+  return sv.residents.some(r => r.role === role);
+}
+
+function beds(sv) {
+  return Math.min(Object.keys(ROLES).length, Math.floor(sv.shelter.level / BED_EVERY));
+}
+
+function drifterDamage(sv) {
+  return Math.round((3 + sv.shelter.level) * strength(sv));
 }
 
 function wallsMax(level, fortifying) {
@@ -190,7 +341,7 @@ function knows(sv, key) {
 }
 
 function shelterMax(sv) {
-  return wallsMax(sv.shelter.level, skillTier(sv, 'fortifying'));
+  return Math.round(wallsMax(sv.shelter.level, skillTier(sv, 'fortifying')) * cureBonus(sv));
 }
 
 function slotsAt(level) {
@@ -199,7 +350,7 @@ function slotsAt(level) {
 
 function turretDamage(sv) {
   const heavy = knows(sv, 'heavy') ? 1.5 : 1;
-  return Math.round((2 + Math.floor(sv.shelter.level * 0.4)) * (1 + 0.2 * skillTier(sv, 'engineering')) * heavy);
+  return Math.round((2 + Math.floor(sv.shelter.level * 0.4)) * (1 + 0.2 * skillTier(sv, 'engineering')) * heavy * strength(sv));
 }
 
 // The weapon in hand: a gun with no bullets left is swapped for the best melee weapon he has.
@@ -214,7 +365,7 @@ function weaponInHand(sv) {
 function heroDamage(sv, w = weaponInHand(sv)) {
   const gun = w.ammo ? 1 + 0.1 * skillTier(sv, 'gunsmithing') : 1;
   const fed = sv.fed > 0 ? 1 + MEAL.bonus : 1;
-  return Math.round((w.damage + Math.floor(sv.shelter.level * 0.8)) * (1 + 0.2 * skillTier(sv, 'combat')) * gun * fed);
+  return Math.round((w.damage + Math.floor(sv.shelter.level * 0.8)) * (1 + 0.2 * skillTier(sv, 'combat')) * gun * fed * strength(sv));
 }
 
 function turretCost(built) {
@@ -282,6 +433,12 @@ function armor(sv) {
   return Math.min(ARMOR_MAX, power / (power + ARMOR_SCALE));
 }
 
+// The share of each bite that still hurts him: what his clothes let through, less the lab's
+// Antibodies.
+function biteShare(sv) {
+  return (1 - armor(sv)) * (researched(sv, 1) ? 0.85 : 1);
+}
+
 // The best tier he knows how to craft, or -1.
 function craftTier(sv) {
   const found = CRAFTABLE.find(([key]) => knows(sv, key));
@@ -328,8 +485,9 @@ function blueprintsLeft(sv) {
 }
 
 // What the survivor builds next, if he can pay for it. Bullets, meals and clothes come first
-// (they are cheap and wanted at once), then turrets (he saves up for them), a better weapon, and
-// stronger walls (which also open more turret slots).
+// (they are cheap and wanted at once), then turrets and the generator (he saves up for them), a
+// better weapon, the lab and its research once he flies (he saves up for those too, but doesn't
+// wait on samples), and stronger walls (which also open more turret slots).
 function nextBuild(sv) {
   const none = { scrap: 0, wood: 0, cloth: 0, food: 0 };
   if (WEAPONS[sv.weapon].ammo && knows(sv, 'ammo') && sv.ammo < Math.max(BULLETS.low, 4 * (WEAPONS[sv.weapon].rounds || 1)) && sv.scrap >= BULLETS.scrap) {
@@ -349,9 +507,19 @@ function nextBuild(sv) {
   if (defense) {
     return defense;
   }
+  if (knows(sv, 'generator') && !sv.generator) {
+    return sv.scrap >= GENERATOR.scrap && sv.wood >= GENERATOR.wood ? { ...none, kind: 'generator', scrap: GENERATOR.scrap, wood: GENERATOR.wood } : null;
+  }
   const w = WEAPONS[sv.weapon + 1];
   if (w && sv.shelter.level >= w.level && knows(sv, w.blueprint) && sv.scrap >= w.cost) {
     return { ...none, kind: 'weapon', scrap: w.cost };
+  }
+  if (flying(sv) && !sv.lab) {
+    return sv.scrap >= LAB.scrap && sv.wood >= LAB.wood ? { ...none, kind: 'lab', scrap: LAB.scrap, wood: LAB.wood } : null;
+  }
+  const stage = flying(sv) ? nextStage(sv) : null;
+  if (stage && sv.samples >= stage.samples) {
+    return sv.scrap >= stage.scrap ? { ...none, kind: 'research', scrap: stage.scrap } : null;
   }
   const walls = wallCost(sv.shelter.level);
   return sv.wood >= walls && sv.scrap >= walls / 2 ? { ...none, kind: 'walls', scrap: walls / 2, wood: walls } : null;
@@ -362,6 +530,9 @@ function goalText(sv) {
   if (sv.turrets < slotsAt(sv.shelter.level)) {
     return knows(sv, 'turret') ? `🗼 turret ${turretCost(sv.turrets)} 🔩` : '📜 a blueprint for turrets';
   }
+  if (knows(sv, 'generator') && !sv.generator) {
+    return `⚡ generator ${GENERATOR.scrap} 🔩 + ${GENERATOR.wood} 🪵`;
+  }
   const w = WEAPONS[sv.weapon + 1];
   if (w && sv.shelter.level >= w.level && !knows(sv, w.blueprint)) {
     return `📜 a blueprint for the ${w.name.toLowerCase()}`;
@@ -371,6 +542,12 @@ function goalText(sv) {
   }
   if (w && sv.shelter.level >= w.level && sv.scrap < w.cost) {
     return `${w.icon} ${w.name} ${w.cost} 🔩`;
+  }
+  if (flying(sv) && !sv.lab) {
+    return `🧪 lab ${LAB.scrap} 🔩 + ${LAB.wood} 🪵`;
+  }
+  if (flying(sv) && sv.samples >= nextStage(sv).samples) {
+    return `${nextStage(sv).icon} ${nextStage(sv).name} ${nextStage(sv).scrap} 🔩`;
   }
   return `🧱 walls ${wallCost(sv.shelter.level)} 🪵 + ${wallCost(sv.shelter.level) / 2} 🔩`;
 }
@@ -424,10 +601,28 @@ function load(now) {
   return sv;
 }
 
+// On Windows the rename fails now and then while another process is reading the save (the status
+// line renders from it). It is tried a few more times; if it still fails, the temporary file goes
+// and so does this save, which costs nothing: lastTick wasn't saved either, so the next tick
+// plays the same time again.
 function save(sv) {
   const tmp = `${SAVE_FILE}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(sv));
-  fs.renameSync(tmp, SAVE_FILE);
+  for (let tries = 1; ; tries++) {
+    try {
+      fs.renameSync(tmp, SAVE_FILE);
+      return;
+    } catch (e) {
+      if (tries >= 5 || !['EPERM', 'EACCES', 'EBUSY'].includes(e.code)) {
+        try { fs.unlinkSync(tmp); } catch {}
+        if (tries >= 5) {
+          return;
+        }
+        throw e;
+      }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+    }
+  }
 }
 
 // ---------- simulation ----------
@@ -436,15 +631,29 @@ function randInt(min, max) {
   return min + Math.floor(Math.random() * (max - min + 1));
 }
 
+// A message stays MSG_MS on the stats row. One with its own `ms` (the update notice, see announce)
+// isn't replaced until that is up.
 function say(sv, text, now) {
+  if (sv.msg && sv.msg.ms && now - sv.msg.at < sv.msg.ms) {
+    return;
+  }
   sv.msg = { text, at: now };
 }
 
+// News from companion.js (the update notice), kept on the stats row for `ms`.
+function announce(text, now, ms) {
+  const sv = load(now);
+  sv.msg = { text, at: now, ms };
+  save(sv);
+}
+
 function makeZombie(sv) {
-  // More kinds turn up as the waves go on: brutes, then runners, then spitters.
+  // More kinds turn up as the waves go on: brutes, then runners, then spitters. Runners come out
+  // early at night, and twice as often.
+  const runner = sv.night ? (sv.wave >= 2 ? Math.min(0.4, 0.08 * (sv.wave - 1)) : 0) : sv.wave >= 4 ? Math.min(0.25, 0.04 * (sv.wave - 3)) : 0;
   const chances = [
     ['brute', sv.wave >= 2 ? Math.min(0.5, 0.08 * (sv.wave - 1)) : 0],
-    ['runner', sv.wave >= 4 ? Math.min(0.25, 0.04 * (sv.wave - 3)) : 0],
+    ['runner', runner],
     ['spitter', sv.wave >= 8 ? Math.min(0.25, 0.03 * (sv.wave - 7)) : 0],
   ];
   let roll = Math.random();
@@ -461,7 +670,8 @@ function makeZombie(sv) {
 
 function spawn(sv, kind) {
   const z = ZOMBIES[kind];
-  const hp = Math.round(z.hp * (1 + 0.15 * (sv.wave - 1)) * (0.85 + Math.random() * 0.3));
+  const serum = researched(sv, 3) ? 0.9 : 1;
+  const hp = Math.round(z.hp * (1 + 0.15 * (sv.wave - 1)) * (0.85 + Math.random() * 0.3) * serum);
   return { kind, x: Math.random() < 0.5 ? -RADIUS : RADIUS, hp, max: hp };
 }
 
@@ -473,7 +683,8 @@ function dropGear(sv, now, bonus = 0) {
   wear(sv, { slot: slot.key, tier, quality: randInt(0, 9) }, now, true);
 }
 
-// `source` is who did it: 'hand', 'turret' or 'trap' (a trap or spikes).
+// `source` is who did it: 'hand', 'turret', 'trap' (a trap or spikes), 'ally' (a drifter or the
+// lookout) or 'fence'. Under a blood moon a zombie drops BLOOD.drops times as much.
 function hitZombie(sv, z, dmg, source, hits, now) {
   z.hp -= dmg;
   hits.push(z.x);
@@ -495,25 +706,39 @@ function hitZombie(sv, z, dmg, source, hits, now) {
     sv.totals.turretKills++;
   } else if (source === 'trap') {
     sv.totals.trapKills++;
+  } else if (source === 'ally') {
+    sv.totals.allyKills++;
+  } else if (source === 'fence') {
+    sv.totals.fenceKills++;
   } else {
     sv.totals.handKills++;
   }
-  const scrap = def.scrap + (Math.random() < 0.5 ? 1 : 0);
+  if (flying(sv)) {
+    const chance = SAMPLES[z.kind] || 0;
+    addSamples(sv, chance >= 1 ? chance : Math.random() < chance ? 1 : 0);
+  }
+  const more = sv.blood ? BLOOD.drops : 1;
+  const scrap = (def.scrap + (Math.random() < 0.5 ? 1 : 0)) * more;
   sv.scrap += scrap;
   sv.totals.scrapFound += scrap;
-  if (Math.random() < DROPS.wood) {
+  if (Math.random() < DROPS.wood * more) {
     sv.wood++;
     sv.totals.woodFound++;
   }
-  if (Math.random() < DROPS.cloth) {
+  if (Math.random() < DROPS.cloth * more) {
     sv.cloth++;
   }
-  if (Math.random() < DROPS.food) {
+  if (Math.random() < DROPS.food * more) {
     sv.food++;
   }
-  if (z.kind !== 'boss' && Math.random() < DROPS.gear) {
+  if (z.kind !== 'boss' && Math.random() < DROPS.gear * more) {
     dropGear(sv, now);
   }
+}
+
+function addSamples(sv, n) {
+  sv.samples += n;
+  sv.totals.samples += n;
 }
 
 function nearest(list, x, within) {
@@ -542,10 +767,27 @@ function finishJob(sv, now) {
     explore(sv, data, now);
     return;
   }
-  if (kind === 'turret' || kind === 'walls' || kind === 'weapon') {
+  if (kind === 'turret' || kind === 'walls' || kind === 'weapon' || kind === 'lab' || kind === 'generator') {
     sv.totals.builds++;
   }
-  if (kind === 'defense') {
+  if (kind === 'generator') {
+    sv.generator = true;
+    say(sv, '⚡ Generator built: it runs on the tokens Claude uses', now);
+  } else if (kind === 'lab') {
+    sv.lab = true;
+    say(sv, '🧪 The lab is built: the samples can be studied', now);
+  } else if (kind === 'research') {
+    const stage = nextStage(sv);
+    sv.samples -= stage.samples;
+    if (sv.cures === 0 && sv.stage < CURE.length - 1) {
+      sv.stage++;
+      say(sv, `${stage.icon} ${stage.name}: ${stage.text}`, now);
+    } else {
+      sv.stage = CURE.length;
+      sv.cures++;
+      say(sv, sv.cures === 1 ? '💉 The cure works ✨ but a new strain is spreading' : `💉 Another strain cured ✨${sv.cures}`, now);
+    }
+  } else if (kind === 'defense') {
     sv.totals.defenses++;
     sv.defReady = sv.step + DEFENSE_COOLDOWN;
     const type = data.type;
@@ -589,11 +831,13 @@ function learn(sv, now) {
 
 function fall(sv, now) {
   sv.totals.falls++;
+  sv.safeDays = 0;
   for (const key of ['scrap', 'wood', 'cloth', 'food']) {
     sv[key] = Math.floor(sv[key] * 0.75);
   }
   sv.zombies = [];
-  sv.crates = [];
+  // A supply drop still waiting out there stays: it came from Claude, not from the strip.
+  sv.crates = sv.crates.filter(c => c.kind === 'drop');
   sv.sites = [];
   sv.defenses = [];
   sv.job = null;
@@ -638,6 +882,10 @@ function gather(sv, crate, now) {
     say(sv, `📜 Found the ${BLUEPRINTS[crate.key].name} blueprint`, now);
     return;
   }
+  if (crate.kind === 'drop') {
+    openDrop(sv, now);
+    return;
+  }
   sv.totals.crates++;
   const found = Math.round((3 + Math.floor(sv.wave / 3) + randInt(0, 2)) * (1 + 0.35 * skillTier(sv, 'scavenging')));
   sv[crate.kind] += found;
@@ -645,6 +893,82 @@ function gather(sv, crate, now) {
     sv.totals[`${crate.kind}Found`] += found;
   }
   say(sv, `${CRATE_ICONS[crate.kind]} +${found} ${crate.kind}`, now);
+}
+
+// What a supply drop holds (see SUPPLY).
+function openDrop(sv, now) {
+  sv.totals.drops++;
+  const more = 1 + SUPPLY.more * sv.wave;
+  const found = [];
+  for (const key of ['scrap', 'wood', 'cloth', 'food']) {
+    const n = Math.round(randInt(...SUPPLY[key]) * more);
+    sv[key] += n;
+    if (key === 'scrap' || key === 'wood') {
+      sv.totals[`${key}Found`] += n;
+    }
+    found.push(`${n} ${key}`);
+  }
+  if (knows(sv, 'ammo')) {
+    sv.ammo += SUPPLY.ammo;
+    found.push(`${SUPPLY.ammo} bullets`);
+  }
+  say(sv, `🪂 Supply drop: +${found.join(', +')}`, now);
+  if (Math.random() < SUPPLY.bp) {
+    findBlueprint(sv, now);
+  }
+  if (Math.random() < SUPPLY.gear) {
+    dropGear(sv, now);
+  }
+}
+
+// Claude is compacting the conversation: a supply drop comes down somewhere on the strip, and he
+// fetches it like a crate. Only that it happens counts. Called from the hook, under the lock.
+function supplyDrop(now) {
+  const sv = load(now);
+  const side = Math.random() < 0.5 ? -1 : 1;
+  sv.crates.push({ x: side * randInt(3, RADIUS - 1), kind: 'drop' });
+  say(sv, '🪂 A supply drop is coming down', now);
+  save(sv);
+}
+
+// The subagents at work now (`drifters`, each known by when it arrived), from companion.js. A
+// new one is a drifter who just came to the walls.
+function meetDrifters(sv, drifters, now) {
+  const fresh = drifters.filter(d => !sv.drifters.includes(d));
+  if (fresh.length) {
+    sv.totals.drifters += fresh.length;
+    say(sv, `🤠 ${fresh.length > 1 ? `${fresh.length} drifters come` : 'A drifter comes'} to help on the walls`, now);
+  }
+  sv.drifters = drifters.slice(0, DRIFTER_TILES.length);
+}
+
+// Someone he met on a search moves in, if a bed is free, and takes a role nobody has yet.
+function moveIn(sv, now) {
+  const roles = Object.keys(ROLES).filter(r => !hasRole(sv, r));
+  if (sv.residents.length >= beds(sv) || !roles.length) {
+    return;
+  }
+  const names = NAMES.filter(n => !sv.residents.some(r => r.name === n));
+  const resident = { name: names[randInt(0, names.length - 1)], role: roles[randInt(0, roles.length - 1)] };
+  sv.residents.push(resident);
+  const role = ROLES[resident.role];
+  say(sv, `👷 ${resident.name} moves in: ${role.icon} the ${role.name}`, now);
+}
+
+// The scavenger is back from a run, with a crate's worth (twice over) and maybe a blueprint.
+function scavengerRun(sv, now) {
+  const who = sv.residents.find(r => r.role === 'scavenger');
+  const kind = ['scrap', 'wood', 'cloth', 'food'][randInt(0, 3)];
+  const n = 2 * (3 + Math.floor(sv.wave / 3) + randInt(0, 2));
+  sv[kind] += n;
+  if (kind === 'scrap' || kind === 'wood') {
+    sv.totals[`${kind}Found`] += n;
+  }
+  sv.totals.runs++;
+  say(sv, `🎒 ${who.name} is back from a run: +${n} ${kind}`, now);
+  if (Math.random() < RUN_BLUEPRINT) {
+    findBlueprint(sv, now);
+  }
 }
 
 // Eating on the move: under half life, he eats a meal he has cooked.
@@ -667,7 +991,8 @@ function fightEstimate(sv, group, from) {
   const gun = WEAPONS[sv.weapon].ammo ? WEAPONS[sv.weapon] : null;
   const melee = WEAPONS.slice(0, sv.weapon + 1).reverse().find(w => !w.ammo);
   const first = gun && sv.ammo >= (gun.rounds || 1) ? gun : melee;
-  const turrets = Math.abs(from) <= TURRET_RANGE ? sv.turrets * turretDamage(sv) : 0;
+  const fire = shelterFire(sv);
+  const turrets = Math.abs(from) <= sees(sv, TURRET_RANGE) ? fire : 0;
   const total = group.reduce((sum, z) => sum + z.hp, 0);
   let pool = total;
   let ammo = sv.ammo;
@@ -682,7 +1007,7 @@ function fightEstimate(sv, group, from) {
     steps++;
   }
   steps += group.length * 0.5;   // walking from one to the next
-  const guard = 1 - armor(sv);
+  const guard = biteShare(sv);
   const bites = group.map(z => Math.max(1, Math.round(ZOMBIES[z.kind].dmg * (1 + 0.07 * (sv.wave - 1)) * guard)));
   bites.sort((a, b) => b - a);
   // Each bites every other step. Up close a crowd can surround him; with reach, he thins them
@@ -693,12 +1018,17 @@ function fightEstimate(sv, group, from) {
   const approach = Math.max(0, near - first.range) * every;
   const taken = dps * Math.max(0, steps - approach);
   const bias = Math.min(1, 0.7 + 0.1 * skillTier(sv, 'tactics'));
-  // Holing up only helps if the turrets can clear them before they wear the walls down.
+  // Holing up only helps if the shelter's guns can clear them before they wear the walls down.
   const wallDps = 0.5 * group.reduce((sum, z) => sum + Math.round(ZOMBIES[z.kind].dmg * (1 + 0.07 * (sv.wave - 1))), 0);
-  const clear = sv.turrets > 0 ? total / (sv.turrets * turretDamage(sv)) : Infinity;
+  const clear = fire > 0 ? total / fire : Infinity;
   const barricades = sv.defenses.filter(d => d.type === 'barricade').length;
   const hold = wallDps * 0.6 * clear * (1 - Math.min(0.5, 0.15 * barricades)) < sv.shelter.hp * 0.6;
   return { ok: taken * bias < sv.hp * RISK, hold, taken: Math.round(taken), weapon: first, steps };
+}
+
+// What the shelter shoots every step: the turrets, the drifters on the walls and the lookout.
+function shelterFire(sv) {
+  return sv.turrets * turretDamage(sv) + sv.drifters.length * drifterDamage(sv) + (hasRole(sv, 'lookout') ? turretDamage(sv) : 0);
 }
 
 function startJob(sv, build) {
@@ -746,8 +1076,13 @@ function canExplore(sv) {
     && !sv.zombies.some(z => Math.abs(z.x) <= WALL + 3 || Math.abs(z.x - sv.x) <= 3);
 }
 
+// The lab's Repellent keeps a third of a group away.
+function repelled(sv, count) {
+  return researched(sv, 4) ? Math.ceil(count * 2 / 3) : count;
+}
+
 function ambush(sv, x, count, now) {
-  for (let i = 0; i < Math.min(6, count); i++) {
+  for (let i = 0; i < Math.min(6, repelled(sv, count)); i++) {
     const z = makeZombie(sv);
     z.x = Math.max(-RADIUS, Math.min(RADIUS, x + (i % 3) - 1));
     sv.zombies.push(z);
@@ -757,7 +1092,7 @@ function ambush(sv, x, count, now) {
 
 function horde(sv, now) {
   const side = Math.random() < 0.5 ? -1 : 1;
-  const count = Math.min(8, 3 + Math.floor(sv.wave / 4));
+  const count = repelled(sv, Math.min(8, 3 + Math.floor(sv.wave / 4)));
   for (let i = 0; i < count; i++) {
     const z = makeZombie(sv);
     z.x = side * (RADIUS - Math.min(i, 5));
@@ -789,7 +1124,7 @@ function explore(sv, site, now) {
     }
     bonus += 0.25 * dive;
   }
-  if (def.ambush && Math.random() < def.ambush - 0.08 * scout) {
+  if (def.ambush && Math.random() < def.ambush - 0.08 * scout - (sv.dog ? DOG.bark : 0)) {
     ambush(sv, site.x, site.kind === 'bunker' ? 3 + Math.floor(sv.wave / 5) : 2 + Math.floor(sv.wave / 6), now);
   }
   if (site.kind === 'shelter') {
@@ -812,6 +1147,18 @@ function explore(sv, site, now) {
   }
   if (Math.random() < def.loot.gear) {
     dropGear(sv, now, def.loot.tier || 0);
+  }
+  if (site.kind === 'bunker' && flying(sv) && Math.random() < SAMPLES.bunker) {
+    addSamples(sv, 1);
+    say(sv, '🧪 A sample of the virus, left in the bunker\'s fridge', now);
+  }
+  // Last, so the news isn't lost under the finds: someone to move in, or a dog.
+  if (Math.random() < def.meet) {
+    moveIn(sv, now);
+  }
+  if (!sv.dog && sv.totals.sites >= DOG.after && Math.random() < DOG.chance) {
+    sv.dog = { name: DOG_NAMES[randInt(0, DOG_NAMES.length - 1)] };
+    say(sv, `🐕 A dog named ${sv.dog.name} follows him home`, now);
   }
 }
 
@@ -860,9 +1207,15 @@ function step(sv, now) {
   if (sv.grace > 0) {
     sv.grace--;
   }
+  // The generator burns a second of fuel; what it powers this step checks powered() after.
+  if (sv.generator && sv.fuel > 0) {
+    sv.fuel = Math.max(0, sv.fuel - 1);
+  }
 
-  // Zombies arrive from both edges, more of them as the waves go up.
-  if (sv.zombies.length < 3 + Math.floor(sv.wave / 2) && Math.random() < Math.min(0.55, 0.18 + 0.03 * sv.wave) * (sv.grace > 0 ? 0.5 : 1)) {
+  // Zombies arrive from both edges, more of them as the waves go up, and more still at night.
+  const dark = sv.night ? (sv.blood ? BLOOD.spawn : NIGHT_SPAWN) : 1;
+  const crowd = 3 + Math.floor(sv.wave / 2) + (sv.night ? (sv.blood ? BLOOD.crowd : NIGHT_CROWD) : 0);
+  if (sv.zombies.length < crowd && Math.random() < Math.min(0.55, 0.18 + 0.03 * sv.wave) * dark * (sv.grace > 0 ? 0.5 : 1)) {
     sv.zombies.push(makeZombie(sv));
   }
   if (sv.boss && !sv.zombies.some(z => z.kind === 'boss')) {
@@ -889,26 +1242,49 @@ function step(sv, now) {
     }
   }
 
-  // The turrets he has built guard the shelter on their own.
+  // The people living in the shelter do their part.
+  const cook = sv.residents.find(r => r.role === 'cook');
+  if (cook && sv.step % COOK_EVERY === 0 && sv.food >= MEAL.food && sv.meals < MAX_MEALS) {
+    sv.food -= MEAL.food;
+    sv.meals++;
+    say(sv, `🍳 ${cook.name} cooked a meal`, now);
+  }
+  if (hasRole(sv, 'scavenger') && sv.step % RUN_EVERY === 0) {
+    scavengerRun(sv, now);
+  }
+
+  // The turrets he has built guard the shelter on their own, and so do the drifters on the walls
+  // and the lookout on the roof (in the dark, only as far as the lights let them see).
   for (let t = 0; t < sv.turrets; t++) {
-    const z = nearest(sv.zombies, 0, TURRET_RANGE);
+    const z = nearest(sv.zombies, 0, sees(sv, TURRET_RANGE));
     if (z) {
       hitZombie(sv, z, turretDamage(sv), 'turret', hits, now);
     }
+  }
+  for (let d = 0; d < sv.drifters.length; d++) {
+    const z = nearest(sv.zombies, 0, sees(sv, DRIFTER_RANGE));
+    if (z) {
+      hitZombie(sv, z, drifterDamage(sv), 'ally', hits, now);
+    }
+  }
+  const spotted = hasRole(sv, 'lookout') ? nearest(sv.zombies, 0, sees(sv, LOOKOUT_RANGE)) : null;
+  if (spotted) {
+    hitZombie(sv, spotted, turretDamage(sv), 'ally', hits, now);
   }
   sv.zombies = sv.zombies.filter(z => z.hp > 0);
 
   // He fights what is in reach; otherwise he builds at the shelter when he can pay for something,
   // chases what is close, or keeps patrolling and gathering.
   const weapon = weaponInHand(sv);
+  const from = sv.x;
   if (sv.down > 0) {
     sv.down--;
   } else if (sv.resting) {
-    // Hurt, he goes home and rests inside, where nothing can reach him.
+    // Hurt, he goes home and rests inside, where nothing can reach him (twice as fast with a medic).
     if (sv.x !== 0) {
       sv.x += sign(-sv.x);
     } else {
-      sv.hp = Math.min(heroMax(sv), sv.hp + 3);
+      sv.hp = Math.min(heroMax(sv), sv.hp + (hasRole(sv, 'medic') ? 6 : 3));
     }
     if (sv.hp >= heroMax(sv) * RETREAT[1]) {
       sv.resting = false;
@@ -987,6 +1363,14 @@ function step(sv, now) {
         sv.x += sv.dir;
       }
     }
+    // His dog fetches a crate lying close by, while he is out.
+    const fetched = sv.dog && sv.x !== 0 && sv.step >= (sv.dog.ready || 0)
+      ? sv.crates.findIndex(c => c.x !== sv.x && Math.abs(c.x - sv.x) <= DOG.fetch) : -1;
+    if (fetched >= 0) {
+      sv.totals.fetched++;
+      sv.dog.ready = sv.step + DOG.rest;
+      gather(sv, sv.crates.splice(fetched, 1)[0], now);
+    }
     const crate = sv.crates.findIndex(c => c.x === sv.x);
     if (crate >= 0) {
       gather(sv, sv.crates.splice(crate, 1)[0], now);
@@ -998,9 +1382,12 @@ function step(sv, now) {
       say(sv, `🔍 Searching the ${SITES[found.kind].name}`, now);
     }
   }
+  if (sv.x !== from) {
+    sv.facing = sign(sv.x - from);
+  }
 
   // The zombies shamble in, and bite whoever they reach (he is safe inside the shelter).
-  const guard = 1 - armor(sv);
+  const guard = biteShare(sv);
   for (const z of sv.zombies) {
     if (z.hp <= 0) {
       continue;
@@ -1018,9 +1405,13 @@ function step(sv, now) {
         sv.hp -= Math.max(1, Math.round(dmg * guard));
       }
     } else if (Math.abs(z.x) <= WALL + (def.reach || 0)) {
-      // The walls take a bite every other step (a spitter's reaches over a distance).
+      // The walls take a bite every other step (a spitter's reaches over a distance), and with the
+      // generator running, the fence shocks whoever is right at them.
       if (sv.step % 2 === 0) {
         sv.shelter.hp -= dmg;
+        if (Math.abs(z.x) <= WALL && powered(sv)) {
+          hitZombie(sv, z, fenceDamage(sv), 'fence', hits, now);
+        }
       }
     } else if (sv.step % def.every === 0) {
       advance(sv, z, dmg, hits, now);
@@ -1038,7 +1429,7 @@ function step(sv, now) {
   if (sv.hp <= 0) {
     // A knockout costs time only: he is carried back to the shelter to rest.
     sv.totals.knockouts++;
-    sv.down = Math.ceil(DOWN_STEPS * (1 - 0.25 * Math.min(aid, 3)));
+    sv.down = Math.ceil(DOWN_STEPS * (1 - 0.25 * Math.min(aid, 3)) * (hasRole(sv, 'medic') ? 0.5 : 1));
     sv.hp = heroMax(sv);
     sv.x = 0;
     sv.job = null;
@@ -1056,7 +1447,8 @@ function step(sv, now) {
   }
   const anyAtWall = sv.zombies.some(z => Math.abs(z.x) <= WALL + (ZOMBIES[z.kind].reach || 0));
   if (!anyAtWall) {
-    sv.shelter.hp = Math.min(shelterMax(sv), sv.shelter.hp + REPAIR_EACH + Math.floor(skillTier(sv, 'fortifying') / 2));
+    const mend = (REPAIR_EACH + Math.floor(skillTier(sv, 'fortifying') / 2)) * (hasRole(sv, 'mechanic') ? 2 : 1);
+    sv.shelter.hp = Math.min(shelterMax(sv), sv.shelter.hp + mend);
   }
 
   // The waves hold at the shelter's pace (its walls and turrets), so a strong shelter stays ahead.
@@ -1073,16 +1465,65 @@ function step(sv, now) {
   sv.fx = { step: sv.step, hits };
 }
 
+// Says so when night falls or the day breaks (not on a save's first tick), and when a blood moon
+// rises, which is counted once a night.
+function noticeNight(sv, night, now) {
+  const blood = night && bloodMoon(now);
+  if (blood && !sv.blood) {
+    sv.totals.bloodMoons++;
+    say(sv, '🌕 A blood moon rises: more zombies, and twice the drops', now);
+  } else if (sv.night !== null && night !== sv.night) {
+    say(sv, night ? `🌙 Night falls: more zombies${powered(sv) ? ', and the lights come on' : ', and less to see them by'}` : '🌅 The day breaks', now);
+  }
+  sv.night = night;
+  sv.blood = blood;
+}
+
+// The tokens Claude used since the last tick go into the generator. Those used while this game
+// wasn't ticking (the adventure on display, or a long break) don't count.
+function refuel(sv, tokens, now) {
+  if (typeof tokens !== 'number') {
+    return;
+  }
+  const last = sv.tokens;
+  sv.tokens = { total: tokens, at: now };
+  if (!last || now - last.at > MAX_GAP_MS || !sv.generator) {
+    return;
+  }
+  sv.fuel = Math.min(FUEL_MAX, sv.fuel + Math.max(0, tokens - last.total) / TOKENS_PER_FUEL);
+}
+
+// The first step on a new day (local time): the day count goes up, and so does the sign by the
+// shelter, the days in a row it has stood, which a fall puts back to 0.
+function noteDay(sv, now) {
+  const d = new Date(now);
+  const day = Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000);
+  if (sv.day === day) {
+    return;
+  }
+  sv.day = day;
+  sv.days++;
+  sv.safeDays++;
+  sv.bestSafe = Math.max(sv.bestSafe, sv.safeDays);
+  say(sv, `📅 Day ${sv.days}${sv.safeDays < sv.days ? ` · 🪧 ${sv.safeDays} day${sv.safeDays === 1 ? '' : 's'} without a breach` : ''}`, now);
+}
+
 // Advances the game by the working time since the last tick. Only called while this game is on
-// display, so the adventure and the survival never both run.
-function tick(active, now) {
+// display, so the adventure and the survival never both run. `world` is what companion.js knows:
+// the subagents at work (`drifters`, see meetDrifters), whether it is `night`, and the `tokens`
+// Claude has used so far, for the generator.
+function tick(active, now, world = {}) {
   const sv = load(now);
+  meetDrifters(sv, world.drifters || [], now);
+  noticeNight(sv, !!world.night, now);
+  refuel(sv, world.tokens, now);
   const gap = now - sv.lastTick;
   sv.lastTick = now;
   if (gap > 0 && gap <= MAX_GAP_MS && active) {
     sv.carryMs += gap;
     while (sv.carryMs >= STEP_MS) {
       sv.carryMs -= STEP_MS;
+      noteDay(sv, now);
       step(sv, now);
     }
   }
@@ -1132,7 +1573,7 @@ function statsRow(sv, ctx) {
   const guard = Math.round(armor(sv) * 100);
 
   let status = null;
-  if (sv.msg && ctx.now - sv.msg.at < MSG_MS) {
+  if (sv.msg && ctx.now - sv.msg.at < (sv.msg.ms || MSG_MS)) {
     status = [GOLD, sv.msg.text];
   } else if (!ctx.active) {
     status = ['2', '💤 waiting for you'];
@@ -1140,12 +1581,21 @@ function statsRow(sv, ctx) {
 
   // Cloth and food only show once he has some.
   const stock = `🔩 ${sv.scrap} 🪵 ${sv.wood}${sv.cloth ? ` 🧵 ${sv.cloth}` : ''}${sv.food ? ` 🥩 ${sv.food}` : ''}`;
+  // The sign's count only shows once it differs from the day count, after a fall.
+  const days = sv.days ? `📅 Day ${sv.days}${sv.safeDays < sv.days ? ` 🪧 ${sv.safeDays}` : ''}` : null;
+  const fuel = Math.round((sv.fuel / FUEL_MAX) * 100);
   const parts = [
-    [`${shelterIcon(lvl)} Shelter ${color(GOLD, `Lv ${lvl}`)} ${color(barColor, bar)} ${sv.shelter.hp}/${max}`, 6],
+    [`${shelterIcon(lvl)} Shelter ${color(GOLD, `Lv ${lvl}`)}${sv.cures ? color(GOLD, ` ✨${sv.cures}`) : ''} ${color(barColor, bar)} ${sv.shelter.hp}/${max}`, 6],
+    [days, 4.4],
+    [ctx.night ? (bloodMoon(ctx.now) ? color(RED, '🌕 blood moon') : '🌙 night') : null, 3.9],
     [`🧑 ${w.icon} ${w.name}${w.ammo ? ` ${sv.ammo}` : ''}`, 4],
     [stock, 5],
     [sv.job ? `${sv.job.kind === 'explore' ? '🔍' : '🔨'} ${JOB_NAMES[sv.job.kind]} ${sv.job.left}` : sv.mode ? (sv.x === 0 ? '🧱 holed up' : '🏃 falling back') : `🎯 ${goalText(sv)}`, 3],
     [`🗼 ${sv.turrets}/${slotsAt(lvl)}`, 4.2],
+    [sv.generator ? (fuel > 0 ? `⚡ ${fuel}%` : color('2', '⚡ 0%')) : null, 3.7],
+    [sv.drifters.length ? `🤠 ${sv.drifters.length}` : null, 3.8],
+    [sv.residents.length ? `👷 ${sv.residents.length}${sv.dog ? ' 🐕' : ''}` : sv.dog ? '🐕' : null, 3.2],
+    [flying(sv) ? `🧪 ${sv.samples}` : null, 3.4],
     [sv.defenses.length ? `🚧 ${sv.defenses.length}` : null, 3.6],
     [guard ? `🧥 ${guard}%` : null, 3.5],
     [sv.meals || sv.fed ? `🍲 ${sv.meals}${sv.fed ? ' 😋' : ''}` : null, 2.8],
@@ -1170,7 +1620,7 @@ function statsRow(sv, ctx) {
 }
 
 const SITE_ICONS = Object.fromEntries(Object.entries(SITES).map(([k, v]) => [k, v.icon]));
-const CRATE_ICONS = { scrap: '📦', wood: '🪵', cloth: '🧵', food: '🥩', blueprint: '📜' };
+const CRATE_ICONS = { scrap: '📦', wood: '🪵', cloth: '🧵', food: '🥩', blueprint: '📜', drop: '🪂' };
 
 function worldRow(sv, ctx) {
   const tiles = Math.min(2 * RADIUS + 1, Math.max(10, Math.min(24, Math.floor(ctx.cols / 2))));
@@ -1180,6 +1630,10 @@ function worldRow(sv, ctx) {
   const built = TURRET_SLOTS.slice(0, sv.turrets);
   const building = !sv.job || sv.job.kind === 'explore' ? null
     : sv.job.kind === 'turret' ? TURRET_SLOTS[sv.turrets] : sv.job.kind === 'defense' ? sv.job.data.x : WALL;
+  // The dog trots behind him while he is out; inside, it is inside too.
+  const out = sv.x !== 0 && sv.down === 0 && sv.rebuild === 0 && !(sv.job && sv.job.kind !== 'explore');
+  const dog = sv.dog && out ? sv.x - sv.facing : null;
+  const drifters = DRIFTER_TILES.slice(0, sv.drifters.length);
   let row = '';
   for (let i = 0; i < tiles; i++) {
     const x = left + i;
@@ -1194,6 +1648,10 @@ function worldRow(sv, ctx) {
       row += ZOMBIES[zombie.kind].icon;
     } else if (!ctx.active && x === sv.x + 1) {
       row += '💤';
+    } else if (x === dog) {
+      row += '🐕';
+    } else if (sv.rebuild === 0 && drifters.includes(x)) {
+      row += '🤠';
     } else if (x === building && sv.rebuild === 0) {
       row += '🔨';
     } else if (sv.crates.some(c => c.x === x)) {
@@ -1210,6 +1668,10 @@ function worldRow(sv, ctx) {
       row += '🔥';
     } else if (sv.rebuild === 0 && x === 9 && sv.shelter.level >= 8) {
       row += '🚩';
+    } else if (sv.rebuild === 0 && x === 8 && sv.lab) {
+      row += '🧪';
+    } else if (sv.rebuild === 0 && x === -8 && sv.generator) {
+      row += '⚡';
     } else if (Math.abs(x) > 4 && hash(x + 4099) % 7 === 0) {
       row += '🌲';
     } else {
@@ -1219,13 +1681,30 @@ function worldRow(sv, ctx) {
   return row;
 }
 
+const FLOOR = { bg: '48;2;58;52;44', fg: '38;2;120;108;90' };
+const BLOOD_FLOOR = { bg: '48;2;68;26;26', fg: '38;2;150;72;72' };
+const LIT = 3;   // with the generator running, its lights reach this many tiles either side of the shelter
+
+// The ground darkens with the adventure's daylight (ctx.light, shaded by ctx.shade), except where
+// the lights reach, and turns red under a blood moon.
 function floorRow(sv, ctx) {
   const tiles = Math.min(2 * RADIUS + 1, Math.max(10, Math.min(24, Math.floor(ctx.cols / 2))));
   const left = -Math.floor(tiles / 2);
-  let row = `${ESC}48;2;58;52;44;38;2;120;108;90m`;
+  const light = ctx.light ?? 1;
+  const blood = ctx.night && bloodMoon(ctx.now);
+  const lamps = light < 1 && powered(sv) && sv.rebuild === 0;
+  let row = '';
+  let style = null;
   for (let i = 0; i < tiles; i++) {
-    const h = hash(left + i + 7919);
-    row += (h % 3 === 0 ? '· ' : '  ');
+    const x = left + i;
+    const glow = lamps && Math.abs(x) <= LIT ? 1 : light;
+    const code = blood ? `${BLOOD_FLOOR.bg};${BLOOD_FLOOR.fg}`
+      : glow < 1 && ctx.shade ? `${ctx.shade(FLOOR.bg, glow)};${ctx.shade(FLOOR.fg, glow)}` : `${FLOOR.bg};${FLOOR.fg}`;
+    if (code !== style) {
+      row += `${ESC}${code}m`;
+      style = code;
+    }
+    row += (hash(x + 7919) % 3 === 0 ? '· ' : '  ');
   }
   return row + RESET;
 }
@@ -1275,6 +1754,65 @@ function gearLine(sv, slot) {
   return `  ${(`${slot.icon} ${slot.name}`).padEnd(12)}${item ? `${gearName(item)} (power ${gearPower(item)})` : 'nothing yet'}`;
 }
 
+function peopleLines(sv) {
+  const open = beds(sv);
+  const more = open < Object.keys(ROLES).length ? ` · the next bed at shelter Lv ${BED_EVERY * (open + 1)}` : '';
+  const head = open === 0 ? `nobody yet: the first bed comes at shelter Lv ${BED_EVERY}`
+    : `${sv.residents.length}/${open} beds taken${more}${sv.residents.length < open ? ' · he meets people on his searches' : ''}`;
+  return [
+    `  People        ${head}${sv.dog ? ` · 🐕 ${sv.dog.name} follows him` : ''}`,
+    ...sv.residents.map(r => `    ${ROLES[r.role].icon} ${r.name}, the ${ROLES[r.role].name}: ${ROLES[r.role].text}`),
+    `  Drifters      ${sv.drifters.length ? `🤠 ${sv.drifters.length} on the walls now` : 'none on the walls now'} · each subagent Claude runs sends one (${drifterDamage(sv)} damage a shot)`,
+  ];
+}
+
+function labLines(sv) {
+  if (!flying(sv)) {
+    return ['  Lab           after the 🚁 helicopter: zombies carry samples of the virus, and a lab studies them for a cure'];
+  }
+  if (!sv.lab) {
+    return [`  Lab           not built yet (${LAB.scrap} scrap, ${LAB.wood} wood) · 🧪 ${sv.samples} samples kept`];
+  }
+  const next = nextStage(sv);
+  const done = sv.cures ? CURE.length - 1 : sv.stage;
+  return [
+    sv.cures
+      ? `  Lab           🧪 ${sv.samples} samples · next: 💉 a cure for the new strain (${next.samples} samples, ${next.scrap} scrap)`
+      : `  Lab           🧪 ${sv.samples} samples · next: ${next.icon} ${next.name} (${next.samples} samples, ${next.scrap} scrap): ${next.text}`,
+    ...CURE.slice(0, done).map(c => `    ${c.icon} ${c.name}: ${c.text}`),
+    ...(sv.cures ? [`    💉 Cured ${sv.cures} time${sv.cures === 1 ? '' : 's'} ✨: ${Math.round(CURE_BONUS * 100 * sv.cures)}% more damage and walls`] : []),
+  ];
+}
+
+// When the next blood moon rises: 'now', 'tonight', 'tomorrow night' or a date.
+function nextBloodMoon(sv, now) {
+  if (sv.night && sv.blood) {
+    return 'now';
+  }
+  for (let i = 0; i <= 31; i++) {
+    const d = new Date(now);
+    d.setDate(d.getDate() + i);
+    d.setHours(22, 0, 0, 0);
+    if (bloodMoon(d.getTime())) {
+      return i === 0 ? 'tonight' : i === 1 ? 'tomorrow night' : `the night of ${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`;
+    }
+  }
+  return 'next month';
+}
+
+function nightLines(sv, now) {
+  const power = !knows(sv, 'generator') ? 'not built: he needs its ⚡ blueprint first'
+    : !sv.generator ? `not built yet (${GENERATOR.scrap} scrap, ${GENERATOR.wood} wood)`
+      : `⚡ ${Math.floor(sv.fuel)}/${FUEL_MAX} seconds of power (${TOKENS_PER_FUEL} of Claude's tokens make a second) · the fence hits ${fenceDamage(sv)}, the lights reach ${LIT} tiles`;
+  const sky = sv.night ? (sv.blood ? '🌕 a blood moon: more zombies, and twice the drops'
+    : `🌙 night: more zombies and runners${powered(sv) ? ', the lights are on' : `, the guns see only ${NIGHT_RANGE} tiles without lights`}`) : 'day';
+  return [
+    `  Days          ${sv.days ? `📅 Day ${sv.days} · 🪧 ${sv.safeDays} day${sv.safeDays === 1 ? '' : 's'} without a breach (best ${sv.bestSafe})` : 'his first day starts with the first step'}`,
+    `  Now           ${sky} · next blood moon: ${nextBloodMoon(sv, now)}`,
+    `  Generator     ${power}`,
+  ];
+}
+
 function shelterReport(now) {
   const sv = load(now);
   const lvl = sv.shelter.level;
@@ -1285,6 +1823,7 @@ function shelterReport(now) {
   const left = blueprintsLeft(sv);
   const lines = [
     `${shelterIcon(lvl)} Shelter Lv ${lvl}${isShown() ? '' : ' (survival is not on display: /vwc:game survival)'}`,
+    ...nightLines(sv, now),
     `  Walls         ${sv.shelter.hp}/${shelterMax(sv)}${sv.rebuild > 0 ? ' · rebuilding' : ''}`,
     `  Turrets       ${sv.turrets}/${slotsAt(lvl)} built 🗼 · ${turretDamage(sv)} damage each, range ${TURRET_RANGE} tiles${sv.turrets < TURRET_SLOTS.length && sv.turrets >= slotsAt(lvl) ? ' · stronger walls open another slot' : ''}`,
     `  Defenses      ${DEFENSE_SLOTS.slice(0, defenseSlots(lvl)).filter(d => sv.defenses.some(e => e.x === d.x)).length}/${defenseSlots(lvl)} standing ${['barricade', 'trap', 'spikes'].map(t => `${DEFENSES[t].icon} ${sv.defenses.filter(d => d.type === t).length}${knows(sv, t) ? '' : '?'}`).join('  ')}${defenseSlots(lvl) === 0 ? ' (the shelter opens its first slot at level 2)' : ''}`,
@@ -1292,6 +1831,8 @@ function shelterReport(now) {
     `  Pantry        🍲 ${sv.meals} meals${sv.fed ? ` · well fed for ${sv.fed} more steps` : ''}${knows(sv, 'cooking') ? '' : ' (he can\'t cook yet)'}`,
     `  Next          ${building}`,
     `  Last call     ${sv.call ? `${sv.call.n} zombies against his ${sv.call.weapon.toLowerCase()}: ${sv.call.ok ? 'he faced them' : `too risky (it would cost about ${sv.call.taken} life), he fell back`}` : 'nothing big yet'}`,
+    ...peopleLines(sv),
+    ...labLines(sv),
     '',
     `  Survivor      🧑 ${w.icon} ${w.name}${w.ammo ? ` (${sv.ammo} bullets)` : ''} · ${heroDamage(sv)} damage · reach ${w.range} · life ${sv.hp}/${heroMax(sv)}`,
     `  Next weapon   ${next ? `${next.icon} ${next.name}: shelter Lv ${next.level}, ${next.cost} scrap` : 'that is the best there is'}`,
@@ -1308,13 +1849,15 @@ function shelterReport(now) {
     `  Gathered      ${sv.totals.scrapFound} scrap · ${sv.totals.woodFound} wood · ${sv.totals.gearFound} pieces of clothing found`,
     `  Made          ${sv.totals.builds} built · ${sv.totals.clothes} clothes · ${sv.totals.meals} meals · ${sv.totals.bulletsMade} bullets`,
     `  Traps        ${sv.totals.trapKills} killed by traps and spikes · ${sv.totals.game} game caught · ${sv.totals.defenses} set up\n  Retreats      ${sv.totals.retreats} times he fell back from a fight he couldn't win\n  Explored      ${sv.totals.sites} places · ${sv.totals.dives} lake dives · ${sv.totals.hordes} hordes met`,
+    `  Helpers       ${sv.totals.drifters} drifters came · ${sv.totals.allyKills} zombies shot by drifters and the lookout · ${sv.totals.drops} supply drops${sv.totals.runs ? ` · ${sv.totals.runs} scavenging runs` : ''}${sv.dog ? ` · ${sv.totals.fetched} crates fetched by ${sv.dog.name}` : ''}`,
+    `  Nights        ${sv.totals.bloodMoons} blood moon${sv.totals.bloodMoons === 1 ? '' : 's'} · ${sv.totals.fenceKills} zombies killed by the fence`,
     `  The shelter fell ${sv.totals.falls} time${sv.totals.falls === 1 ? '' : 's'}`,
   ];
   return lines.join('\n');
 }
 
 module.exports = {
-  isShown, setShown, setGame, load, tick, render, shelterReport, step, newSave,
+  isShown, setShown, setGame, load, save, tick, render, shelterReport, step, newSave, supplyDrop, announce, moveIn, bloodMoon,
   BLUEPRINTS, shelterMax, slotsAt, turretDamage, turretCost, wallCost, heroMax, waveNeed, skillTier, armor,
-  WEAPONS, ZOMBIES, SKILLS, GEAR_SLOTS, RADIUS, fightEstimate,
+  WEAPONS, ZOMBIES, SKILLS, GEAR_SLOTS, RADIUS, fightEstimate, ROLES, CURE,
 };

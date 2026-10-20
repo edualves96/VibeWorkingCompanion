@@ -5,7 +5,9 @@ subagent allies and salvage with reforging (1.11.0), rested XP (1.12.0), day and
 (1.13.0), seasonal events (1.14.0), elite enemies (1.15.0),
 `/vwc:card` (1.16.0), `/vwc:journal <class>` (1.17.0), campfires on compaction (1.18.0), for
 the endgame the 🧢 Trainer unlocked at level 50 (1.20.0, see `TRAINER_PLAN.md`) and, in 1.21.0,
-bounties and the treasure goblin, in 1.22.0 the Swamp, Tundra and Sky Islands in 1.23.0 weapon mastery after level 35 and, in 1.24.0, work streaks.
+bounties and the treasure goblin, in 1.22.0 the Swamp, Tundra and Sky Islands in 1.23.0 weapon mastery after level 35 and, in 1.24.0, work streaks. For the Survival game, 1.26.0 added drifters,
+supply drops, survivors who move in, the dog and the cure, and 1.27.0 nights with the blood moon,
+the generator that runs on tokens and the day count.
 
 ## Rules every idea has to follow
 
@@ -37,8 +39,10 @@ bounties and the treasure goblin, in 1.22.0 the Swamp, Tundra and Sky Islands in
 ## A second game
 
 - **Survival mode (first version built in 1.25.0).** The switch, the strip, walkers and brutes, fists and an axe,
-  gathering, fifteen blueprints to find, barricades, traps and spikes set up from inside the shelter, a survivor that builds, sews and cooks, wears the best clothes, explores buildings, lakes, lost shelters and bunkers, rides a tank and a helicopter near the endgame, more zombie kinds with a tyrant every 10th wave, skills it learns by doing and `/vwc:shelter` are in. Still to come: more
-  places and encounters (caves, a harbor, survivors to meet) and more shelter visuals. A second game you switch to with a command. It only advances while it is the one
+  gathering, fifteen blueprints to find (sixteen since 1.27.0), barricades, traps and spikes set up from inside the shelter, a survivor that builds, sews and cooks, wears the best clothes, explores buildings, lakes, lost shelters and bunkers, rides a tank and a helicopter near the endgame, more zombie kinds with a tyrant every 10th wave, skills it learns by doing and `/vwc:shelter` are in, and since 1.26.0 drifters, supply drops,
+  survivors who move in, a dog and the cure, and since 1.27.0 nights, blood moons, the generator and
+  the day count. Still to come: more places and encounters (caves, a
+  harbor) and more shelter visuals. A second game you switch to with a command. It only advances while it is the one
   on display, so it ticks on the render, with no offline catch-up.
   - The character patrols back and forth along a wide, short strip and fights zombies, weak ones
     and strong ones. The shelter sits in the center, with some visual upgrades around it.
@@ -53,6 +57,51 @@ bounties and the treasure goblin, in 1.22.0 the Swamp, Tundra and Sky Islands in
   - First version: the switch command, one strip, 2 zombie types, fists and one melee weapon,
     gathering that levels the shelter, auto-turrets and the inside-shelter command. Ranged, tanks and
     aircraft come in later releases, one per version.
+
+### More for the Survival game
+
+**Tied to what Claude is doing.** Subagents (drifters), compaction (supply drops), the clock
+(nights) and tokens (the generator) reach the Survival game since 1.26.0 and 1.27.0; this would tie
+it closer still.
+
+- **🎃 Seasons.** The adventure's seasons reach the strip: pumpkin-headed zombies and 🤡 in October,
+  and in December ⛄ snow that slows the zombies and frozen lakes he fishes through.
+
+**Places and people.**
+
+- **New places to search.** 🏥 a hospital (medkits that shorten rests), ⛽ a gas station (fuel and
+  bottles for molotovs), 🚢 a harbor (fish for food, and a boat to reach farther sites), 🗻 caves
+  (rich in scrap, with bats and now and then a hidden bunker), 🛒 a supermarket (food and cloth).
+  ⛽ needs adding to `WIDE_BELOW_1F000`.
+- **🦹 Raiders.** Now and then a band of raiders comes instead of zombies: they shoot from range and
+  step around traps, but drop guns, bullets and Tactical gear. They never take anything.
+- **🐫 A passing trader.** Every so often a trader swaps his surplus for what he is short of (wood
+  for cloth, say), on his own and at fair rates. No shop and no choices: it resolves like a crate.
+
+**Zombies.**
+
+- **New kinds.** 😱 a screamer that calls runners when it sees him (he and the turrets go for it
+  first), 🤮 a bloater that bursts and hurts everything around it, zombies included, 🦏 a juggernaut
+  that breaks a barricade in one blow, 🐀 rat swarms, many and weak.
+- **Tyrants with a trick.** The 10th-wave boss takes turns: the tyrant, a screamer queen that calls
+  runners in, a juggernaut that walks through barricades, a brood that splits into walkers when it
+  dies.
+
+**Shelter, weapons and the endgame.**
+
+- **Rooms.** The shelter grows rooms, built on their own and drawn as a floor plan in
+  `/vwc:shelter`: a 🌱 greenhouse (food while he works), a 🏥 infirmary (faster rests), a 🧰 workshop
+  (faster builds) and a 📻 radio room (warns of hordes). The lab and the beds (1.26.0) could join
+  the plan.
+- **More rungs on the ladder.** Melee from 🏏 a bat to 🔪 a machete and 🪚 a chainsaw; 🏹 a bow that
+  shoots wood instead of bullets; 🍾 molotovs and 💣 grenades, thrown on their own at groups of three
+  or more; 🛻 a pickup between the rifle and the tank, that rams. Vehicles could need ⛽ fuel the way
+  guns need bullets.
+- **🏅 Achievements, journal and card.** A category in `/vwc:achievements` (called Shelter, since the
+  adventure already has a Survival category), `/vwc:journal survival` for blueprints, tyrants and
+  rebuilds, and `/vwc:card survival`.
+- **One small cross-reward.** Settles the open question above: reaching wave 30 gives the
+  adventure's heroes a title or a cosmetic, nothing that changes their power.
 
 ## Turned down
 

@@ -228,6 +228,14 @@ const UPDATE_MSG_MS = 30000;      // the "updated" notice stays longer than othe
 const WHATS_NEW = {
   '1.3.0': 'enemies have life now, and every 5th level summons a boss',
   '1.4.0': `skills are random now, dropped by level bosses: ${COMMAND_PREFIX}skills`,
+  '1.27.0': root => (olderThan(root.seenVersion, '1.25.0')
+    ? `🏠 a second game: survive zombies with a shelter, ${COMMAND_PREFIX}game survival`
+    : olderThan(root.seenVersion, '1.26.0')
+      ? '🏠 Survival: 🤠 drifters, 🪂 supply drops, 👷 survivors, a 🐕 dog, 🧪 a cure, 🌙 nights and ⚡ a generator'
+      : '🏠 Survival: 🌙 nights and 🌕 blood moons, a ⚡ generator that runs on tokens, and 📅 a day count'),
+  '1.26.0': root => (olderThan(root.seenVersion, '1.25.0')
+    ? `🏠 a second game: survive zombies with a shelter, ${COMMAND_PREFIX}game survival`
+    : '🏠 Survival: 🤠 subagents send drifters, 🪂 supply drops, 👷 survivors move in, a 🐕 dog and 🧪 a cure'),
   '1.25.0': `🏠 a second game: survive zombies with a shelter, ${COMMAND_PREFIX}game survival`,
   '1.24.0': root => (olderThan(root.seenVersion, '1.23.0')
     ? '🌟 star weapon ranks, 📆 work streaks, 🐸 three new biomes, 📋 bounties and 💰 treasure goblins'
@@ -879,6 +887,7 @@ function anyActive(root, now) {
 }
 
 // Advances the active hero by the working time since the last settle. Returns the steps taken.
+// With the survival game on display the hero waits, hook events included.
 function settle(root, now) {
   const gap = now - root.lastTick;
   if (gap <= 0) {
@@ -886,7 +895,7 @@ function settle(root, now) {
   }
   root.lastTick = now;
   const h = activeHero(root);
-  if (!h || gap > MAX_GAP_MS || !anyActive(root, now)) {
+  if (!h || gap > MAX_GAP_MS || !anyActive(root, now) || survival.isShown()) {
     return 0;
   }
   comeBack(h, now);
@@ -1126,8 +1135,13 @@ function applyHookEvent(root, ev, at) {
   }
   const ss = session(root, ev.session_id, at);
   ingestTranscript(root, ss, ev.transcript_path, at);
+  // The game on display gets the compaction: a camp for the hero, or a supply drop for the shelter.
   if (name === 'PreCompact') {
-    makeCamp(activeHero(root), at);
+    if (survival.isShown()) {
+      survival.supplyDrop(at);
+    } else {
+      makeCamp(activeHero(root), at);
+    }
   }
   if (name === 'UserPromptSubmit') {
     const h = activeHero(root);
@@ -1221,12 +1235,13 @@ function onStatusLine(data, now) {
       const ss = session(root, data.session_id, now);
       ingestTranscript(root, ss, data.transcript_path, now);
     }
-    // Only the game on display advances: with the survival game shown, the adventure waits.
+    // Only the game on display advances: with the survival game shown, the adventure waits, and
+    // its allies (Claude's subagents) come to the shelter as drifters instead.
     let worked;
     if (survival.isShown()) {
       root.lastTick = now;
       worked = anyActive(root, now);
-      survival.tick(worked, now);
+      survival.tick(worked, now, { drifters: fightingAllies(root, now).map(a => a.since), night: isNight(now), tokens: root.stats.tokens });
     } else {
       worked = settle(root, now) > 0;
     }
@@ -1284,8 +1299,13 @@ function noticeUpdate(root, now) {
   if (h) {
     const entry = WHATS_NEW[version];
     const news = typeof entry === 'function' ? entry(root) : entry || `${COMMAND_PREFIX}commands lists every command`;
-    h.msg = { text: `🆕 Updated to ${version} · ${news}`, at: now, ms: UPDATE_MSG_MS };
+    const text = `🆕 Updated to ${version} · ${news}`;
+    h.msg = { text, at: now, ms: UPDATE_MSG_MS };
     record(h, `🆕 Updated to ${version}`, now);
+    // With the survival game on display the hero's stats row isn't shown, so it goes there too.
+    if (survival.isShown()) {
+      survival.announce(text, now, UPDATE_MSG_MS);
+    }
   }
   root.seenVersion = version;
 }
@@ -3546,7 +3566,9 @@ function render(root, now, cols) {
   const h = activeHero(root);
   const show = display(root);
   if (survival.isShown()) {
-    return survival.render(survival.load(now), { now, cols, show, active: anyActive(root, now), displayWidth, alignRight: row => alignRight(row, cols) });
+    return survival.render(survival.load(now), {
+      now, cols, show, active: anyActive(root, now), night: isNight(now), light: daylight(now), shade, displayWidth, alignRight: row => alignRight(row, cols),
+    });
   }
   let text = [];
   let map;
