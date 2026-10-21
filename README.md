@@ -81,10 +81,12 @@ or your files, so it's safe to run on work projects and code under an NDA.
 - **Nothing from your work is saved:** the save file holds hero stats, timestamps, token totals,
   the IDs of the last few API messages (so tokens aren't counted twice) and where it stopped
   reading each session's transcript. See [Files](#files) for everything it writes.
-- **Nothing leaves your machine:** no network access at all, and no npm dependencies. The scripts
-  only use Node's built-in `fs`, `path`, `os` and `child_process`, and `child_process` only runs the
-  status line you already had, so it keeps showing above the hero.
-- **Easy to check:** about 3,400 lines of plain JavaScript, with no build step and nothing
+- **Nothing leaves your machine:** no network access, and no npm dependencies. The scripts only
+  use Node's built-in modules, and `child_process` only runs the status line you already had, so it
+  keeps showing above the hero. The one exception is opt-in: `/vwc:window true` starts a small
+  server that listens on `127.0.0.1` only (with a random key in its address) and opens a local
+  browser window on it. It sends nothing anywhere, and it stops when the window closes.
+- **Easy to check:** about 7,800 lines of plain JavaScript, with no build step and nothing
   minified. The transcript reading is `ingestTranscript()` in `scripts/companion.js`.
 
 ## Install
@@ -164,6 +166,7 @@ any other hero active, older windows work as before.
 | `/vwc:showprogress <on\|off>` | `off` hides the hero's progress (the stats row with name, level, XP, weapon, zone and kills, and the 💗 life bar) so only the map is shown; `on` brings it back. With no argument it switches. Level-ups, loot and other news are shown on the stats row, so you won't see them while it's hidden. The choice is remembered across restarts. |
 | `/vwc:game <adventure\|survival>` | Switch the game on display. Only the one on display advances, so the other waits where it was. With no argument it switches. See [Survival](#survival). |
 | `/vwc:shelter` | The inside of the Survival game's shelter: the day count, the next blood moon, the generator, walls, turrets, scrap, weapon, the people living there, the lab, waves and totals. |
+| `/vwc:window <true\|false>` | `true` opens the Survival game in a pixel-art window of its own, and the status line shows a single line; `false` brings it back to the status line. With no argument it switches. See [Survival window](#survival-window). |
 | `/vwc:commands` | List every command, your heroes, how many achievements you have, and what is currently shown or hidden. |
 
 The commands run a small script before Claude sees anything, and then use Haiku to repeat the
@@ -355,6 +358,28 @@ it takes one step per second of Claude's work.
   Turrets, blueprints, clothes, skills and levels are never lost.
 - `/vwc:shelter` shows the inside: what is built, what he is saving for, who lives there, the lab,
   what he wears, his blueprints and what he has learned. The save is its own file, `survival.json`.
+
+### Survival window
+
+`/vwc:window true` opens the Survival game in a window of its own, drawn as a pixel-art diorama: the
+shelter and its towers, the people and zombies, hills that drift as the camera follows him, the sky
+by the hour (and the blood moon), the generator's lights and the campfire glowing at night. The
+stats row sits above it, and the news under it.
+
+```
+🪟 Survival is in its window · 📅 Day 9 · 🧟 Wave 12
+```
+
+- **The game is the same.** It still runs in the status line's ticks, one step per second of
+  Claude's work, so everything works as before; the window only shows it, and eases everything
+  between steps. While it is open, the status line shows the single line above.
+- **Back to the status line:** `/vwc:window false`, closing the window, or switching to the
+  adventure with `/vwc:game adventure`. `/vwc:window true` puts Survival on display if it wasn't.
+- **How it opens:** as an Edge or Chrome app window (no tabs or address bar), with a profile of its
+  own in your temp folder. Without either browser it opens in a tab of your default browser, and
+  stops a few minutes after the tab closes.
+- **Private:** a small server on `127.0.0.1` only, with a random key in the address, that reads
+  `survival.json` and sends nothing anywhere.
 
 ## Skills
 
@@ -994,12 +1019,14 @@ If you had a status line before `/vwc:setup`, it runs and is shown on top. Other
 | `.claude-plugin/plugin.json` | Plugin manifest (name `vwc`, version). |
 | `.claude-plugin/marketplace.json` | Makes this repository its own marketplace (`vibeworkcompanion`). |
 | `hooks/hooks.json` | The hooks that tell the companion when Claude is working. |
-| `skills/` | The `/vwc:` commands: `setup`, `chooseclass`, `createchar`, `hide`, `show`, `stats`, `showprogress`, `skills`, `gear`, `achievements`, `statistics`, `journal`, `card`, `dex`, `game`, `shelter` and `commands`. |
+| `skills/` | The `/vwc:` commands: `setup`, `chooseclass`, `createchar`, `hide`, `show`, `stats`, `showprogress`, `skills`, `gear`, `achievements`, `statistics`, `journal`, `card`, `dex`, `game`, `shelter`, `window` and `commands`. |
 | `scripts/companion.js` | The engine: save file, classes, biomes, game rules, rendering. |
 | `scripts/statusline.js` | What the status line runs: info row plus the three companion rows. |
 | `scripts/hook.js` | What the hooks run. Events from subagents go to the allies. |
 | `scripts/cli.js` | Class switching, new characters, hide/show, the stats row's place, showing or hiding the progress rows, the skills, gear, achievements and statistics lists, the journal, the hero card, the dex, and the command list. |
 | `scripts/survival.js` | The Survival game: its rules, rendering and the `/vwc:game` and `/vwc:shelter` commands. |
+| `scripts/window.js` | `/vwc:window`: the local server and the browser window for the Survival game. |
+| `scripts/window/` | The window's page: `scene.js` draws the diorama, `sprites.js` holds the pixel art. |
 | `scripts/setup.js` | Turns the status line on and off in your `settings.json`. |
 | `scripts/roster.js` | The Trainer's critters: the 15 types they fight with and all 151 species. |
 | `scripts/check-roster.js` | Checks `roster.js` after a change: numbering, names, evolutions, bosses and emoji. |
@@ -1014,6 +1041,7 @@ plugin updates:
 | `state.json` | One hero per class (with its skills, gear, shards, rested XP, camp, journal, and counts for achievements and statistics), which one is active, the allies of the subagents running now, the achievements earned and the totals they need, the dex of the critters seen and caught, what `/vwc:hide` has hidden, where `/vwc:stats` put the stats row, whether `/vwc:showprogress` hid it, and the last plugin version it saw (for the update notice). Delete it to start everything over. |
 | `survival.json` | The Survival game's save: shelter, scrap, weapon, wave, the people living there, the lab and totals. |
 | `game` | Exists only while the Survival game is the one on display. |
+| `window.json` | Exists only while the Survival window is open: its server's process, port and key. |
 | `backups/` | Heroes replaced by `/vwc:createchar`. To restore one, copy it into `state.json` under `heroes.<class>`. |
 | `statusline.js` | Small launcher that your status line runs; it finds the current plugin version. |
 | `previous-statusline.json` | The status line you had before setup. |

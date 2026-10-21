@@ -251,6 +251,9 @@ function newSave(now) {
     // total last counted toward it ({ total, at }); the days played (`day` is the last one, in days
     // since 1970) and how many of them in a row the shelter has stood (`safeDays`, best `bestSafe`).
     night: null, blood: false, generator: false, fuel: 0, tokens: null, day: null, days: 0, safeDays: 0, bestSafe: 0,
+    // Whether Claude was working at the last tick, and the last zombie's id (the window tells them
+    // apart by it).
+    active: false, seq: 0,
     totals: {
       scrapFound: 0, woodFound: 0, falls: 0, brutes: 0, bosses: 0, turretKills: 0, crates: 0, handKills: 0, builds: 0, waves: 0,
       knockouts: 0, rests: 0, retreats: 0, lessons: 0, defenses: 0, trapKills: 0, game: 0, sites: 0, dives: 0, hordes: 0, clothes: 0, meals: 0, bulletsMade: 0, gearFound: 0,
@@ -672,7 +675,8 @@ function spawn(sv, kind) {
   const z = ZOMBIES[kind];
   const serum = researched(sv, 3) ? 0.9 : 1;
   const hp = Math.round(z.hp * (1 + 0.15 * (sv.wave - 1)) * (0.85 + Math.random() * 0.3) * serum);
-  return { kind, x: Math.random() < 0.5 ? -RADIUS : RADIUS, hp, max: hp };
+  sv.seq++;
+  return { id: sv.seq, kind, x: Math.random() < 0.5 ? -RADIUS : RADIUS, hp, max: hp };
 }
 
 function dropGear(sv, now, bonus = 0) {
@@ -1519,6 +1523,7 @@ function tick(active, now, world = {}) {
   refuel(sv, world.tokens, now);
   const gap = now - sv.lastTick;
   sv.lastTick = now;
+  sv.active = active;
   if (gap > 0 && gap <= MAX_GAP_MS && active) {
     sv.carryMs += gap;
     while (sv.carryMs >= STEP_MS) {
@@ -1563,7 +1568,9 @@ function cutTo(ctx, text, width) {
   return `${out}…`;
 }
 
-function statsRow(sv, ctx) {
+// The stats row's parts, as [text, priority] (the lowest go first when the row is too wide), and
+// its status, the news or that it is waiting, as [color, text] or null.
+function statParts(sv, ctx) {
   const lvl = sv.shelter.level;
   const max = shelterMax(sv);
   const filled = Math.max(0, Math.min(10, Math.ceil((sv.shelter.hp / max) * 10)));
@@ -1601,9 +1608,13 @@ function statsRow(sv, ctx) {
     [sv.meals || sv.fed ? `🍲 ${sv.meals}${sv.fed ? ' 😋' : ''}` : null, 2.8],
     [`🧟 Wave ${sv.wave} ${Math.min(sv.waveKills, waveNeed(sv.wave))}/${waveNeed(sv.wave)}`, 4.5],
     [`💀 ${sv.kills}`, 2],
-    [status && color(...status), 5.5],
   ].filter(p => p[0]);
+  return { parts, status };
+}
 
+function statsRow(sv, ctx) {
+  const { parts: shown, status } = statParts(sv, ctx);
+  const parts = status ? [...shown, [color(...status), 5.5]] : shown;
   const sep = `${ESC}2m · ${RESET}`;
   let row = parts.map(p => p[0]).join(sep);
   while (ctx.displayWidth(row) > ctx.cols && parts.length > 1) {
@@ -1717,6 +1728,34 @@ function render(sv, ctx) {
   }
   const text = ctx.alignRight(statsRow(sv, ctx));
   return ctx.show.stats === 'below' ? [...map, text] : [text, ...map];
+}
+
+// The status line's single line while the game is in its window (see window.js).
+function windowLine(sv, ctx) {
+  const parts = ['🪟 Survival is in its window', sv.days ? `📅 Day ${sv.days}` : null, `🧟 Wave ${sv.wave}`, ctx.active ? null : '💤 waiting for you'];
+  return cutTo(ctx, parts.filter(Boolean).join(`${ESC}2m · ${RESET}`), ctx.cols);
+}
+
+// What the window draws: the save, what the rules make of it, and the stats row's parts as plain
+// text. The window only looks; the game goes on here, in the status line's ticks.
+function windowView(sv, ctx) {
+  const plain = text => text.replace(/\x1b\[[0-9;]*m/g, '');
+  const w = weaponInHand(sv);
+  return {
+    sv,
+    hud: statParts(sv, ctx).parts.map(p => plain(p[0])),
+    news: sv.msg && ctx.now - sv.msg.at < (sv.msg.ms || MSG_MS) ? sv.msg.text : null,
+    waiting: !ctx.active,
+    max: shelterMax(sv),
+    heroMax: heroMax(sv),
+    weapon: { key: WEAPONS.indexOf(w), name: w.name, vehicle: !!w.vehicle },
+    cooking: knows(sv, 'cooking'),
+    powered: powered(sv),
+    blood: !!ctx.night && bloodMoon(ctx.now),
+    night: !!ctx.night,
+    light: ctx.light ?? 1,
+    layout: { radius: RADIUS, wall: WALL, lit: LIT, turrets: TURRET_SLOTS.slice(0, sv.turrets), drifters: DRIFTER_TILES.slice(0, sv.drifters.length) },
+  };
 }
 
 // ---------- commands ----------
@@ -1858,6 +1897,7 @@ function shelterReport(now) {
 
 module.exports = {
   isShown, setShown, setGame, load, save, tick, render, shelterReport, step, newSave, supplyDrop, announce, moveIn, bloodMoon,
+  windowLine, windowView,
   BLUEPRINTS, shelterMax, slotsAt, turretDamage, turretCost, wallCost, heroMax, waveNeed, skillTier, armor,
   WEAPONS, ZOMBIES, SKILLS, GEAR_SLOTS, RADIUS, fightEstimate, ROLES, CURE,
 };

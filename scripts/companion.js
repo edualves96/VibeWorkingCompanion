@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { TYPES, SPECIES } = require('./roster');
 const survival = require('./survival');
+const survivalWindow = require('./window');
 
 // Where the save lives: COMPANION_DIR (set by the status line launcher, cli.js and tests),
 // else the plugin's data folder (Claude Code gives hooks CLAUDE_PLUGIN_DATA), else next to this file.
@@ -228,6 +229,9 @@ const UPDATE_MSG_MS = 30000;      // the "updated" notice stays longer than othe
 const WHATS_NEW = {
   '1.3.0': 'enemies have life now, and every 5th level summons a boss',
   '1.4.0': `skills are random now, dropped by level bosses: ${COMMAND_PREFIX}skills`,
+  '1.28.0': root => (olderThan(root.seenVersion, '1.25.0')
+    ? `🏠 a second game: survive zombies with a shelter, ${COMMAND_PREFIX}game survival`
+    : `🪟 ${COMMAND_PREFIX}window true opens Survival in a pixel-art window of its own`),
   '1.27.0': root => (olderThan(root.seenVersion, '1.25.0')
     ? `🏠 a second game: survive zombies with a shelter, ${COMMAND_PREFIX}game survival`
     : olderThan(root.seenVersion, '1.26.0')
@@ -3566,9 +3570,12 @@ function render(root, now, cols) {
   const h = activeHero(root);
   const show = display(root);
   if (survival.isShown()) {
-    return survival.render(survival.load(now), {
+    const ctx = {
       now, cols, show, active: anyActive(root, now), night: isNight(now), light: daylight(now), shade, displayWidth, alignRight: row => alignRight(row, cols),
-    });
+    };
+    // In its window, the game leaves a single line here (/vwc:window).
+    const sv = survival.load(now);
+    return survivalWindow.isOpen() ? [alignRight(survival.windowLine(sv, ctx), cols)] : survival.render(sv, ctx);
   }
   let text = [];
   let map;

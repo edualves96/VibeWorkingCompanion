@@ -16,6 +16,7 @@
 //   node cli.js --data <dir> dex [all]                     the trainer's critters: by biome, the partner, the last ones; all 151
 //   node cli.js --data <dir> game [adventure|survival]     switch the game on display (no choice: switch)
 //   node cli.js --data <dir> shelter                       the survival game's shelter, inside
+//   node cli.js --data <dir> window [true|false]           the survival game in its own window, or back (no choice: switch)
 //   node cli.js --data <dir> commands                     list every command, plus the current state
 // --data is the plugin's data folder, where the save lives. Skills don't get it as an
 // environment variable, so they pass it here.
@@ -30,6 +31,7 @@ if (dataAt >= 0) {
 
 const companion = require('./companion');
 const survival = require('./survival');
+const survivalWindow = require('./window');
 
 const [command, arg] = args;
 const names = Object.keys(companion.CLASSES).join(' | ');
@@ -53,6 +55,7 @@ const COMMANDS = [
   ['dex [all]', 'the trainer\'s critters: by biome, his partner and the last catches; all lists all 151'],
   ['game <adventure|survival>', 'switch the game on display; only that one advances (no choice: switch)'],
   ['shelter', "the survival game: the shelter's walls, turrets, scrap, weapon and waves"],
+  ['window <true|false>', 'the survival game in a pixel-art window of its own, or back in the status line (no choice: switch)'],
   ['setup', 'turn the companion status line on (an existing status line stays on top)'],
   ['setup remove', 'turn it off and put back your previous status line'],
   ['commands', 'this list'],
@@ -101,6 +104,9 @@ function run() {
   }
   if (command === 'shelter') {
     return survival.shelterReport(now);
+  }
+  if (command === 'window') {
+    return survivalWindow.command(arg, now);
   }
   if (command === 'commands') {
     return commands();
