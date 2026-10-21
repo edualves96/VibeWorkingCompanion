@@ -1,10 +1,11 @@
 'use strict';
-// The Survival game drawn as a pixel-art diorama: a 320x180 canvas scaled up without smoothing.
-// It asks the companion's server for the game every POLL_MS and eases everything toward it, since
+// The Survival game drawn as a pixel-art diorama: a 320x222 canvas scaled up without smoothing,
+// the strip above ground and the shelter's rooms dug under it. It asks the companion's server for the game every POLL_MS and eases everything toward it, since
 // the game itself only moves once a second. It never changes the game.
 
 const W = 320;
-const H = 180;
+const H = 222;
+const GROUND = 155;         // where the earth begins, under the lane
 const TW = 14;              // a tile of the strip, in pixels
 const LANE = 146;           // where feet stand
 const HORIZON = 112;
@@ -92,9 +93,10 @@ for (const layer of LAYERS) {
   }
 }
 const STARS = Array.from({ length: 70 }, () => ({ x: rand() * W, y: rand() * 95, b: rand(), s: rand() < 0.15 ? 2 : 1 }));
-const TUFTS = Array.from({ length: 90 }, () => ({ x: rand() * SPAN, y: 152 + rand() * 28, h: 2 + Math.floor(rand() * 4), c: rand() }));
+const TUFTS = Array.from({ length: 70 }, () => ({ x: rand() * SPAN, y: 152 + rand() * 3, h: 2 + Math.floor(rand() * 4), c: rand() }));
 const PEBBLES = Array.from({ length: 40 }, () => ({ x: rand() * SPAN, y: 138 + rand() * 12 }));
 const CLOUDS = Array.from({ length: 6 }, () => ({ x: rand() * SPAN, y: 14 + rand() * 50, w: 3 + Math.floor(rand() * 4), v: 1 + rand() * 2 }));
+const STONES = Array.from({ length: 60 }, () => ({ x: rand() * SPAN, y: GROUND + 3 + rand() * (H - GROUND - 5), w: 1 + Math.floor(rand() * 3), c: rand() }));
 const FLIES = Array.from({ length: 14 }, () => ({ x: rand() * W, y: 100 + rand() * 60, p: rand() * 6.28 }));
 
 // ---------- sky and land ----------
@@ -200,7 +202,15 @@ function drawLand() {
   rect(0, 128, W, 10, view.blood ? '#2a1010' : mix('#1c3324', '#4d8a3e', t));
   rect(0, 136, W, 16, view.blood ? '#3a1d18' : mix('#3b2f27', '#8d6c49', t));
   rect(0, 136, W, 1, view.blood ? '#4a2520' : mix('#4a3b30', '#a3825c', t));
-  rect(0, 152, W, H - 152, view.blood ? '#241010' : mix('#15281c', '#3f7a33', t));
+  rect(0, 152, W, 3, view.blood ? '#241010' : mix('#15281c', '#3f7a33', t));
+  // The earth under it all, in layers, with stones.
+  rect(0, GROUND, W, H - GROUND, '#3b2a1d');
+  rect(0, GROUND, W, 2, '#4a3524');
+  rect(0, GROUND + 30, W, 1, '#33251a');
+  rect(0, GROUND + 52, W, 1, '#2e2117');
+  for (const st of STONES) {
+    rect((st.x - camX + SPAN) % SPAN - 100, st.y, st.w, 1, st.c < 0.5 ? '#5a4a3e' : '#2a1e15');
+  }
   g.fillStyle = view.blood ? '#4a2a24' : mix('#4a3d33', '#a8896a', t);
   for (const p of PEBBLES) {
     const x = (p.x - camX + SPAN) % SPAN - 100;
@@ -672,6 +682,284 @@ function onStep(prev) {
   }
 }
 
+// ---------- inside: the rooms under the shelter ----------
+
+const ROOM_W = 40;
+const ROOM_H = 28;
+const SHAFT = 10;
+const FLOORS = [159, 191];   // the tops of the first floor's rooms and of the cellar's
+// Each room has its own place, so none moves when another is dug: [floor, side, slot from the shaft].
+const SLOTS = {
+  workshop: [0, -1, 0], storage: [0, -1, 1], kitchen: [0, -1, 2], bunks: [0, 1, 0], study: [0, 1, 1], lab: [0, 1, 2],
+  infirmary: [1, -1, 0], greenhouse: [1, -1, 1], training: [1, -1, 2], armory: [1, 1, 0], radio: [1, 1, 1],
+};
+const WALLS = {
+  workshop: '#5a4a3c', storage: '#54483a', kitchen: '#6b5040', bunks: '#4a4a5c', study: '#4c4038', lab: '#8e989c',
+  infirmary: '#aeb4b8', greenhouse: '#3c5a40', training: '#5c4a4a', armory: '#4a4f46', radio: '#43504a',
+};
+const SPINES = ['#a33a2e', '#2f6fbf', '#d9a42b', '#4f8a3e', '#7a4b9a', '#c8c0a8'];
+
+// Where a room is: its left and top, and the line its floor is at (where feet stand).
+function roomBox(key) {
+  const [floor, side, i] = SLOTS[key];
+  const cx = sx(0);
+  const x = side < 0 ? cx - SHAFT / 2 - 2 - (i + 1) * ROOM_W - i * 2 : cx + SHAFT / 2 + 2 + i * (ROOM_W + 2);
+  return { x: Math.round(x), y: FLOORS[floor], f: FLOORS[floor] + ROOM_H - 3 };
+}
+
+function roomShell(b, key) {
+  rect(b.x - 1, b.y - 1, ROOM_W + 2, ROOM_H + 2, '#1e140c');
+  rect(b.x, b.y, ROOM_W, ROOM_H, WALLS[key]);
+  rect(b.x, b.y, ROOM_W, 2, '#2a1e14');
+  rect(b.x, b.f, ROOM_W, 3, '#6b4a30');
+  rect(b.x, b.f, ROOM_W, 1, '#8a6440');
+  rect(b.x + ROOM_W / 2, b.y + 2, 1, 2, '#3a3a3a');
+  rect(b.x + ROOM_W / 2 - 1, b.y + 4, 3, 1, '#ffe08a');
+}
+
+function sparks(x, y) {
+  if (Math.sin(clock * 17) > 0.2) {
+    rect(x + Math.round(Math.sin(clock * 31) * 2), y - Math.round(Math.abs(Math.cos(clock * 23)) * 3), 1, 1, '#ffe680');
+  }
+}
+
+const FURNISH = {
+  workshop(b, s) {
+    rect(b.x + 3, b.f - 7, 20, 2, '#8b5a2b');
+    rect(b.x + 4, b.f - 5, 1, 5, '#6b4423');
+    rect(b.x + 21, b.f - 5, 1, 5, '#6b4423');
+    rect(b.x + 18, b.f - 9, 3, 2, '#7d8590');
+    rect(b.x + 4, b.y + 6, 1, 5, '#6b4423');
+    rect(b.x + 3, b.y + 6, 3, 1, '#9a9aa2');
+    rect(b.x + 8, b.y + 7, 6, 2, '#b8bcc4');
+    rect(b.x + 16, b.y + 6, 1, 5, '#9a9aa2');
+    rect(b.x + 30, b.f - 6, 7, 6, '#9a6a3c');
+    rect(b.x + 30, b.f - 4, 7, 1, '#6e6e74');
+    if (s.busy) {
+      sparks(b.x + 12, b.f - 8);
+    }
+  },
+  storage(b, s) {
+    for (const y of [b.y + 10, b.y + 18]) rect(b.x + 2, y, 36, 1, '#6b4423');
+    rect(b.x + 2, b.y + 5, 1, b.f - b.y - 5, '#6b4423');
+    rect(b.x + 37, b.y + 5, 1, b.f - b.y - 5, '#6b4423');
+    const sv = view.sv;
+    const stock = sv.scrap + sv.wood + sv.cloth + sv.food;
+    const boxes = Math.min(14, 1 + Math.floor(Math.log2(stock + 1) * 1.4));
+    const colors = ['#9a6a3c', '#8b5a2b', '#6a5acd', '#c0504d', '#7d8590'];
+    for (let i = 0; i < boxes; i++) {
+      const shelf = i < 7 ? b.y + 10 : b.y + 18;
+      rect(b.x + 4 + (i % 7) * 5, shelf - 4, 4, 4, colors[i % colors.length]);
+    }
+    rect(b.x + 26, b.f - 4, 5, 4, '#b8a47a');
+    rect(b.x + 31, b.f - 3, 4, 3, '#a8946a');
+  },
+  kitchen(b, s) {
+    rect(b.x + 3, b.f - 9, 9, 9, '#3a3a40');
+    rect(b.x + 3, b.f - 9, 9, 1, '#55555c');
+    rect(b.x + 5, b.f - 5, 5, 2, s.busy ? '#ff6a2a' : '#2a2a2e');
+    rect(b.x + 5, b.f - 12, 5, 3, '#7d8590');
+    if (s.busy) {
+      smoke(b.x + 7, b.f - 13);
+    }
+    rect(b.x + 22, b.f - 6, 13, 2, '#8b5a2b');
+    rect(b.x + 23, b.f - 4, 1, 4, '#6b4423');
+    rect(b.x + 33, b.f - 4, 1, 4, '#6b4423');
+    rect(b.x + 26, b.f - 7, 3, 1, '#e8e2d0');
+    rect(b.x + 16, b.y + 8, 21, 1, '#6b4423');
+    for (let i = 0; i < Math.min(5, view.sv.meals); i++) rect(b.x + 17 + i * 4, b.y + 5, 2, 3, '#e8913a');
+  },
+  bunks(b, s) {
+    const beds = Math.max(1, view.inside.beds);
+    for (let k = 0; k < Math.min(2, Math.ceil(beds / 2)); k++) {
+      const x = b.x + 3 + k * 18;
+      rect(x, b.f - 16, 1, 16, '#6b4423');
+      rect(x + 14, b.f - 16, 1, 16, '#6b4423');
+      rect(x + 1, b.f - 4, 13, 2, '#4a6fa5');
+      rect(x + 1, b.f - 5, 3, 1, '#e8e2d0');
+      if (beds > 2 * k + 1) {
+        rect(x + 1, b.f - 13, 13, 2, '#4a6fa5');
+        rect(x + 1, b.f - 14, 3, 1, '#e8e2d0');
+      }
+    }
+  },
+  study(b, s) {
+    rect(b.x + 4, b.f - 7, 14, 2, '#7a4b2a');
+    rect(b.x + 5, b.f - 5, 1, 5, '#5a361e');
+    rect(b.x + 16, b.f - 5, 1, 5, '#5a361e');
+    rect(b.x + 6, b.f - 10, 1, 3, '#2e2e2e');
+    rect(b.x + 5, b.f - 11, 3, 1, '#ffd36b');
+    if (s.busy) {
+      rect(b.x + 10, b.f - 8, 4, 1, '#f4f0e0');
+      rect(b.x + 12, b.f - 8, 1, 1, Math.sin(clock * 3) > 0 ? '#c8c0a8' : '#f4f0e0');
+    }
+    rect(b.x + 25, b.y + 5, 12, b.f - b.y - 5, '#5a3a1a');
+    const spines = Math.min(20, 3 + view.inside.books * 2);
+    for (let i = 0; i < spines; i++) {
+      rect(b.x + 26 + (i % 5) * 2, b.y + 6 + Math.floor(i / 5) * 5, 1, 4, SPINES[i % SPINES.length]);
+    }
+  },
+  lab(b, s) {
+    rect(b.x + 3, b.f - 7, 30, 2, '#e8ecee');
+    rect(b.x + 4, b.f - 5, 1, 5, '#9aa4a8');
+    rect(b.x + 31, b.f - 5, 1, 5, '#9aa4a8');
+    rect(b.x + 6, b.f - 11, 2, 4, '#6ff0a0');
+    rect(b.x + 12, b.f - 10, 3, 3, '#6fb8ff');
+    rect(b.x + 20, b.f - 12, 2, 5, '#c08aff');
+    if (Math.sin(clock * 5) > 0) rect(b.x + 7, b.f - 13, 1, 1, '#b8ffd0');
+  },
+  infirmary(b, s) {
+    rect(b.x + 4, b.f - 5, 16, 3, '#e8ecee');
+    rect(b.x + 4, b.f - 6, 3, 1, '#ffffff');
+    rect(b.x + 4, b.f - 2, 1, 2, '#9aa4a8');
+    rect(b.x + 19, b.f - 2, 1, 2, '#9aa4a8');
+    rect(b.x + 28, b.y + 7, 5, 1, '#d03030');
+    rect(b.x + 30, b.y + 5, 1, 5, '#d03030');
+    rect(b.x + 23, b.f - 14, 1, 14, '#9a9aa2');
+    rect(b.x + 22, b.f - 15, 3, 3, '#cfe8ff');
+  },
+  greenhouse(b, s) {
+    rect(b.x + 3, b.y + 3, 34, 1, '#d070ff');
+    for (let i = 0; i < 5; i++) {
+      const x = b.x + 4 + i * 7;
+      rect(x, b.f - 3, 4, 3, '#a0522d');
+      const h = 3 + ((i * 7) % 4);
+      const sway = Math.round(Math.sin(clock * 1.2 + i));
+      rect(x + 1 + sway, b.f - 3 - h, 1, h, '#4f9a3a');
+      rect(x + sway, b.f - 3 - h, 3, 1, '#6cc04a');
+    }
+  },
+  training(b, s) {
+    const swing = Math.round(Math.sin(clock * 2.5) * 1.5);
+    rect(b.x + 10, b.y + 2, 1, 5, '#7d8590');
+    rect(b.x + 8 + swing, b.y + 7, 5, 11, '#b03a2e');
+    rect(b.x + 22, b.f - 4, 12, 2, '#3a3a3a');
+    rect(b.x + 24, b.f - 7, 1, 3, '#9a9aa2');
+    rect(b.x + 31, b.f - 7, 1, 3, '#9a9aa2');
+    rect(b.x + 23, b.f - 7, 10, 1, '#5a5a60');
+  },
+  armory(b, s) {
+    rect(b.x + 3, b.y + 6, 20, 13, '#5a3a1a');
+    for (let i = 0; i < 3; i++) {
+      rect(b.x + 5, b.y + 8 + i * 4, 15, 1, '#2e2e2e');
+      rect(b.x + 5, b.y + 9 + i * 4, 4, 1, '#6b4423');
+    }
+    rect(b.x + 27, b.f - 5, 9, 5, '#5d6640');
+    rect(b.x + 27, b.f - 3, 9, 1, '#d8b030');
+  },
+  radio(b, s) {
+    rect(b.x + 4, b.f - 7, 22, 2, '#7a4b2a');
+    rect(b.x + 5, b.f - 5, 1, 5, '#5a361e');
+    rect(b.x + 24, b.f - 5, 1, 5, '#5a361e');
+    rect(b.x + 7, b.f - 13, 12, 6, '#3d4a3a');
+    rect(b.x + 9, b.f - 11, 3, 2, '#e8e2d0');
+    rect(b.x + 14, b.f - 11, 1, 1, Math.sin(clock * 4) > 0 ? '#ff4040' : '#5a2020');
+    rect(b.x + 16, b.f - 11, 1, 1, Math.sin(clock * 3 + 1) > 0 ? '#40ff60' : '#205a28');
+    rect(b.x + 30, b.y, 1, b.f - b.y - 13, '#2e2e2e');
+  },
+};
+
+// A room still being dug: beams and sparks.
+function scaffold(b) {
+  rect(b.x, b.y, ROOM_W, ROOM_H, '#2e2116');
+  for (let i = 0; i < ROOM_W; i += 10) rect(b.x + i, b.y, 1, ROOM_H, '#8b5a2b');
+  rect(b.x, b.y + 10, ROOM_W, 1, '#8b5a2b');
+  rect(b.x, b.f, ROOM_W, 3, '#5a3f28');
+  sparks(b.x + 20, b.f - 6);
+}
+
+// The room for what he is doing inside.
+function roomFor(doing, inside) {
+  const has = key => inside.rooms.includes(key) || inside.built.includes(key);
+  if ((doing === 'cook' || doing === 'eat') && has('kitchen')) return 'kitchen';
+  if (doing === 'study' && has('study')) return 'study';
+  if (doing === 'organize') return 'storage';
+  if ((doing === 'lab' || doing === 'research') && has('lab')) return 'lab';
+  if (doing === 'room' && inside.building) return inside.building;
+  if (doing === 'rest' || doing === 'down' || view.sv.resting) return has('infirmary') ? 'infirmary' : 'bunks';
+  return 'workshop';
+}
+
+const RESIDENT_ROOM = { mechanic: 'workshop', scavenger: 'storage', cook: 'kitchen', medic: 'infirmary' };
+
+function zz(x, y) {
+  const zt = (clock * 0.7) % 1;
+  g.globalAlpha = 1 - zt;
+  g.fillStyle = '#e8e8f8';
+  g.font = '7px monospace';
+  g.fillText('z', x + zt * 5, y - zt * 8);
+  g.globalAlpha = 1;
+}
+
+function drawInside() {
+  const inside = view.inside;
+  // A server started before 1.29.0 sends no rooms.
+  if (!inside) {
+    return;
+  }
+  const sv = view.sv;
+  const visible = [...inside.rooms, ...(inside.cellar ? inside.built : [])];
+  const cx = sx(0);
+  const deepest = inside.cellar ? FLOORS[1] + ROOM_H : FLOORS[0] + ROOM_H;
+  // The shaft down from the shelter's door, with its ladder.
+  rect(cx - SHAFT / 2, 152, SHAFT, deepest - 152, '#22170f');
+  rect(cx - 3, 152, 1, deepest - 152, '#6b4423');
+  rect(cx + 2, 152, 1, deepest - 152, '#6b4423');
+  for (let y = 154; y < deepest; y += 4) rect(cx - 3, y, 6, 1, '#8b5a2b');
+  const doing = sv.doing;
+  const here = inside.inside ? roomFor(doing, inside) : null;
+  for (const key of visible) {
+    const b = roomBox(key);
+    roomShell(b, key);
+    FURNISH[key](b, { busy: here === key && !['rest', 'down'].includes(doing) });
+  }
+  if (inside.cellar && inside.building) {
+    scaffold(roomBox(inside.building));
+  }
+  // The people living there, each in their room.
+  (sv.residents || []).forEach((r, i) => {
+    const key = r.role === 'medic' && !visible.includes('infirmary') ? 'bunks' : RESIDENT_ROOM[r.role];
+    if (!key || !visible.includes(key)) {
+      return;
+    }
+    const b = roomBox(key);
+    const bob = Math.sin(clock * 2 + i) > 0.7 ? 1 : 0;
+    blit(g, SPRITES.resident(0), b.x + ROOM_W - 8, b.f - bob, true);
+  });
+  if (!here || sv.rebuild > 0) {
+    return;
+  }
+  const b = roomBox(here);
+  const f = b.f;
+  const tier = sv.gear && sv.gear.body ? sv.gear.body.tier : 0;
+  if (here === 'bunks' || here === 'infirmary') {
+    const bed = here === 'bunks' ? b.x + 11 : b.x + 12;
+    blit(g, SPRITES.down(), bed, here === 'bunks' ? f - 3 : f - 4, false);
+    zz(bed + 6, f - 10);
+  } else if (here === 'storage') {
+    const t = (Math.sin(clock * 1.4) + 1) / 2;
+    const x = b.x + 8 + t * 14;
+    blit(g, SPRITES.survivor(Math.floor(clock * 6) % 2, tier), x, f, Math.cos(clock * 1.4) < 0);
+    rect(x - 2, f - 17, 5, 4, '#9a6a3c');
+  } else {
+    const spot = { kitchen: [b.x + 16, true], study: [b.x + 21, true], workshop: [b.x + 15, true], lab: [b.x + 17, true] }[here] || [b.x + 20, false];
+    blit(g, SPRITES.survivor(0, tier), spot[0], f, spot[1]);
+    if (doing === 'eat') {
+      rect(spot[0] + 4, f - 7, 3, 1, '#e8913a');
+    }
+    if (doing === 'study') {
+      rect(spot[0] - 5, f - 8, 3, 2, '#f4f0e0');
+    }
+  }
+  if (sv.dog && visible.includes('bunks')) {
+    const d = roomBox('bunks');
+    blit(g, SPRITES.dog(0), d.x + ROOM_W - 6, d.f, true);
+  }
+  if (view.waiting) {
+    zz(b.x + ROOM_W / 2, b.y + 10);
+  }
+}
+
 // ---------- light ----------
 
 function drawLight() {
@@ -686,7 +974,7 @@ function drawLight() {
   fade.addColorStop(0, `rgba(${tint},0)`);
   fade.addColorStop(1, `rgba(${tint},${a})`);
   sg.fillStyle = fade;
-  sg.fillRect(0, 96, W, H - 96);
+  sg.fillRect(0, 96, W, GROUND - 96);
   // Light cuts holes in the dark.
   sg.globalCompositeOperation = 'destination-out';
   const hole = (x, y, rx, ry, strength) => {
@@ -810,21 +1098,8 @@ function draw(t) {
   drawDog(hero, dt);
   const order = [...sv.zombies].sort((a, b) => (hash(a.id || 7) % 5) - (hash(b.id || 7) % 5));
   for (const z of order) drawZombie(z, dt);
-  if (sv.job && sv.job.kind !== 'explore' && sv.rebuild === 0) {
-    const x = sx(0);
-    const hop = Math.abs(Math.sin(clock * 8)) * 2;
-    rect(x - 1, LANE - shelterHeight(sv.shelter.level) - 6 - hop, 4, 2, '#9a9aa2');
-    rect(x, LANE - shelterHeight(sv.shelter.level) - 4 - hop, 1, 4, '#6b4423');
-  }
-  if ((sv.resting || sv.down > 0) && sv.rebuild === 0) {
-    const zt = (clock * 0.7) % 1;
-    g.globalAlpha = 1 - zt;
-    g.fillStyle = '#e8e8f8';
-    g.font = '7px monospace';
-    g.fillText('z', sx(0) + 8 + zt * 6, LANE - shelterHeight(sv.shelter.level) - zt * 10);
-    g.globalAlpha = 1;
-  }
   drawTufts();
+  drawInside();
   drawEffects(dt);
   drawLight();
   if (view.waiting && hero) {

@@ -165,7 +165,7 @@ any other hero active, older windows work as before.
 | `/vwc:stats <above\|below>` | Put the hero's stats row (level, XP, weapon, zone, kills) above the map, where it starts, or below it. With no argument it switches to the other place. The choice is remembered across restarts. |
 | `/vwc:showprogress <on\|off>` | `off` hides the hero's progress (the stats row with name, level, XP, weapon, zone and kills, and the 💗 life bar) so only the map is shown; `on` brings it back. With no argument it switches. Level-ups, loot and other news are shown on the stats row, so you won't see them while it's hidden. The choice is remembered across restarts. |
 | `/vwc:game <adventure\|survival>` | Switch the game on display. Only the one on display advances, so the other waits where it was. With no argument it switches. See [Survival](#survival). |
-| `/vwc:shelter` | The inside of the Survival game's shelter: the day count, the next blood moon, the generator, walls, turrets, scrap, weapon, the people living there, the lab, waves and totals. |
+| `/vwc:shelter` | The inside of the Survival game's shelter: the day count, the next blood moon, the generator, walls, turrets, scrap, weapon, the people living there, the rooms and books, the lab, waves and totals. |
 | `/vwc:window <true\|false>` | `true` opens the Survival game in a pixel-art window of its own, and the status line shows a single line; `false` brings it back to the status line. With no argument it switches. See [Survival window](#survival-window). |
 | `/vwc:commands` | List every command, your heroes, how many achievements you have, and what is currently shown or hidden. |
 
@@ -341,6 +341,20 @@ it takes one step per second of Claude's work.
 - **🐕 A dog.** Once he has explored a few places, a search may turn up a dog that follows him from
   then on: it trots behind him, fetches a crate lying close by every so often, and barks before an
   ambush, so fewer of them catch him.
+- **🏠 Inside the shelter.** Under it are its rooms: a 🔧 workshop, 📦 storage and bunks from the
+  start, a 🍳 kitchen once he (or a cook who moved in) can cook, a 📚 study once he finds a book,
+  and the 🧪 lab. He builds and crafts in there, and when he is resting or holed up he keeps busy:
+  he builds what he can, reads a book, or tidies the storage, which now and then turns up a few
+  forgotten materials. He eats at the kitchen table.
+- **📚 Books.** Buildings, bunkers, lost shelters, supply drops and the scavenger's runs sometimes
+  turn up a book. With one to read, he takes a reading break every 10 minutes of work when nothing
+  is at the walls (the turrets keep watch), and reads when there is nothing else to do. Books are
+  hard going: a read takes a minute and a half, and sinks in only about 4 times in 10 at first (the
+  📖 Studying skill helps); otherwise he reads it again. What sinks in teaches him to build the
+  rooms of a cellar, dug at shelter level 5: a 🌱 Greenhouse (1 book: food), a 🩺 Infirmary (2:
+  faster rests, shorter knockouts), a 💣 Armory (3: half again as many bullets a batch), a 📻 Radio
+  room (3: a supply drop every 2 hours of work) and a 💪 Training room (4: he hits 10% harder), in
+  that order. He builds each one when he has the materials.
 - **🧪 The cure.** Once he flies the helicopter, brutes and spitters now and then carry a sample of
   the virus, a tyrant several, and a bunker may hold one. He builds a lab at the shelter, and it
   studies the samples one stage at a time, each one for good: 🧫 Antibodies (bites hurt him 15%
@@ -352,7 +366,7 @@ it takes one step per second of Claude's work.
   (crates gathered), 🥊 Combat (zombies killed by hand), 🔧 Engineering (things built), 🧱 Fortifying
   (waves survived), 🩹 First aid (times he had to rest), 🧵 Tailoring (clothes made), 🍳 Cooking (meals
   cooked), 🔍 Scouting (places explored: fewer ambushes, bigger finds), 🏊 Diving (lake dives: less
-  damage, more finds), 🧨 Gunsmithing (bullets made: more a batch, harder hits), 🪤 Trapping (defenses set up) and 🧠 Tactics (hard lessons).
+  damage, more finds), 🧨 Gunsmithing (bullets made: more a batch, harder hits), 🪤 Trapping (defenses set up), 📖 Studying (books read through: they sink in more often) and 🧠 Tactics (hard lessons).
 - Waves hold at the shelter's pace. If the shelter falls anyway, you lose a quarter of the materials
   and a wave, the zombies thin out for a few minutes, and it is rebuilt in a few seconds.
   Turrets, blueprints, clothes, skills and levels are never lost.
@@ -363,8 +377,10 @@ it takes one step per second of Claude's work.
 
 `/vwc:window true` opens the Survival game in a window of its own, drawn as a pixel-art diorama: the
 shelter and its towers, the people and zombies, hills that drift as the camera follows him, the sky
-by the hour (and the blood moon), the generator's lights and the campfire glowing at night. The
-stats row sits above it, and the news under it.
+by the hour (and the blood moon), the generator's lights and the campfire glowing at night. Under
+the ground, the shelter's rooms are cut open, and he is seen in the one he is at: crafting at the
+workbench, cooking, reading at the desk, tidying the shelves, asleep in a bunk, with the people who
+moved in at work in theirs. The stats row sits above it, and the news under it.
 
 ```
 🪟 Survival is in its window · 📅 Day 9 · 🧟 Wave 12

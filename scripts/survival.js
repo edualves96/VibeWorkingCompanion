@@ -144,21 +144,22 @@ const SKILLS = {
   trapping: { icon: '🪤', name: 'Trapping', counter: 'defenses', unit: 'defenses set up', tiers: [4, 15, 40], text: 'barricades hold longer, traps and spikes hurt more' },
   tactics: { icon: '🧠', name: 'Tactics', counter: 'lessons', unit: 'hard lessons', tiers: [5, 20, 60], text: 'sizes up a fight more carefully' },
   gunsmithing: { icon: '🧨', name: 'Gunsmithing', counter: 'bulletsMade', unit: 'bullets made', tiers: [200, 1000, 4000], text: 'more bullets a batch, guns hit 10% harder' },
+  studying: { icon: '📖', name: 'Studying', counter: 'reads', unit: 'books read through', tiers: [3, 10, 25], text: 'books sink in more often' },
 };
 
-const JOB_STEPS = { turret: 8, walls: 10, weapon: 6, ammo: 3, clothes: 6, cook: 4, explore: 5, defense: 5, lab: 20, research: 12, generator: 10 };
-const JOB_NAMES = { turret: 'turret', walls: 'walls', weapon: 'crafting', ammo: 'bullets', clothes: 'sewing', cook: 'cooking', explore: 'searching', defense: 'defenses', lab: 'the lab', research: 'research', generator: 'generator' };
+const JOB_STEPS = { turret: 8, walls: 10, weapon: 6, ammo: 3, clothes: 6, cook: 4, explore: 5, defense: 5, lab: 20, research: 12, generator: 10, room: 15 };
+const JOB_NAMES = { turret: 'turret', walls: 'walls', weapon: 'crafting', ammo: 'bullets', clothes: 'sewing', cook: 'cooking', explore: 'searching', defense: 'defenses', lab: 'the lab', research: 'research', generator: 'generator', room: 'a room' };
 
 // Places to explore. He goes when he is healthy and the shelter is quiet, and takes his chances:
 // a building may hide an ambush, a lake may nearly drown him, a bunker is always guarded but holds
 // the best finds, and a lost shelter is a safe stop. `loot` is [min, max] per material, the chance
 // of a blueprint (`bp`) and of a piece of clothing (`gear`); `meet` the chance of meeting someone
-// who would move in (see ROLES).
+// who would move in (see ROLES), and `book` of finding a book (see ROOMS).
 const SITES = {
-  building: { icon: '🏢', name: 'abandoned building', weight: 0.4, ambush: 0.35, meet: 0.1, loot: { scrap: [10, 25], cloth: [3, 7], food: [2, 5], bp: 0.2, gear: 0.15 } },
-  lake: { icon: '🌊', name: 'lake', weight: 0.2, meet: 0, loot: { wood: [8, 18], scrap: [10, 30], bp: 0.15, gear: 0.25 } },
-  shelter: { icon: '⛺', name: 'lost shelter', weight: 0.25, meet: 0.35, loot: { wood: [8, 15], scrap: [10, 20], food: [3, 6], bp: 0.2, gear: 0 } },
-  bunker: { icon: '🚪', name: 'bunker', weight: 0.15, ambush: 1, meet: 0.2, loot: { scrap: [40, 80], cloth: [5, 10], food: [4, 8], bp: 0.7, gear: 0.4, tier: 1 } },
+  building: { icon: '🏢', name: 'abandoned building', weight: 0.4, ambush: 0.35, meet: 0.1, book: 0.08, loot: { scrap: [10, 25], cloth: [3, 7], food: [2, 5], bp: 0.2, gear: 0.15 } },
+  lake: { icon: '🌊', name: 'lake', weight: 0.2, meet: 0, book: 0, loot: { wood: [8, 18], scrap: [10, 30], bp: 0.15, gear: 0.25 } },
+  shelter: { icon: '⛺', name: 'lost shelter', weight: 0.25, meet: 0.35, book: 0.06, loot: { wood: [8, 15], scrap: [10, 20], food: [3, 6], bp: 0.2, gear: 0 } },
+  bunker: { icon: '🚪', name: 'bunker', weight: 0.15, ambush: 1, meet: 0.2, book: 0.15, loot: { scrap: [40, 80], cloth: [5, 10], food: [4, 8], bp: 0.7, gear: 0.4, tier: 1 } },
 };
 
 // Every subagent Claude runs sends a drifter to the shelter (the adventure's allies, from the same
@@ -169,7 +170,7 @@ const DRIFTER_RANGE = 6;
 // When Claude compacts the conversation, a supply drop lands by parachute somewhere on the strip.
 // It holds more than a crate (`more` per wave), bullets once he makes them, and good odds of a
 // blueprint and a piece of clothing.
-const SUPPLY = { scrap: [25, 45], wood: [15, 30], cloth: [4, 8], food: [4, 8], more: 0.1, ammo: 30, bp: 0.5, gear: 0.3 };
+const SUPPLY = { scrap: [25, 45], wood: [15, 30], cloth: [4, 8], food: [4, 8], more: 0.1, ammo: 30, bp: 0.5, gear: 0.3, book: 0.3 };
 
 // Survivors he meets on his searches move in while there is a bed for them (one every BED_EVERY
 // shelter levels), and each takes the role nobody has yet. They stay inside, so nothing can hurt
@@ -187,6 +188,7 @@ const LOOKOUT_RANGE = 8;
 const COOK_EVERY = 40;       // steps between the cook's meals, while there is food
 const RUN_EVERY = 150;       // steps between the scavenger's runs
 const RUN_BLUEPRINT = 0.05;
+const RUN_BOOK = 0.05;
 // A dog he finds on a search (once he has explored DOG.after places) follows him from then on. It
 // fetches a crate within DOG.fetch tiles of him (then rests DOG.rest steps) and barks before an
 // ambush, so fewer catch him.
@@ -228,6 +230,29 @@ const MOON = { month: 29.530588853, newAt: Date.UTC(2000, 0, 6, 18, 14) };
 const GENERATOR = { scrap: 150, wood: 60 };
 const TOKENS_PER_FUEL = 500;
 const FUEL_MAX = 900;
+
+// Inside the shelter. He builds there, and while he rests or is holed up he keeps busy: he builds
+// what he can, or reads the books he has found, or puts the storage in order, which turns up a few
+// forgotten materials (ORGANIZE.find) every ORGANIZE.every steps. Books are hard going: a read takes
+// READ_STEPS, and sinks in only with a chance of UNDERSTAND (more with each tier of Studying); if it
+// doesn't, he reads it again. The books he understands teach him the ROOMS, one at a time and in
+// that order, which he builds in a cellar the shelter digs at CELLAR_LEVEL.
+const READ_STEPS = 90;
+const UNDERSTAND = [0.4, 0.15];
+const ORGANIZE = { every: 40, find: [2, 5] };
+// With a book to read, he also takes a break for it: BREAK.steps of reading every BREAK.every
+// steps, when nothing is at the walls.
+const BREAK = { every: 600, steps: 45 };
+const CELLAR_LEVEL = 5;
+const ROOMS = {
+  greenhouse: { icon: '🌱', name: 'Greenhouse', books: 1, scrap: 200, wood: 150, cloth: 0, text: 'grows 2 food every 90 seconds' },
+  infirmary: { icon: '🩺', name: 'Infirmary', books: 2, scrap: 250, wood: 100, cloth: 20, text: 'rests heal faster, and knockouts end sooner' },
+  armory: { icon: '💣', name: 'Armory', books: 3, scrap: 400, wood: 100, cloth: 0, text: 'half again as many bullets a batch' },
+  radio: { icon: '📻', name: 'Radio room', books: 3, scrap: 500, wood: 50, cloth: 30, text: 'calls in a supply drop every 2 hours' },
+  training: { icon: '💪', name: 'Training room', books: 4, scrap: 300, wood: 200, cloth: 20, text: 'he hits 10% harder' },
+};
+const GREENHOUSE = { every: 90, food: 2 };
+const RADIO_EVERY = 7200;
 const BULLETS = { scrap: 10, made: 40, low: 10 };   // 10 scrap make 40 bullets, made when under 10 are left
 const MEAL = { food: 3, heal: 0.4, fed: 60, bonus: 0.15, below: 0.5 };   // 3 food make a meal
 
@@ -254,10 +279,15 @@ function newSave(now) {
     // Whether Claude was working at the last tick, and the last zombie's id (the window tells them
     // apart by it).
     active: false, seq: 0,
+    // Inside: the books not understood yet, the steps into the one he is reading, the books
+    // understood toward each room, the rooms built, what he did inside on the last step (for the
+    // window and the stats row), and the steps of tidying toward the next find.
+    books: 0, reading: 0, understood: {}, rooms: [], doing: null, sorted: 0, breakAt: 0, breakLeft: BREAK.steps,
     totals: {
       scrapFound: 0, woodFound: 0, falls: 0, brutes: 0, bosses: 0, turretKills: 0, crates: 0, handKills: 0, builds: 0, waves: 0,
       knockouts: 0, rests: 0, retreats: 0, lessons: 0, defenses: 0, trapKills: 0, game: 0, sites: 0, dives: 0, hordes: 0, clothes: 0, meals: 0, bulletsMade: 0, gearFound: 0,
       drifters: 0, allyKills: 0, drops: 0, fetched: 0, runs: 0, samples: 0, fenceKills: 0, bloodMoons: 0,
+      booksFound: 0, reads: 0, roomsBuilt: 0, organized: 0,
     },
   };
 }
@@ -325,6 +355,27 @@ function beds(sv) {
   return Math.min(Object.keys(ROLES).length, Math.floor(sv.shelter.level / BED_EVERY));
 }
 
+function hasRoom(sv, key) {
+  return sv.rooms.includes(key);
+}
+
+// The room he studies for now: the first in ROOMS he hasn't understood all the books for, or null.
+function topic(sv) {
+  return Object.keys(ROOMS).find(k => (sv.understood[k] || 0) < ROOMS[k].books) || null;
+}
+
+// A room to build: one he has learned and not built, once the cellar is dug, and only when he can
+// pay for it at once (he never saves up for one).
+function nextRoom(sv) {
+  if (sv.shelter.level < CELLAR_LEVEL) {
+    return null;
+  }
+  const key = Object.keys(ROOMS).find(k => (sv.understood[k] || 0) >= ROOMS[k].books && !hasRoom(sv, k));
+  const r = ROOMS[key];
+  return r && sv.scrap >= r.scrap && sv.wood >= r.wood && sv.cloth >= r.cloth
+    ? { kind: 'room', scrap: r.scrap, wood: r.wood, cloth: r.cloth, food: 0, data: { key } } : null;
+}
+
 function drifterDamage(sv) {
   return Math.round((3 + sv.shelter.level) * strength(sv));
 }
@@ -368,7 +419,8 @@ function weaponInHand(sv) {
 function heroDamage(sv, w = weaponInHand(sv)) {
   const gun = w.ammo ? 1 + 0.1 * skillTier(sv, 'gunsmithing') : 1;
   const fed = sv.fed > 0 ? 1 + MEAL.bonus : 1;
-  return Math.round((w.damage + Math.floor(sv.shelter.level * 0.8)) * (1 + 0.2 * skillTier(sv, 'combat')) * gun * fed * strength(sv));
+  const trained = hasRoom(sv, 'training') ? 1.1 : 1;
+  return Math.round((w.damage + Math.floor(sv.shelter.level * 0.8)) * (1 + 0.2 * skillTier(sv, 'combat')) * gun * fed * trained * strength(sv));
 }
 
 function turretCost(built) {
@@ -517,6 +569,10 @@ function nextBuild(sv) {
   if (w && sv.shelter.level >= w.level && knows(sv, w.blueprint) && sv.scrap >= w.cost) {
     return { ...none, kind: 'weapon', scrap: w.cost };
   }
+  const room = nextRoom(sv);
+  if (room) {
+    return room;
+  }
   if (flying(sv) && !sv.lab) {
     return sv.scrap >= LAB.scrap && sv.wood >= LAB.wood ? { ...none, kind: 'lab', scrap: LAB.scrap, wood: LAB.wood } : null;
   }
@@ -596,6 +652,7 @@ function load(now) {
     }
   }
   sv.gear = { ...sv.gear };
+  sv.understood = { ...sv.understood };
   sv.learned = { ...sv.learned };
   for (const key of Object.keys(SKILLS)) {
     // A skill already earned in an older save is not announced again.
@@ -771,10 +828,15 @@ function finishJob(sv, now) {
     explore(sv, data, now);
     return;
   }
-  if (kind === 'turret' || kind === 'walls' || kind === 'weapon' || kind === 'lab' || kind === 'generator') {
+  if (kind === 'turret' || kind === 'walls' || kind === 'weapon' || kind === 'lab' || kind === 'generator' || kind === 'room') {
     sv.totals.builds++;
   }
-  if (kind === 'generator') {
+  if (kind === 'room') {
+    const r = ROOMS[data.key];
+    sv.rooms.push(data.key);
+    sv.totals.roomsBuilt++;
+    say(sv, `${r.icon} ${r.name} built in the cellar: ${r.text}`, now);
+  } else if (kind === 'generator') {
     sv.generator = true;
     say(sv, '⚡ Generator built: it runs on the tokens Claude uses', now);
   } else if (kind === 'lab') {
@@ -801,7 +863,7 @@ function finishJob(sv, now) {
     sv.turrets++;
     say(sv, `🗼 Turret ${sv.turrets} built`, now);
   } else if (kind === 'ammo') {
-    const made = Math.round(BULLETS.made * (1 + 0.25 * skillTier(sv, 'gunsmithing')));
+    const made = Math.round(BULLETS.made * (1 + 0.25 * skillTier(sv, 'gunsmithing')) * (hasRoom(sv, 'armory') ? 1.5 : 1));
     sv.ammo += made;
     sv.totals.bulletsMade += made;
     say(sv, `🧨 ${made} bullets made`, now);
@@ -923,16 +985,109 @@ function openDrop(sv, now) {
   if (Math.random() < SUPPLY.gear) {
     dropGear(sv, now);
   }
+  if (Math.random() < SUPPLY.book) {
+    findBook(sv, now);
+  }
 }
 
-// Claude is compacting the conversation: a supply drop comes down somewhere on the strip, and he
-// fetches it like a crate. Only that it happens counts. Called from the hook, under the lock.
-function supplyDrop(now) {
-  const sv = load(now);
+// A supply drop comes down somewhere on the strip, and he fetches it like a crate.
+function landDrop(sv) {
   const side = Math.random() < 0.5 ? -1 : 1;
   sv.crates.push({ x: side * randInt(3, RADIUS - 1), kind: 'drop' });
+}
+
+// Claude is compacting the conversation: a supply drop. Only that it happens counts. Called from
+// the hook, under the lock.
+function supplyDrop(now) {
+  const sv = load(now);
+  landDrop(sv);
   say(sv, '🪂 A supply drop is coming down', now);
   save(sv);
+}
+
+// ---------- inside ----------
+
+// A book, as long as he still needs more than he has to learn every room.
+function findBook(sv, now) {
+  const needed = Object.keys(ROOMS).reduce((sum, k) => sum + Math.max(0, ROOMS[k].books - (sv.understood[k] || 0)), 0);
+  if (sv.books >= needed) {
+    return;
+  }
+  sv.books++;
+  sv.totals.booksFound++;
+  say(sv, `📚 Found a book on the ${ROOMS[topic(sv)].name.toLowerCase()}`, now);
+}
+
+// A step of reading. At the end of a read the book sinks in, or he will have to read it again.
+function read(sv, now) {
+  sv.doing = 'study';
+  sv.reading++;
+  if (sv.reading < READ_STEPS) {
+    return;
+  }
+  sv.reading = 0;
+  sv.totals.reads++;
+  const key = topic(sv);
+  const r = ROOMS[key];
+  if (Math.random() >= UNDERSTAND[0] + UNDERSTAND[1] * skillTier(sv, 'studying')) {
+    say(sv, `📖 Read a book on the ${r.name.toLowerCase()}, but it didn't sink in`, now);
+    return;
+  }
+  sv.books--;
+  sv.understood[key] = (sv.understood[key] || 0) + 1;
+  const n = sv.understood[key];
+  say(sv, n < r.books ? `📖 A book on the ${r.name.toLowerCase()} sank in (${n}/${r.books})`
+    : `📖 He knows how to build the ${r.name.toLowerCase()}${sv.shelter.level < CELLAR_LEVEL ? `, once the shelter has a cellar (Lv ${CELLAR_LEVEL})` : ''}`, now);
+}
+
+// Whether he takes his reading break now: one is due, he has a book, and nothing is at the walls.
+function readingBreak(sv) {
+  return sv.books > 0 && !!topic(sv) && sv.step >= sv.breakAt && !sv.zombies.some(z => Math.abs(z.x) <= WALL + 3);
+}
+
+// A step of tidying the storage, which now and then turns up something forgotten.
+function organize(sv, now) {
+  sv.doing = 'organize';
+  sv.sorted++;
+  if (sv.sorted < ORGANIZE.every) {
+    return;
+  }
+  sv.sorted = 0;
+  const kind = ['scrap', 'wood', 'cloth'][randInt(0, 2)];
+  const n = randInt(...ORGANIZE.find);
+  sv[kind] += n;
+  if (kind === 'scrap' || kind === 'wood') {
+    sv.totals[`${kind}Found`] += n;
+  }
+  sv.totals.organized++;
+  say(sv, `📦 Tidied up the storage and found ${n} ${kind}`, now);
+}
+
+// A step of the job he is on, inside the shelter (or out at a place he searches).
+function work(sv, now) {
+  sv.doing = sv.job.kind;
+  sv.job.left--;
+  if (sv.job.left <= 0) {
+    finishJob(sv, now);
+  }
+}
+
+// Inside while resting or holed up, he keeps busy: the job he is on, or something new to build,
+// or a book, or the storage.
+function indoor(sv, now) {
+  if (sv.job && sv.job.kind !== 'explore') {
+    work(sv, now);
+    return;
+  }
+  const build = nextBuild(sv);
+  if (build) {
+    startJob(sv, build);
+    sv.doing = build.kind;
+  } else if (sv.books > 0 && topic(sv)) {
+    read(sv, now);
+  } else {
+    organize(sv, now);
+  }
 }
 
 // The subagents at work now (`drifters`, each known by when it arrived), from companion.js. A
@@ -973,11 +1128,17 @@ function scavengerRun(sv, now) {
   if (Math.random() < RUN_BLUEPRINT) {
     findBlueprint(sv, now);
   }
+  if (Math.random() < RUN_BOOK) {
+    findBook(sv, now);
+  }
 }
 
-// Eating on the move: under half life, he eats a meal he has cooked.
+// Eating on the move, or at the kitchen table: under half life, he eats a meal he has cooked.
 function eat(sv, now) {
   if (sv.meals > 0 && sv.fed <= 0 && sv.hp < heroMax(sv) * MEAL.below) {
+    if (sv.x === 0) {
+      sv.doing = 'eat';
+    }
     const cook = skillTier(sv, 'cooking');
     sv.meals--;
     sv.hp = Math.min(heroMax(sv), sv.hp + Math.round(heroMax(sv) * MEAL.heal * (1 + 0.15 * cook)));
@@ -1156,7 +1317,10 @@ function explore(sv, site, now) {
     addSamples(sv, 1);
     say(sv, '🧪 A sample of the virus, left in the bunker\'s fridge', now);
   }
-  // Last, so the news isn't lost under the finds: someone to move in, or a dog.
+  // Last, so the news isn't lost under the finds: a book, someone to move in, or a dog.
+  if (Math.random() < def.book) {
+    findBook(sv, now);
+  }
   if (Math.random() < def.meet) {
     moveIn(sv, now);
   }
@@ -1193,6 +1357,7 @@ function advance(sv, z, dmg, hits, now) {
 
 function step(sv, now) {
   sv.step++;
+  sv.doing = null;
   const hits = [];
 
   if (sv.rebuild > 0) {
@@ -1256,6 +1421,14 @@ function step(sv, now) {
   if (hasRole(sv, 'scavenger') && sv.step % RUN_EVERY === 0) {
     scavengerRun(sv, now);
   }
+  // And so do the rooms in the cellar.
+  if (hasRoom(sv, 'greenhouse') && sv.step % GREENHOUSE.every === 0) {
+    sv.food += GREENHOUSE.food;
+  }
+  if (hasRoom(sv, 'radio') && sv.step % RADIO_EVERY === 0) {
+    landDrop(sv);
+    say(sv, '📻 The radio calls in a supply drop', now);
+  }
 
   // The turrets he has built guard the shelter on their own, and so do the drifters on the walls
   // and the lookout on the roof (in the dark, only as far as the lights let them see).
@@ -1283,12 +1456,16 @@ function step(sv, now) {
   const from = sv.x;
   if (sv.down > 0) {
     sv.down--;
+    sv.doing = 'down';
   } else if (sv.resting) {
-    // Hurt, he goes home and rests inside, where nothing can reach him (twice as fast with a medic).
+    // Hurt, he goes home and rests inside, where nothing can reach him (twice as fast with a medic,
+    // faster still with the infirmary), and keeps busy while he heals.
     if (sv.x !== 0) {
       sv.x += sign(-sv.x);
     } else {
-      sv.hp = Math.min(heroMax(sv), sv.hp + (hasRole(sv, 'medic') ? 6 : 3));
+      sv.hp = Math.min(heroMax(sv), sv.hp + (hasRole(sv, 'medic') ? 6 : 3) + (hasRoom(sv, 'infirmary') ? 2 : 0));
+      sv.doing = 'rest';
+      indoor(sv, now);
     }
     if (sv.hp >= heroMax(sv) * RETREAT[1]) {
       sv.resting = false;
@@ -1296,10 +1473,7 @@ function step(sv, now) {
   } else if (sv.job) {
     // Building happens inside the shelter; searching, out where the place is.
     sv.x = sv.job.kind === 'explore' ? sv.job.data.x : 0;
-    sv.job.left--;
-    if (sv.job.left <= 0) {
-      finishJob(sv, now);
-    }
+    work(sv, now);
   } else {
     const foe = nearest(sv.zombies, sv.x, weapon.range);
     // He only heads home to build once the zombies are off the shelter's doorstep.
@@ -1329,10 +1503,7 @@ function step(sv, now) {
       } else {
         // Inside, he is safe, so he puts the time to use.
         sv.hole++;
-        const work = nextBuild(sv);
-        if (work) {
-          startJob(sv, work);
-        }
+        indoor(sv, now);
       }
     } else if (foe) {
       if (weapon.ammo) {
@@ -1353,6 +1524,18 @@ function step(sv, now) {
       } else {
         sv.x += sign(-sv.x);
       }
+    } else if (readingBreak(sv)) {
+      // Time for a break with a book, while the turrets keep watch.
+      if (sv.x !== 0) {
+        sv.x += sign(-sv.x);
+      } else {
+        read(sv, now);
+        sv.breakLeft--;
+        if (sv.breakLeft <= 0) {
+          sv.breakAt = sv.step + BREAK.every;
+          sv.breakLeft = BREAK.steps;
+        }
+      }
     } else {
       // With the walls under half, he goes for whatever is closest to the shelter.
       const threat = sv.shelter.hp < shelterMax(sv) / 2 ? nearest(sv.zombies, 0, RADIUS) : nearest(sv.zombies, sv.x, SIGHT);
@@ -1360,6 +1543,13 @@ function step(sv, now) {
       if (chase) {
         sv.x += sign(chase.x - sv.x);
         sv.dir = sign(chase.x - sv.x) || sv.dir;
+      } else if (sv.books > 0 && topic(sv)) {
+        // Nothing to fight, gather or search: he goes in to read until something turns up.
+        if (sv.x !== 0) {
+          sv.x += sign(-sv.x);
+        } else {
+          read(sv, now);
+        }
       } else {
         if (Math.abs(sv.x + sv.dir) > RADIUS - 1) {
           sv.dir = -sv.dir;
@@ -1433,7 +1623,7 @@ function step(sv, now) {
   if (sv.hp <= 0) {
     // A knockout costs time only: he is carried back to the shelter to rest.
     sv.totals.knockouts++;
-    sv.down = Math.ceil(DOWN_STEPS * (1 - 0.25 * Math.min(aid, 3)) * (hasRole(sv, 'medic') ? 0.5 : 1));
+    sv.down = Math.ceil(DOWN_STEPS * (1 - 0.25 * Math.min(aid, 3)) * (hasRole(sv, 'medic') ? 0.5 : 1) * (hasRoom(sv, 'infirmary') ? 0.75 : 1));
     sv.hp = heroMax(sv);
     sv.x = 0;
     sv.job = null;
@@ -1568,6 +1758,12 @@ function cutTo(ctx, text, width) {
   return `${out}…`;
 }
 
+// What he does while he rests inside, for the stats row.
+function restText(sv) {
+  return sv.doing === 'study' ? `📖 reading ${Math.round((sv.reading / READ_STEPS) * 100)}%`
+    : sv.doing === 'organize' ? '📦 tidying up' : '🩹 resting';
+}
+
 // The stats row's parts, as [text, priority] (the lowest go first when the row is too wide), and
 // its status, the news or that it is waiting, as [color, text] or null.
 function statParts(sv, ctx) {
@@ -1597,7 +1793,8 @@ function statParts(sv, ctx) {
     [ctx.night ? (bloodMoon(ctx.now) ? color(RED, '🌕 blood moon') : '🌙 night') : null, 3.9],
     [`🧑 ${w.icon} ${w.name}${w.ammo ? ` ${sv.ammo}` : ''}`, 4],
     [stock, 5],
-    [sv.job ? `${sv.job.kind === 'explore' ? '🔍' : '🔨'} ${JOB_NAMES[sv.job.kind]} ${sv.job.left}` : sv.mode ? (sv.x === 0 ? '🧱 holed up' : '🏃 falling back') : `🎯 ${goalText(sv)}`, 3],
+    [sv.job ? `${sv.job.kind === 'explore' ? '🔍' : '🔨'} ${JOB_NAMES[sv.job.kind]} ${sv.job.left}` : sv.mode ? (sv.x === 0 ? '🧱 holed up' : '🏃 falling back')
+      : sv.x === 0 && (sv.resting || sv.doing === 'study') ? restText(sv) : `🎯 ${goalText(sv)}`, 3],
     [`🗼 ${sv.turrets}/${slotsAt(lvl)}`, 4.2],
     [sv.generator ? (fuel > 0 ? `⚡ ${fuel}%` : color('2', '⚡ 0%')) : null, 3.7],
     [sv.drifters.length ? `🤠 ${sv.drifters.length}` : null, 3.8],
@@ -1755,6 +1952,18 @@ function windowView(sv, ctx) {
     night: !!ctx.night,
     light: ctx.light ?? 1,
     layout: { radius: RADIUS, wall: WALL, lit: LIT, turrets: TURRET_SLOTS.slice(0, sv.turrets), drifters: DRIFTER_TILES.slice(0, sv.drifters.length) },
+    // The rooms under the shelter: the first floor's as he gets to them, and the cellar's built
+    // (or being built) once it is dug.
+    inside: {
+      rooms: ['workshop', 'storage', 'bunks', (knows(sv, 'cooking') || hasRole(sv, 'cook')) && 'kitchen', sv.totals.booksFound > 0 && 'study', sv.lab && 'lab'].filter(Boolean),
+      cellar: sv.shelter.level >= CELLAR_LEVEL,
+      built: sv.rooms,
+      building: sv.job && sv.job.kind === 'room' ? sv.job.data.key : null,
+      inside: sv.x === 0 && sv.rebuild === 0,
+      beds: 1 + beds(sv),
+      reading: sv.reading / READ_STEPS,
+      books: sv.books,
+    },
   };
 }
 
@@ -1802,6 +2011,25 @@ function peopleLines(sv) {
     `  People        ${head}${sv.dog ? ` · 🐕 ${sv.dog.name} follows him` : ''}`,
     ...sv.residents.map(r => `    ${ROLES[r.role].icon} ${r.name}, the ${ROLES[r.role].name}: ${ROLES[r.role].text}`),
     `  Drifters      ${sv.drifters.length ? `🤠 ${sv.drifters.length} on the walls now` : 'none on the walls now'} · each subagent Claude runs sends one (${drifterDamage(sv)} damage a shot)`,
+  ];
+}
+
+function insideLines(sv) {
+  const first = ['🔧 workshop', '📦 storage', 'bunks', (knows(sv, 'cooking') || hasRole(sv, 'cook')) && '🍳 kitchen', sv.totals.booksFound > 0 && '📚 study', sv.lab && '🧪 lab'].filter(Boolean);
+  const key = topic(sv);
+  const reading = !key ? 'he has learned all the rooms'
+    : `${sv.books ? `📚 ${sv.books} to read` : 'no book to read (they turn up in buildings, bunkers, lost shelters and supply drops)'} · studying the ${ROOMS[key].name.toLowerCase()}: ${sv.understood[key] || 0}/${ROOMS[key].books} books understood${sv.reading ? `, ${Math.round((sv.reading / READ_STEPS) * 100)}% through a read` : ''}`;
+  const room = k => {
+    const r = ROOMS[k];
+    const n = sv.understood[k] || 0;
+    const state = hasRoom(sv, k) ? 'built' : n >= r.books ? `learned, to build for ${r.scrap} scrap, ${r.wood} wood${r.cloth ? `, ${r.cloth} cloth` : ''}` : `${n}/${r.books} books`;
+    return `    ${r.icon} ${r.name}: ${r.text} (${state})`;
+  };
+  return [
+    `  Inside        ${first.join(' · ')}`,
+    `  Books         ${reading} · ${sv.totals.reads} read through`,
+    `  Cellar        ${sv.shelter.level >= CELLAR_LEVEL ? `${sv.rooms.length}/${Object.keys(ROOMS).length} rooms built` : `dug at shelter Lv ${CELLAR_LEVEL}`}; its rooms come from books:`,
+    ...Object.keys(ROOMS).map(room),
   ];
 }
 
@@ -1871,6 +2099,7 @@ function shelterReport(now) {
     `  Next          ${building}`,
     `  Last call     ${sv.call ? `${sv.call.n} zombies against his ${sv.call.weapon.toLowerCase()}: ${sv.call.ok ? 'he faced them' : `too risky (it would cost about ${sv.call.taken} life), he fell back`}` : 'nothing big yet'}`,
     ...peopleLines(sv),
+    ...insideLines(sv),
     ...labLines(sv),
     '',
     `  Survivor      🧑 ${w.icon} ${w.name}${w.ammo ? ` (${sv.ammo} bullets)` : ''} · ${heroDamage(sv)} damage · reach ${w.range} · life ${sv.hp}/${heroMax(sv)}`,
@@ -1899,5 +2128,5 @@ module.exports = {
   isShown, setShown, setGame, load, save, tick, render, shelterReport, step, newSave, supplyDrop, announce, moveIn, bloodMoon,
   windowLine, windowView,
   BLUEPRINTS, shelterMax, slotsAt, turretDamage, turretCost, wallCost, heroMax, waveNeed, skillTier, armor,
-  WEAPONS, ZOMBIES, SKILLS, GEAR_SLOTS, RADIUS, fightEstimate, ROLES, CURE,
+  WEAPONS, ZOMBIES, SKILLS, GEAR_SLOTS, RADIUS, fightEstimate, ROLES, CURE, ROOMS,
 };

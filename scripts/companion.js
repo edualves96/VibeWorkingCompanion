@@ -229,6 +229,9 @@ const UPDATE_MSG_MS = 30000;      // the "updated" notice stays longer than othe
 const WHATS_NEW = {
   '1.3.0': 'enemies have life now, and every 5th level summons a boss',
   '1.4.0': `skills are random now, dropped by level bosses: ${COMMAND_PREFIX}skills`,
+  '1.29.0': root => (olderThan(root.seenVersion, '1.25.0')
+    ? `🏠 a second game: survive zombies with a shelter, ${COMMAND_PREFIX}game survival`
+    : '🏠 Survival: rooms inside the shelter, 📚 books to study, and a cellar to build from them'),
   '1.28.0': root => (olderThan(root.seenVersion, '1.25.0')
     ? `🏠 a second game: survive zombies with a shelter, ${COMMAND_PREFIX}game survival`
     : `🪟 ${COMMAND_PREFIX}window true opens Survival in a pixel-art window of its own`),

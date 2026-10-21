@@ -28,7 +28,7 @@ const PAGES = {
   '/scene.js': ['scene.js', 'text/javascript; charset=utf-8'],
   '/sprites.js': ['sprites.js', 'text/javascript; charset=utf-8'],
 };
-const SIZE = [1000, 700];
+const SIZE = [1000, 800];
 const START_MS = 6000;         // how long open() waits for the server
 const STOP_MS = 5000;          // and close() for it to stop
 const CLOSING_MS = 1500;       // the page gets this long to close itself before the browser is ended

@@ -7,7 +7,8 @@ subagent allies and salvage with reforging (1.11.0), rested XP (1.12.0), day and
 the endgame the 🧢 Trainer unlocked at level 50 (1.20.0, see `TRAINER_PLAN.md`) and, in 1.21.0,
 bounties and the treasure goblin, in 1.22.0 the Swamp, Tundra and Sky Islands in 1.23.0 weapon mastery after level 35 and, in 1.24.0, work streaks. For the Survival game, 1.26.0 added drifters,
 supply drops, survivors who move in, the dog and the cure, and 1.27.0 nights with the blood moon,
-the generator that runs on tokens and the day count.
+the generator that runs on tokens and the day count. 1.28.0 drew Survival in a pixel-art window
+(`/vwc:window`), and 1.29.0 added the rooms under the shelter, books and studying.
 
 ## Rules every idea has to follow
 
@@ -41,7 +42,8 @@ the generator that runs on tokens and the day count.
 - **Survival mode (first version built in 1.25.0).** The switch, the strip, walkers and brutes, fists and an axe,
   gathering, fifteen blueprints to find (sixteen since 1.27.0), barricades, traps and spikes set up from inside the shelter, a survivor that builds, sews and cooks, wears the best clothes, explores buildings, lakes, lost shelters and bunkers, rides a tank and a helicopter near the endgame, more zombie kinds with a tyrant every 10th wave, skills it learns by doing and `/vwc:shelter` are in, and since 1.26.0 drifters, supply drops,
   survivors who move in, a dog and the cure, and since 1.27.0 nights, blood moons, the generator and
-  the day count. Still to come: more places and encounters (caves, a
+  the day count, since 1.28.0 a pixel-art window, and since 1.29.0 the rooms inside, books and a
+  cellar he learns to build from them. Still to come: more places and encounters (caves, a
   harbor) and more shelter visuals. A second game you switch to with a command. It only advances while it is the one
   on display, so it ticks on the render, with no offline catch-up.
   - The character patrols back and forth along a wide, short strip and fights zombies, weak ones
@@ -89,10 +91,9 @@ it closer still.
 
 **Shelter, weapons and the endgame.**
 
-- **Rooms.** The shelter grows rooms, built on their own and drawn as a floor plan in
-  `/vwc:shelter`: a 🌱 greenhouse (food while he works), a 🏥 infirmary (faster rests), a 🧰 workshop
-  (faster builds) and a 📻 radio room (warns of hordes). The lab and the beds (1.26.0) could join
-  the plan.
+- **More cellar rooms.** 1.29.0 has five, learned from books. More could follow the same way: a
+  water still (meals heal more), a garage (vehicles use fewer bullets), a library (books sink in
+  more often).
 - **More rungs on the ladder.** Melee from 🏏 a bat to 🔪 a machete and 🪚 a chainsaw; 🏹 a bow that
   shoots wood instead of bullets; 🍾 molotovs and 💣 grenades, thrown on their own at groups of three
   or more; 🛻 a pickup between the rifle and the tank, that rams. Vehicles could need ⛽ fuel the way
