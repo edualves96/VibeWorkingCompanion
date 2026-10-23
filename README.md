@@ -302,6 +302,17 @@ it takes one step per second of Claude's work.
   🌊 lake can hurt him (or nearly drown him) but may hold finds, a ⛺ lost shelter is a safe stop
   that heals him, and a 🚪 bunker is always guarded but holds the best loot, often a blueprint.
   The search takes a few seconds (🔍) and a bad one can leave him hurt, so he may rest after.
+- **🧭 Trips.** Once he has explored a few places and a turret guards the shelter, he sets out
+  down the road past one end of the strip (🪧), by day, rested, with the walls nearly whole and
+  nothing near them, at most every 4 minutes of work. He searches 2 to 4 places, each further out
+  than the last: a 🌾 farm (food and wood), a 🏪 gas station, a 🏬 town (people and books, and
+  ambushes) and, from wave 6, a 🪖 army base, guarded like a bunker but with the best finds. Their
+  finds grow with the waves. Zombies wait along the road and come at him once he is near, and
+  while he is away more of them come for the shelter, sometimes a whole horde, so the turrets have
+  to hold on their own. He heads home once the places are searched, or sooner if he is hurt, night
+  falls, a fight is too big, or the walls drop under half. While he is out, the map follows him past
+  🚗 wrecked cars, and a red "🧟 3 at the walls" tells of an attack at home. `/vwc:shelter` shows the
+  trip, or what the next one waits for.
 - **Nothing is there until he builds it.** He gathers 🔩 scrap (from zombies and 📦 crates), 🪵 wood,
   🧵 cloth and 🥩 food. With enough, he heads home and works inside for a few seconds (shown as 🔨):
   🗼 turrets, one per free slot, then the next weapon, then stronger 🧱 walls, which add turret
@@ -383,6 +394,12 @@ by the hour (and the blood moon), the generator's lights and the campfire glowin
 the ground, the shelter's rooms are cut open, and he is seen in the one he is at: crafting at the
 workbench, cooking, reading at the desk, tidying the shelves, asleep in a bunk, with the people who
 moved in at work in theirs. The stats row sits above it, and the news under it.
+
+It is seen from a little above, so it has depth: the road recedes, the shelter, walls, towers and
+places are solid blocks with lit tops and shaded sides, the zombies spread over the road's width,
+the rooms are open like a dollhouse, and by day everything casts a shadow away from the sun. On a
+trip, the camera follows him down the road, and a small view of the shelter in the corner shows it
+holding out, with the walls' life under it and its frame flashing red while zombies are at them.
 
 ```
 🪟 Survival is in its window · 📅 Day 9 · 🧟 Wave 12

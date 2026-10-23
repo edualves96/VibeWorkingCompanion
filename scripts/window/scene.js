@@ -2,18 +2,24 @@
 // The Survival game drawn as a pixel-art diorama: a 320x222 canvas scaled up without smoothing,
 // the strip above ground and the shelter's rooms dug under it. It asks the companion's server for the game every POLL_MS and eases everything toward it, since
 // the game itself only moves once a second. It never changes the game.
+//
+// The strip is seen from a little above, so it has some depth: the lane recedes, what stands on it
+// is drawn as solid blocks with tops and sides, the zombies spread over its width, and by day
+// everything casts a shadow away from the sun.
 
 const W = 320;
 const H = 222;
 const GROUND = 155;         // where the earth begins, under the lane
 const TW = 14;              // a tile of the strip, in pixels
 const LANE = 146;           // where feet stand
+const BACK = 10;            // the lane's far edge, in rows behind where feet stand
+const LEAN = 0.01;          // how far in toward the middle each row of depth draws a thing (see at())
 const HORIZON = 112;
 const POLL_MS = 400;
 const KEY = new URLSearchParams(location.search).get('k');
 
 const canvas = document.getElementById('scene');
-const g = canvas.getContext('2d');
+let g = canvas.getContext('2d');   // solid() points it at a canvas of its own for a moment
 g.imageSmoothingEnabled = false;
 const shade = document.createElement('canvas');
 shade.width = W;
@@ -65,6 +71,11 @@ function rect(x, y, w, h, c) {
 }
 
 const sx = tile => W / 2 + tile * TW - camX;
+const onScreen = (px, z = 0) => at(W / 2 + px - camX, z);   // px along the strip, z rows back
+// Where a thing at screen x is drawn when it stands `z` rows behind where feet stand (in front, if
+// negative): a little in toward the middle of the view, as the far side of the strip is narrower.
+// It is also drawn z rows higher.
+const at = (x, z) => x + (W / 2 - x) * z * LEAN;
 
 // ---------- the land, made once ----------
 
@@ -76,21 +87,16 @@ function noise(x) {
   const s = f * f * (3 - 2 * f);
   return lattice[i & 511] * (1 - s) + lattice[(i + 1) & 511] * s;
 }
-const SPAN = W + 200;        // wide enough for the camera's drift at every depth
+const SPAN = W + 200;        // the stones, pebbles, tufts and clouds repeat this often
+const wrap = v => ((v % SPAN) + SPAN) % SPAN;
+// The hills are worked out column by column, so they go on as far as his trips take the camera.
 const LAYERS = [
   { depth: 0.12, base: 92, amp: 30, freq: 0.012, day: '#8fa9cf', night: '#2c2852', blood: '#3a1418' },
-  { depth: 0.3, base: 102, amp: 16, freq: 0.03, day: '#6f93a8', night: '#24213f', blood: '#2c0e12', pines: true },
-  { depth: 0.55, base: 114, amp: 6, freq: 0.06, day: '#4f7d52', night: '#16202a', blood: '#1e0a0c', pines: true },
+  { depth: 0.3, base: 102, amp: 16, freq: 0.03, day: '#6f93a8', night: '#24213f', blood: '#2c0e12', pines: 7 },
+  { depth: 0.55, base: 114, amp: 6, freq: 0.06, day: '#4f7d52', night: '#16202a', blood: '#1e0a0c', pines: 12 },
 ];
-for (const layer of LAYERS) {
-  layer.top = Array.from({ length: SPAN }, (_, i) => Math.round(layer.base - noise(i * layer.freq + layer.depth * 97) * layer.amp
-    - noise(i * layer.freq * 3.1) * layer.amp * 0.3));
-  layer.trees = [];
-  if (layer.pines) {
-    for (let i = 0; i < SPAN; i += 3 + Math.floor(rand() * 7)) {
-      layer.trees.push({ i, h: 6 + Math.floor(rand() * (layer.depth > 0.4 ? 12 : 7)) });
-    }
-  }
+function hillTop(layer, i) {
+  return Math.round(layer.base - noise(i * layer.freq + layer.depth * 97) * layer.amp - noise(i * layer.freq * 3.1) * layer.amp * 0.3);
 }
 const STARS = Array.from({ length: 70 }, () => ({ x: rand() * W, y: rand() * 95, b: rand(), s: rand() < 0.15 ? 2 : 1 }));
 const TUFTS = Array.from({ length: 70 }, () => ({ x: rand() * SPAN, y: 152 + rand() * 3, h: 2 + Math.floor(rand() * 4), c: rand() }));
@@ -118,6 +124,14 @@ function skyColors() {
     : [mix(dusk[0], day[0], (t - 0.5) * 2), mix(dusk[1], day[1], (t - 0.5) * 2)];
 }
 
+// The sun by day, the moon by night, along an arc by the hour.
+function sunAt() {
+  const now = new Date();
+  const hour = now.getHours() + now.getMinutes() / 60;
+  const up = Math.max(0, Math.min(1, view.night ? ((hour + 4) % 24) / 10 : (hour - 6) / 14));
+  return { x: 20 + up * (W - 40), y: 70 - Math.sin(up * Math.PI) * 50 };
+}
+
 function drawSky() {
   const [top, bottom] = skyColors();
   const grad = g.createLinearGradient(0, 0, 0, HORIZON);
@@ -136,7 +150,7 @@ function drawSky() {
   g.globalAlpha = 1;
   // Clouds drift by, pale by day and dark by night.
   for (const c of CLOUDS) {
-    const x = Math.round((c.x + clock * c.v - camX * 0.05) % SPAN) - 100;
+    const x = Math.round(wrap(c.x + clock * c.v - camX * 0.05)) - 100;
     g.fillStyle = view.blood ? 'rgba(90,20,24,0.6)' : mix('#2a2a48', '#f4f8fb', dayness());
     g.globalAlpha = 0.35 + dayness() * 0.55;
     for (let i = 0; i < c.w; i++) {
@@ -146,12 +160,7 @@ function drawSky() {
     g.fillRect(x - 2, Math.round(c.y) - 2, c.w * 5 + 7, 2);
   }
   g.globalAlpha = 1;
-  // The sun by day, the moon by night, along an arc by the hour.
-  const now = new Date();
-  const hour = now.getHours() + now.getMinutes() / 60;
-  const up = view.night ? ((hour + 4) % 24) / 10 : (hour - 6) / 14;
-  const x = 20 + Math.max(0, Math.min(1, up)) * (W - 40);
-  const y = 70 - Math.sin(Math.max(0, Math.min(1, up)) * Math.PI) * 50;
+  const { x, y } = sunAt();
   if (view.night) {
     const r = view.blood ? 11 : 8;
     g.fillStyle = view.blood ? 'rgba(255,60,40,0.18)' : 'rgba(255,250,220,0.12)';
@@ -183,45 +192,63 @@ function drawLand() {
     const off = Math.round(100 + camX * layer.depth);
     g.fillStyle = color;
     for (let x = 0; x < W; x++) {
-      const top = layer.top[(x + off) % SPAN];
+      const top = hillTop(layer, x + off);
       g.fillRect(x, top, 1, 140 - top);
     }
-    for (const tree of layer.trees) {
-      const x = tree.i - off;
-      if (x < -6 || x > W + 6) {
+    // A pine on about one column in six.
+    for (let x = -6; layer.pines && x < W + 6; x++) {
+      const h = hash((x + off) * 31 + layer.pines);
+      if (h % 6 !== 0) {
         continue;
       }
-      const base = layer.top[tree.i % SPAN] + 2;
-      for (let row = 0; row < tree.h; row++) {
+      const tall = 6 + ((h >>> 8) % layer.pines);
+      const base = hillTop(layer, x + off) + 2;
+      for (let row = 0; row < tall; row++) {
         const half = Math.floor(row / 2.2);
-        g.fillRect(x - half, base - tree.h + row, half * 2 + 1, 1);
+        g.fillRect(x - half, base - tall + row, half * 2 + 1, 1);
       }
     }
   }
-  // Grass behind the lane, the dirt lane, grass in front.
+  // Grass behind the lane, the dirt lane (darker the farther back, with the strip's tiles faintly
+  // marked as they recede), grass in front.
   rect(0, 128, W, 10, view.blood ? '#2a1010' : mix('#1c3324', '#4d8a3e', t));
   rect(0, 136, W, 16, view.blood ? '#3a1d18' : mix('#3b2f27', '#8d6c49', t));
+  for (let row = 0; row < 12; row++) {
+    g.globalAlpha = 0.2 * (1 - row / 12);
+    rect(0, 136 + row, W, 1, '#1a120c');
+  }
+  g.globalAlpha = 0.18;
+  g.fillStyle = '#2a1e14';
+  const first = Math.floor((camX - W / 2) / TW) - 3;
+  for (let tile = first; tile < first + W / TW + 6; tile++) {
+    const x = sx(tile + 0.5);
+    for (let row = 1; row < 16; row++) {
+      g.fillRect(Math.round(at(x, LANE - 136 - row)), 136 + row, 1, 1);
+    }
+  }
+  g.globalAlpha = 1;
   rect(0, 136, W, 1, view.blood ? '#4a2520' : mix('#4a3b30', '#a3825c', t));
   rect(0, 152, W, 3, view.blood ? '#241010' : mix('#15281c', '#3f7a33', t));
+  rect(0, 152, W, 1, view.blood ? '#301414' : mix('#1d3424', '#4f9040', t));
   // The earth under it all, in layers, with stones.
   rect(0, GROUND, W, H - GROUND, '#3b2a1d');
   rect(0, GROUND, W, 2, '#4a3524');
   rect(0, GROUND + 30, W, 1, '#33251a');
   rect(0, GROUND + 52, W, 1, '#2e2117');
   for (const st of STONES) {
-    rect((st.x - camX + SPAN) % SPAN - 100, st.y, st.w, 1, st.c < 0.5 ? '#5a4a3e' : '#2a1e15');
+    rect(wrap(st.x - camX) - 100, st.y, st.w, 1, st.c < 0.5 ? '#5a4a3e' : '#2a1e15');
   }
   g.fillStyle = view.blood ? '#4a2a24' : mix('#4a3d33', '#a8896a', t);
   for (const p of PEBBLES) {
-    const x = (p.x - camX + SPAN) % SPAN - 100;
-    g.fillRect(Math.round(x), Math.round(p.y), 1, 1);
+    const x = wrap(p.x - camX) - 100;
+    g.fillRect(Math.round(at(x, LANE - p.y)), Math.round(p.y), 1, 1);
   }
 }
 
 function drawTufts() {
   const t = dayness();
   for (const tuft of TUFTS) {
-    const x = Math.round((tuft.x - camX * 1.15 + SPAN * 4) % SPAN - 100);
+    const x = Math.round(wrap(tuft.x - camX * 1.15) - 100);
     const sway = Math.round(Math.sin(clock * 1.5 + tuft.x) * 0.6);
     g.fillStyle = view.blood ? '#3a1414' : mix(tuft.c < 0.5 ? '#1f3b25' : '#27482c', tuft.c < 0.5 ? '#5aa045' : '#6cb550', t);
     for (let i = 0; i < tuft.h; i++) {
@@ -233,14 +260,13 @@ function drawTufts() {
 
 // ---------- the shelter and what stands around it ----------
 
-function drawShelter(x, level) {
-  const sv = view.sv;
-  const night = !view.night ? '#78b6d6' : '#ffd36b';
-  if (sv.rebuild > 0) {
+// The shelter from the front (or its ruins while it is rebuilt), with its windows lit at night.
+// What moves on it is drawn by shelterLife.
+function paintShelter(x, level, ruins, lit) {
+  const night = lit ? '#ffd36b' : '#78b6d6';
+  if (ruins) {
     rect(x - 13, LANE - 5, 26, 5, '#5a5048');
     rect(x - 9, LANE - 8, 18, 3, '#6e625a');
-    flames(x - 5, LANE - 7, 3);
-    flames(x + 4, LANE - 8, 4);
     return;
   }
   if (level >= 12) {
@@ -272,9 +298,6 @@ function drawShelter(x, level) {
     rect(x + 7, LANE - 27, 4, 7, '#6e6e74');
     rect(x - 3, LANE - 9, 6, 9, '#4a2e16');
     for (const wx of [-11, 7]) rect(x + wx, LANE - 12, 4, 4, night);
-    if (view.cooking) {
-      smoke(x + 9, LANE - 28);
-    }
   } else {
     rect(x - 12, LANE - 13, 24, 13, '#8b5a2b');
     for (let i = 0; i < 24; i += 3) rect(x - 12 + i, LANE - 13, 1, 13, '#734a22');
@@ -282,10 +305,23 @@ function drawShelter(x, level) {
     rect(x - 3, LANE - 8, 6, 8, '#4a2e16');
     rect(x + 5, LANE - 10, 4, 3, night);
   }
+}
+
+// The fire in its ruins, the chimney's smoke and the cure's star, over the shelter at (x, y).
+function shelterLife(x, y, level) {
+  const sv = view.sv;
+  if (sv.rebuild > 0) {
+    flames(x - 5, y - 7, 3);
+    flames(x + 4, y - 8, 4);
+    return;
+  }
+  if (view.cooking && level >= 4 && level < 7) {
+    smoke(x + 9, y - 28);
+  }
   if (sv.cures > 0) {
     const tw = Math.sin(clock * 3) > 0 ? '#fff7b0' : '#ffd84a';
-    rect(x - 1, LANE - shelterHeight(level) - 8, 3, 1, tw);
-    rect(x, LANE - shelterHeight(level) - 9, 1, 3, tw);
+    rect(x - 1, y - shelterHeight(level) - 8, 3, 1, tw);
+    rect(x, y - shelterHeight(level) - 9, 1, 3, tw);
   }
 }
 
@@ -293,7 +329,7 @@ function shelterHeight(level) {
   return level >= 12 ? 44 : level >= 7 ? 29 : level >= 4 ? 26 : 21;
 }
 
-function drawWall(x, level) {
+function paintWall(x, level) {
   if (level >= 7) {
     rect(x - 5, LANE - 12, 10, 12, '#8d8d94');
     rect(x - 5, LANE - 14, 3, 2, '#8d8d94');
@@ -308,20 +344,21 @@ function drawWall(x, level) {
   rect(x - 4, LANE - 7, 10, 1, '#5a3a1a');
 }
 
-// Where a turret stands: the two nearest the shelter on its roof corners, the others on legs.
+// Where a turret stands: the two nearest the shelter on its roof corners, the others on legs at
+// the back of the lane.
+const TOWER_Z = 6;
 function turretSpot(tile, level) {
   if (Math.abs(tile) !== 1) {
-    return { x: sx(tile), y: LANE, legs: true };
+    return { x: at(sx(tile), TOWER_Z), y: LANE - TOWER_Z, legs: true };
   }
   const half = level >= 12 ? 18 : level >= 7 ? 16 : level >= 4 ? 15 : 12;
   const roof = level >= 12 ? 16 : level >= 7 ? 29 : level >= 4 ? 16 : 13;
   return { x: sx(0) + tile * (half - 3), y: LANE - roof + 9, legs: false };
 }
 
-function drawTurret(spot, face, heavy, firing) {
-  const { x, y } = spot;
+function paintTurret(x, y, legs, face, heavy) {
   const metal = heavy ? '#7d8590' : '#8b5a2b';
-  if (spot.legs) {
+  if (legs) {
     rect(x - 3, y - 9, 1, 9, '#5a3a1a');
     rect(x + 2, y - 9, 1, 9, '#5a3a1a');
     rect(x - 3, y - 5, 6, 1, '#5a3a1a');
@@ -332,25 +369,22 @@ function drawTurret(spot, face, heavy, firing) {
   if (heavy) {
     rect(face > 0 ? x + 3 : x - 7, y - 12, 5, 1, '#2e2e2e');
   }
-  if (firing) {
-    rect(face > 0 ? x + 8 : x - 9, y - 15, 2, 2, '#ffe680');
-  }
 }
 
-function drawDefense(d, x) {
-  if (d.type === 'barricade') {
-    rect(x - 5, LANE - 3, 11, 3, '#b8a47a');
+function paintDefense(type, x, y = LANE) {
+  if (type === 'barricade') {
+    rect(x - 5, y - 3, 11, 3, '#b8a47a');
     for (let i = 0; i < 7; i++) {
-      rect(x - 4 + i, LANE - 9 + i, 2, 1, '#8b5a2b');
-      rect(x + 3 - i, LANE - 9 + i, 2, 1, '#734a22');
+      rect(x - 4 + i, y - 9 + i, 2, 1, '#8b5a2b');
+      rect(x + 3 - i, y - 9 + i, 2, 1, '#734a22');
     }
-  } else if (d.type === 'trap') {
-    rect(x - 3, LANE - 1, 7, 1, '#6e6e74');
-    for (let i = -3; i <= 3; i += 2) rect(x + i, LANE - 2, 1, 1, '#a0a0a8');
+  } else if (type === 'trap') {
+    rect(x - 3, y - 1, 7, 1, '#6e6e74');
+    for (let i = -3; i <= 3; i += 2) rect(x + i, y - 2, 1, 1, '#a0a0a8');
   } else {
     for (let i = -5; i <= 5; i += 2) {
-      rect(x + i, LANE - 3, 1, 3, '#9a9aa2');
-      rect(x + i, LANE - 4, 1, 1, '#c8c8d0');
+      rect(x + i, y - 3, 1, 3, '#9a9aa2');
+      rect(x + i, y - 4, 1, 1, '#c8c8d0');
     }
   }
 }
@@ -380,12 +414,12 @@ const CRATE = {
     rect(x - 3, LANE - 6, 7, 6, '#2f6fbf');
     for (let y = 1; y < 6; y += 2) rect(x - 2, LANE - 6 + y, 5, 1, '#b8d8ff');
   },
-  drop: (x, fall) => {
-    const y = LANE - fall;
+  drop: (x, falling) => {
+    const y = LANE;
     rect(x - 3, y - 6, 7, 6, '#6b7a3a');
     rect(x - 3, y - 4, 7, 1, '#2e2e2e');
     // The canopy: on the way down above the crate, then draped beside it.
-    if (fall > 0) {
+    if (falling) {
       for (let row = 0; row < 5; row++) rect(x - 7 + row, y - 19 + row - 2, 15 - row * 2, 1, row % 2 ? '#f0f0f0' : '#d0453a');
       rect(x - 6, y - 15, 1, 9, '#c8c8c8');
       rect(x + 6, y - 15, 1, 9, '#c8c8c8');
@@ -405,14 +439,19 @@ const SITE = {
     rect(x - 2, LANE - 14, 4, 6, '#2a2a30');
     rect(x + 4, LANE - 27, 1, 9, '#55514d');
   },
-  lake: x => {
-    g.fillStyle = '#2f6a9a';
-    g.beginPath();
-    g.ellipse(x, LANE - 3, 13, 3, 0, 0, 6.29);
-    g.fill();
+  // A pond in the grass behind the lane, centered on (x, y): its muddy bank, the water, ripples.
+  lake: (x, y) => {
+    const pond = (rx, ry, color) => {
+      for (let dy = -ry; dy <= ry; dy++) {
+        const half = Math.round(rx * Math.sqrt(1 - (dy / (ry + 0.5)) ** 2));
+        rect(x - half, y + dy, half * 2 + 1, 1, color);
+      }
+    };
+    pond(15, 3, '#4f5a38');
+    pond(13, 2, '#2f6a9a');
     const s = Math.round(Math.sin(clock * 2 + x) * 3);
-    rect(x - 6 + s, LANE - 4, 4, 1, '#7fb6e0');
-    rect(x + 3 - s, LANE - 2, 3, 1, '#7fb6e0');
+    rect(x - 6 + s, y - 1, 4, 1, '#7fb6e0');
+    rect(x + 3 - s, y + 1, 3, 1, '#7fb6e0');
   },
   shelter: x => {
     for (let row = 0; row < 9; row++) rect(x - row, LANE - 9 + row, row * 2 + 1, 1, row % 3 ? '#b5a46a' : '#9a8a55');
@@ -424,7 +463,88 @@ const SITE = {
     rect(x - 3, LANE - 6, 6, 2, '#8a9096');
     rect(x - 1, LANE - 7, 2, 1, '#c0c6cc');
   },
+  // Down the road, on his trips.
+  farm: x => {
+    // A red barn with a white-trimmed door, and a silo.
+    rect(x - 14, LANE - 16, 20, 16, '#a33a2e');
+    for (let row = 0; row < 7; row++) rect(x - 15 + row, LANE - 17 - row, 22 - row * 2, 1, '#5a3a2a');
+    rect(x - 8, LANE - 10, 8, 10, '#6b2a20');
+    rect(x - 8, LANE - 10, 8, 1, '#e8e2d0');
+    rect(x - 8, LANE - 10, 1, 10, '#e8e2d0');
+    rect(x - 1, LANE - 10, 1, 10, '#e8e2d0');
+    for (let i = 0; i < 8; i++) rect(x - 8 + i, LANE - 10 + Math.round((i * 9) / 7), 1, 1, '#e8e2d0');
+    rect(x - 6, LANE - 20, 4, 3, '#e8e2d0');
+    rect(x + 8, LANE - 24, 7, 24, '#9a9aa2');
+    for (let y = 4; y < 24; y += 5) rect(x + 8, LANE - 24 + y, 7, 1, '#85858d');
+    rect(x + 8, LANE - 26, 7, 2, '#7d8590');
+    rect(x + 9, LANE - 27, 5, 1, '#7d8590');
+  },
+  station: x => {
+    // The shop with its sign, and the pumps under a canopy on two posts.
+    rect(x - 16, LANE - 13, 13, 13, '#c8c0b0');
+    rect(x - 16, LANE - 14, 13, 1, '#a8a090');
+    rect(x - 14, LANE - 10, 5, 4, '#5a7a8a');
+    rect(x - 8, LANE - 9, 3, 9, '#5a4a3a');
+    rect(x - 13, LANE - 22, 1, 8, '#7d8590');
+    rect(x - 15, LANE - 25, 5, 3, '#d9a42b');
+    rect(x - 2, LANE - 17, 20, 3, '#e8e8e0');
+    rect(x - 2, LANE - 15, 20, 1, '#c0392b');
+    rect(x - 1, LANE - 14, 1, 14, '#9a9aa2');
+    rect(x + 16, LANE - 14, 1, 14, '#9a9aa2');
+    rect(x + 5, LANE - 7, 4, 7, '#c0392b');
+    rect(x + 6, LANE - 6, 2, 2, '#e8e2d0');
+  },
+  town: x => {
+    // A house, a taller block and a shop with an awning.
+    rect(x - 18, LANE - 14, 12, 14, '#8a7a68');
+    for (let row = 0; row < 4; row++) rect(x - 19 + row, LANE - 15 - row, 14 - row * 2, 1, '#6b3a2e');
+    rect(x - 15, LANE - 10, 3, 3, '#3a3a40');
+    rect(x - 10, LANE - 7, 3, 7, '#4a3a2a');
+    rect(x - 6, LANE - 24, 11, 24, '#6e6a66');
+    rect(x - 6, LANE - 24, 11, 1, '#8a8682');
+    for (const [wx, wy] of [[-4, -21], [1, -21], [-4, -15], [1, -15]]) rect(x + wx, LANE + wy, 2, 3, '#2a2a30');
+    rect(x - 2, LANE - 7, 3, 7, '#2a2a30');
+    rect(x + 6, LANE - 12, 12, 12, '#9a6a4a');
+    rect(x + 6, LANE - 13, 12, 1, '#7a4a32');
+    rect(x + 6, LANE - 11, 12, 2, '#c0392b');
+    rect(x + 8, LANE - 8, 8, 4, '#5a7a8a');
+  },
+  base: x => {
+    // A hangar behind a wire fence, and a watchtower.
+    for (let row = 0; row < 14; row++) {
+      const half = Math.round(Math.sqrt(1 - ((13 - row) / 14) ** 2) * 13);
+      rect(x - half, LANE - 14 + row, half * 2 + 1, 1, row % 3 ? '#5d6640' : '#4d5534');
+    }
+    rect(x - 4, LANE - 7, 8, 7, '#2e3224');
+    rect(x + 13, LANE - 22, 1, 22, '#5a3a1a');
+    rect(x + 17, LANE - 22, 1, 22, '#5a3a1a');
+    rect(x + 12, LANE - 26, 7, 4, '#6b5a3a');
+    rect(x + 12, LANE - 27, 7, 1, '#4d5534');
+    for (let i = -18; i <= -14; i += 2) rect(x + i, LANE - 7, 1, 7, '#9a9aa2');
+    rect(x - 18, LANE - 6, 6, 1, '#9a9aa2');
+    rect(x - 18, LANE - 3, 6, 1, '#9a9aa2');
+  },
 };
+
+// By the road past the ends of the strip: a signpost, and wrecked cars here and there (where the
+// status line's map shows them too).
+const ROADSIDE = {
+  sign: x => {
+    rect(x, LANE - 12, 1, 12, '#6b4423');
+    rect(x - 4, LANE - 13, 9, 4, '#9a6a3c');
+    rect(x - 3, LANE - 11, 7, 1, '#e8e2d0');
+  },
+  wreck: x => {
+    rect(x - 7, LANE - 5, 14, 4, '#8a4a2e');
+    rect(x - 4, LANE - 8, 8, 3, '#7a4028');
+    rect(x - 3, LANE - 7, 3, 2, '#2e3a40');
+    rect(x + 1, LANE - 7, 2, 2, '#2e3a40');
+    rect(x - 7, LANE - 3, 14, 1, '#5a3020');
+    rect(x - 5, LANE - 2, 3, 2, '#1e1e1e');
+    rect(x + 3, LANE - 2, 3, 2, '#1e1e1e');
+  },
+};
+const wreck = (tile, radius) => Math.abs(tile) > radius + 2 && hash(tile + 1777) % 10 === 0;
 
 function flames(x, y, size) {
   for (let i = 0; i < size + 2; i++) {
@@ -442,54 +562,315 @@ function smoke(x, y) {
   g.globalAlpha = 1;
 }
 
-function drawDecor() {
-  const sv = view.sv;
-  if (sv.rebuild > 0) {
-    return;
-  }
-  if (view.cooking) {
-    const x = sx(-9);
-    rect(x - 3, LANE - 1, 7, 1, '#5a3a1a');
-    rect(x - 2, LANE - 2, 5, 1, '#734a22');
-    flames(x - 1, LANE - 2, 3);
-    flames(x + 1, LANE - 3, 4);
-  }
-  if (sv.generator) {
-    const x = sx(-8);
+const DECOR = {
+  generator: x => {
     rect(x - 4, LANE - 7, 9, 7, '#d8b030');
     for (let i = 0; i < 9; i += 3) rect(x - 4 + i, LANE - 2, 2, 2, '#2e2e2e');
     rect(x, LANE - 6, 1, 2, '#2e2e2e');
     rect(x - 1, LANE - 4, 2, 1, '#2e2e2e');
-    // The cable to the shelter, along the ground.
-    g.globalAlpha = 0.6;
-    rect(x + 5, LANE - 1, sx(-1) - x - 5, 1, '#2e2e2e');
-    g.globalAlpha = 1;
-    if (view.powered && Math.sin(clock * 9) > 0.6) {
-      rect(x + 3, LANE - 9, 1, 1, '#fff6a0');
-      rect(x - 3, LANE - 8, 1, 1, '#fff6a0');
-    }
-  }
-  if (sv.lab) {
-    const x = sx(8);
+  },
+  lab: x => {
     rect(x - 7, LANE - 12, 14, 12, '#d8dcdc');
     rect(x - 7, LANE - 13, 14, 1, '#a8aeb0');
     rect(x - 4, LANE - 9, 3, 3, '#7dff9a');
     rect(x + 2, LANE - 6, 3, 6, '#5a6266');
     rect(x - 1, LANE - 17, 2, 4, '#7dff9a');
     rect(x - 2, LANE - 14, 4, 1, '#7dff9a');
+  },
+};
+
+function campfire(x, y) {
+  rect(x - 3, y - 1, 7, 1, '#5a3a1a');
+  rect(x - 2, y - 2, 5, 1, '#734a22');
+  flames(x - 1, y - 2, 3);
+  flames(x + 1, y - 3, 4);
+}
+
+function flag(x, y) {
+  rect(x, y - 18, 1, 18, '#9a9aa2');
+  for (let row = 0; row < 5; row++) {
+    const wave = Math.round(Math.sin(clock * 4 + row * 0.8));
+    rect(x + 1, y - 18 + row, 7 + wave, 1, row % 2 ? '#c0392b' : '#e74c3c');
   }
-  if (sv.shelter.level >= 8) {
-    const x = sx(9);
-    rect(x, LANE - 18, 1, 18, '#9a9aa2');
-    for (let row = 0; row < 5; row++) {
-      const wave = Math.round(Math.sin(clock * 4 + row * 0.8));
-      rect(x + 1, LANE - 18 + row + wave * 0, 7 + wave, 1, row % 2 ? '#c0392b' : '#e74c3c');
+}
+
+// ---------- depth ----------
+
+// Solid things (the shelter, walls, towers, places) are drawn from the front once, into a canvas
+// of their own, then stamped back a row at a time to give them depth: darkened where a side shows,
+// lit along their top edges.
+const SW = 96;
+const SH = 72;
+const SB = SH - 4;           // where a solid's base is, in its canvas
+const solids = new Map();    // key -> { front, side, top, shade, h }
+
+function canvasOf(w, h) {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  return c;
+}
+
+function solid(key, paint) {
+  let s = solids.get(key);
+  if (s) {
+    return s;
+  }
+  const front = canvasOf(SW, SH);
+  const keep = g;
+  g = front.getContext('2d');
+  g.translate(0, SB - LANE);
+  paint(SW / 2);
+  g = keep;
+  // A copy of the front, with `fill` laid over it by `op`; `edge` keeps only its top edge first.
+  const copy = (fill, op, edge) => {
+    const c = canvasOf(SW, SH);
+    const cg = c.getContext('2d');
+    cg.drawImage(front, 0, 0);
+    if (edge) {
+      cg.globalCompositeOperation = 'destination-out';
+      cg.drawImage(front, 0, 1);
     }
+    cg.globalCompositeOperation = op;
+    cg.fillStyle = fill;
+    cg.fillRect(0, 0, SW, SH);
+    return c;
+  };
+  // Its height, for its shadow: down to its base from the first row with anything in it.
+  const px = front.getContext('2d').getImageData(0, 0, SW, SH).data;
+  let first = 3;
+  while (first < px.length && !px[first]) {
+    first += 4;
+  }
+  s = {
+    front,
+    side: copy('rgba(0,0,0,0.35)', 'source-atop'),
+    top: copy('rgba(255,246,220,0.35)', 'source-atop', true),
+    shade: copy('#000', 'source-in'),
+    h: Math.max(0, SB - Math.floor(first / 4 / SW)),
+  };
+  solids.set(key, s);
+  return s;
+}
+
+// Draws a solid with the middle of its base at (x, y), `depth` rows deep.
+function extrude(s, x, y, depth) {
+  const left = Math.round(x) - SW / 2;
+  const top = Math.round(y) - SB;
+  const lean = (W / 2 - x) * LEAN;
+  for (let i = depth; i > 0; i--) {
+    const dx = Math.round(i * lean);
+    g.drawImage(s.side, left + dx, top - i);
+    g.drawImage(s.top, left + dx, top - i);
+  }
+  g.drawImage(s.front, left, top);
+}
+
+// By day shadows fall toward the front, away from the sun, longer as it sets. Set every frame.
+let sunlight = null;         // { x, len, alpha }, or null when it is too dark for shadows
+
+// The shadow of `rows` rows of silhouette `src`, ending at row `bottom`, cast from a base at
+// (left, y): squashed and leaned away from the sun.
+function cast(src, bottom, rows, left, y, flip) {
+  const n = Math.max(1, Math.round(rows * sunlight.len));
+  const lean = Math.max(-1.6, Math.min(1.6, (left + src.width / 2 - sunlight.x) / 90));
+  g.save();
+  g.globalAlpha = sunlight.alpha;
+  if (flip) {
+    g.translate(left * 2 + src.width, 0);
+    g.scale(-1, 1);
+  }
+  for (let r = 0; r < n; r++) {
+    const row = bottom - 1 - Math.floor((r * rows) / n);
+    const dx = Math.round(r * lean);
+    g.drawImage(src, 0, row, src.width, 1, left + (flip ? -dx : dx), Math.round(y) + r, src.width, 1);
+  }
+  g.restore();
+}
+
+const silhouettes = new WeakMap();
+function shadowOfSprite(img, x, y, flip) {
+  if (!sunlight) {
+    rect(x - img.width / 2 + 1, y, img.width - 2, 1, 'rgba(0,0,0,0.25)');
+    return;
+  }
+  let s = silhouettes.get(img);
+  if (!s) {
+    s = canvasOf(img.width, img.height);
+    const cg = s.getContext('2d');
+    cg.drawImage(img, 0, 0);
+    cg.globalCompositeOperation = 'source-in';
+    cg.fillStyle = '#000';
+    cg.fillRect(0, 0, img.width, img.height);
+    silhouettes.set(img, s);
+  }
+  cast(s, img.height, img.height, Math.round(x - img.width / 2), y, flip);
+}
+
+function shadowOfSolid(s, x, y) {
+  if (sunlight && s.h > 0) {
+    cast(s.shade, SB, s.h, Math.round(x) - SW / 2, y, false);
+  }
+}
+
+// Everything standing on the strip, each with how far back it is (`z`, to draw them back to front),
+// how to draw it and its shadow.
+function scenery(sv) {
+  const items = [];
+  // A solid `depth` rows deep with its front `z` rows back, drawn in order of `sort` (its back, by
+  // default), and `after` drawn over it.
+  const block = (key, paint, x, z, depth, after, sort) => {
+    const s = solid(key, paint);
+    const bx = at(x, z);
+    const by = LANE - z;
+    items.push({
+      z: sort ?? z + depth,
+      draw: () => {
+        extrude(s, bx, by, depth);
+        if (after) {
+          after(bx, by);
+        }
+      },
+      shadow: () => shadowOfSolid(s, bx, by),
+    });
+  };
+  const flat = (z, draw) => items.push({ z, draw });
+  const level = sv.shelter.level;
+  const rubble = sv.rebuild > 0;
+  const heavy = (sv.blueprints || []).includes('heavy');
+
+  // The places to explore, the one being searched, and those his trip is headed for.
+  const searching = sv.job && sv.job.kind === 'explore' ? [sv.job.data] : [];
+  for (const site of [...sv.sites, ...searching, ...(sv.trip ? sv.trip.stops : [])]) {
+    if (!SITE[site.kind]) {
+      continue;
+    }
+    if (site.kind === 'lake') {
+      flat(BACK + 4, () => SITE.lake(at(sx(site.x), BACK + 4), LANE - BACK - 4));
+    } else {
+      const [z, depth] = site.kind === 'shelter' || site.kind === 'bunker' ? [7, 5] : [8, 8];
+      block(`site:${site.kind}`, SITE[site.kind], sx(site.x), z, depth);
+    }
+  }
+  const radius = view.layout.radius;
+  const first = Math.floor((camX - W / 2) / TW) - 3;
+  for (let tile = first; tile < first + W / TW + 6; tile++) {
+    if (Math.abs(tile) === radius + 1) {
+      block('sign', ROADSIDE.sign, sx(tile), 7, 1);
+    } else if (wreck(tile, radius)) {
+      block('wreck', ROADSIDE.wreck, sx(tile), 6, 5);
+    }
+  }
+  if (!rubble) {
+    if (view.cooking) {
+      flat(4, () => campfire(at(sx(-9), 4), LANE - 4));
+    }
+    if (sv.generator) {
+      block('generator', DECOR.generator, sx(-8), 5, 4, (x, y) => {
+        // The cable to the shelter, along the ground.
+        g.globalAlpha = 0.6;
+        rect(x + 5, y - 1, at(sx(-1), 5) - x - 5, 1, '#2e2e2e');
+        g.globalAlpha = 1;
+        if (view.powered && Math.sin(clock * 9) > 0.6) {
+          rect(x + 3, y - 9, 1, 1, '#fff6a0');
+          rect(x - 3, y - 8, 1, 1, '#fff6a0');
+        }
+      });
+    }
+    if (sv.lab) {
+      block('lab', DECOR.lab, sx(8), 6, 6);
+    }
+    if (level >= 8) {
+      flat(7, () => flag(at(sx(9), 7), LANE - 7));
+    }
+    for (const d of sv.defenses) {
+      const x = sx(d.x);
+      if (d.type === 'trap') {
+        flat(BACK, () => {
+          for (const z of [6, 2, -2]) paintDefense('trap', at(x, z), LANE - z);
+        });
+        continue;
+      }
+      // Barricades and spikes are set up across the lane, a row of them from back to front.
+      for (const z of [7, 2, -3]) {
+        block(`defense:${d.type}`, x0 => paintDefense(d.type, x0), x, z, 1, null, z);
+      }
+    }
+    for (const t of view.layout.turrets) {
+      const spot = turretSpot(t, level);
+      if (spot.legs) {
+        const face = Math.sign(t) || 1;
+        block(`turret:${heavy}:${face}:legs`, x0 => paintTurret(x0, LANE, true, face, heavy), sx(t), TOWER_Z, 3,
+          (x, y) => turretFlash(t, x, y));
+      }
+    }
+    if (level >= 3) {
+      for (const tile of [-view.layout.wall, view.layout.wall]) {
+        // The walls run across the lane, with the drifters standing on their front ends.
+        const drifter = view.layout.drifters.includes(tile);
+        block(`wall:${level >= 7}`, x0 => paintWall(x0, level), sx(tile), -2, 6,
+          drifter ? (x, y) => blit(g, SPRITES.drifter(), x, y - 9, tile < 0) : null);
+      }
+    }
+  }
+  // The shelter, with the turrets on its roof and the lookout between them.
+  const lit = !!view.night;
+  block(`shelter:${rubble ? 'ruins' : level >= 12 ? 12 : level >= 7 ? 7 : level >= 4 ? 4 : 1}:${lit}`,
+    x0 => paintShelter(x0, level, rubble, lit), sx(0), 0, rubble ? 4 : 8, (x, y) => {
+      shelterLife(x, y, level);
+      if (rubble) {
+        return;
+      }
+      for (const t of view.layout.turrets) {
+        const spot = turretSpot(t, level);
+        if (!spot.legs) {
+          const s = solid(`turret:${heavy}:${t}`, x0 => paintTurret(x0, LANE, false, t, heavy));
+          extrude(s, spot.x, spot.y, 3);
+          turretFlash(t, spot.x, spot.y);
+        }
+      }
+      if ((sv.residents || []).some(r => r.role === 'lookout')) {
+        const near = sv.zombies.reduce((a, z) => (!a || Math.abs(z.x) < Math.abs(a.x) ? z : a), null);
+        blit(g, SPRITES.resident(0), x + 4, y - shelterHeight(level) + 3, near ? near.x < 0 : false);
+      }
+    });
+  if (!rubble && level < 3) {
+    for (const tile of view.layout.drifters) {
+      const x = sx(tile);
+      items.push({
+        z: 0,
+        draw: () => blit(g, SPRITES.drifter(), x, LANE, tile < 0),
+        shadow: () => shadowOfSprite(SPRITES.drifter(), x, LANE, tile < 0),
+      });
+    }
+  }
+  // The crates lie just behind where he walks.
+  for (const c of sv.crates) {
+    const since = landing.has(c.x) ? clock - landing.get(c.x) : 99;
+    const fall = c.kind === 'drop' ? Math.max(0, 120 - since * 60) : 0;
+    const kind = CRATE[c.kind] ? c.kind : 'scrap';
+    const s = solid(`crate:${kind}:${fall > 0}`, x0 => CRATE[kind](x0, fall > 0));
+    const x = at(sx(c.x), 2);
+    items.push({
+      z: 2.5,
+      draw: () => extrude(s, x, LANE - 2 - fall, 3),
+      shadow: () => !fall && shadowOfSolid(s, x, LANE - 2),
+    });
+  }
+  return items;
+}
+
+function turretFlash(t, x, y) {
+  if (clock - (firing.get(t) || -9) < 0.12) {
+    const face = Math.sign(t) || 1;
+    rect(face > 0 ? x + 8 : x - 9, y - 15, 2, 2, '#ffe680');
   }
 }
 
 // ---------- people and zombies ----------
 
+// Eases what is on screen toward where the game has it. `target` and the result's x are in pixels
+// along the strip from the shelter, not on screen, so a second camera (see shelterCam) can share them.
 function ease(key, target, dt) {
   let e = shown.get(key);
   if (!e || Math.abs(e.x - target) > TW * 4) {
@@ -530,64 +911,97 @@ function hpBar(x, y, hp, max) {
   rect(x - w / 2, y, Math.max(1, Math.round((w * hp) / max)), 1, hp / max < 0.35 ? '#ff5050' : '#7ee07e');
 }
 
-function drawZombie(z, dt) {
-  const target = sx(z.x);
-  const e = ease(`z${z.id ?? z.x}`, target, dt);
-  const depth = ((hash(z.id || 7) % 5) - 2);
+// The rows of the lane the zombies keep to, each its own, so a crowd spreads over it.
+const DEPTHS = [-3, -1, 1, 3, 5];
+const depthOf = z => DEPTHS[hash(z.id || 7) % DEPTHS.length];
+
+function zombie(z, dt) {
+  const depth = depthOf(z);
+  const e = ease(`z${z.id ?? z.x}`, z.x * TW, dt);
+  const x = onScreen(e.x, depth);
   const face = z.x > 0 ? -1 : 1;
   const atWall = Math.abs(z.x) <= view.layout.wall + (z.kind === 'spitter' ? 3 : 0);
   const lunge = atWall && Math.sin(clock * 8 + (z.id || 0)) > 0.3 ? face : 0;
   const shake = z.held > 0 ? (Math.floor(clock * 20) % 2 ? 1 : -1) : 0;
   const img = SPRITES[z.kind] ? SPRITES[z.kind](z.held > 0 ? 0 : frame(e)) : SPRITES.walker(frame(e));
-  const y = LANE + depth;
-  rect(e.x - img.width / 2 + 1, y, img.width - 2, 1, 'rgba(0,0,0,0.25)');
-  blit(g, img, e.x + lunge + shake, y, face < 0);
-  hpBar(e.x, y - img.height - 3, z.hp, z.max);
-  if (z.kind === 'spitter' && atWall && Math.abs(z.x) > view.layout.wall && Math.random() < 0.02) {
-    tracers.push({ x1: e.x, y1: y - 10, x2: sx(Math.sign(z.x) * view.layout.wall), y2: LANE - 8, life: 0.4, color: '#b6ff4a', arc: true });
-  }
-  return e;
+  const y = LANE - depth;
+  return {
+    z: depth,
+    shadow: () => shadowOfSprite(img, x, y, face < 0),
+    draw: () => {
+      blit(g, img, x + lunge + shake, y, face < 0);
+      hpBar(x, y - img.height - 3, z.hp, z.max);
+      if (dt > 0 && z.kind === 'spitter' && atWall && Math.abs(z.x) > view.layout.wall && Math.random() < 0.02) {
+        const wall = Math.sign(z.x) * view.layout.wall;
+        tracer(x, y - 10, at(sx(wall), depth), y - 8, 0.4, '#b6ff4a', true);
+      }
+    },
+  };
 }
 
-function drawHero(dt) {
+function hero(dt) {
   const sv = view.sv;
   if (sv.x === 0 || sv.rebuild > 0 || sv.down > 0) {
     shown.delete('hero');
     return null;
   }
-  const e = ease('hero', sx(sv.x), dt);
+  const e = ease('hero', sv.x * TW, dt);
+  const x = onScreen(e.x);
   const face = sv.facing || 1;
   if (view.weapon.vehicle) {
-    if (view.weapon.name === 'Helicopter') {
-      const y = LANE - 16 + Math.round(Math.sin(clock * 3));
-      rect(e.x - 8, LANE, 16, 1, 'rgba(0,0,0,0.25)');
-      blit(g, SPRITES.heli(), e.x, y, face < 0);
-      const spin = Math.floor(clock * 20) % 2;
-      rect(e.x - (spin ? 12 : 6), y - 8, spin ? 24 : 12, 1, '#1e1e1e');
-    } else {
-      blit(g, SPRITES.tank(), e.x, LANE, face < 0);
-    }
-    return e;
+    const heli = view.weapon.name === 'Helicopter';
+    const img = heli ? SPRITES.heli() : SPRITES.tank();
+    return {
+      z: 0,
+      e,
+      x,
+      shadow: () => shadowOfSprite(img, x, LANE, face < 0),
+      draw: () => {
+        if (!heli) {
+          blit(g, img, x, LANE, face < 0);
+          return;
+        }
+        const y = LANE - 16 + Math.round(Math.sin(clock * 3));
+        blit(g, img, x, y, face < 0);
+        const spin = Math.floor(clock * 20) % 2;
+        rect(x - (spin ? 12 : 6), y - 8, spin ? 24 : 12, 1, '#1e1e1e');
+      },
+    };
   }
-  rect(e.x - 3, LANE, 6, 1, 'rgba(0,0,0,0.25)');
   const tier = sv.gear && sv.gear.body ? sv.gear.body.tier : 0;
-  blit(g, SPRITES.survivor(frame(e), tier), e.x, LANE, face < 0);
-  drawWeapon(e.x, LANE, face, view.weapon.key);
-  if (sv.job && sv.job.kind === 'explore') {
-    bubble(e.x, LANE - 19, '?');
-  }
-  return e;
+  const img = SPRITES.survivor(frame(e), tier);
+  return {
+    z: 0,
+    e,
+    x,
+    shadow: () => shadowOfSprite(img, x, LANE, face < 0),
+    draw: () => {
+      blit(g, img, x, LANE, face < 0);
+      drawWeapon(x, LANE, face, view.weapon.key);
+      if (sv.job && sv.job.kind === 'explore') {
+        bubble(x, LANE - 19, '?');
+      }
+    },
+  };
 }
 
-function drawDog(hero, dt) {
+// The dog trots behind him, a little nearer the front.
+function dog(him, dt) {
   const sv = view.sv;
-  if (!sv.dog || !hero) {
+  if (!sv.dog || !him) {
     shown.delete('dog');
-    return;
+    return null;
   }
-  const e = ease('dog', hero.x - (sv.facing || 1) * TW * 0.8, dt);
-  e.moving = e.moving || hero.moving;
-  blit(g, SPRITES.dog(frame(e)), e.x, LANE + 1, (sv.facing || 1) < 0);
+  const face = sv.facing || 1;
+  const e = ease('dog', him.e.x - face * TW * 0.8, dt);
+  e.moving = e.moving || him.e.moving;
+  const x = onScreen(e.x, -2);
+  const img = SPRITES.dog(frame(e));
+  return {
+    z: -2,
+    shadow: () => shadowOfSprite(img, x, LANE + 2, face < 0),
+    draw: () => blit(g, img, x, LANE + 2, face < 0),
+  };
 }
 
 function bubble(x, y, text) {
@@ -601,10 +1015,17 @@ function bubble(x, y, text) {
 
 // ---------- effects ----------
 
-function burst(x, y, colors, n) {
+// Bits flying from (x, y) on screen that land on the ground at `floor`. Effects keep where they are
+// along the strip (x + camX), so they stay put as the camera moves, and show in the shelter cam.
+function burst(x, y, colors, n, floor) {
   for (let i = 0; i < n; i++) {
-    particles.push({ x, y, vx: (Math.random() - 0.5) * 40, vy: -Math.random() * 40, life: 0.5 + Math.random() * 0.4, color: colors[i % colors.length] });
+    particles.push({ x: x + camX, y, floor, vx: (Math.random() - 0.5) * 40, vy: -Math.random() * 40, life: 0.5 + Math.random() * 0.4, color: colors[i % colors.length] });
   }
+}
+
+// A shot from (x1, y1) to (x2, y2) on screen, lasting `life` seconds; `arc` lobs it.
+function tracer(x1, y1, x2, y2, life, color, arc) {
+  tracers.push({ x1: x1 + camX, y1, x2: x2 + camX, y2, life, color, arc });
 }
 
 function drawEffects(dt) {
@@ -617,9 +1038,9 @@ function drawEffects(dt) {
     }
     p.vy += 90 * dt;
     p.x += p.vx * dt;
-    p.y = Math.min(LANE + 2, p.y + p.vy * dt);
+    p.y = Math.min(p.floor, p.y + p.vy * dt);
     g.globalAlpha = Math.min(1, p.life * 2);
-    rect(p.x, p.y, 1, 1, p.color);
+    rect(p.x - camX, p.y, 1, 1, p.color);
   }
   for (let i = tracers.length - 1; i >= 0; i--) {
     const t = tracers[i];
@@ -631,11 +1052,11 @@ function drawEffects(dt) {
     g.globalAlpha = Math.min(1, t.life * 6);
     g.strokeStyle = t.color;
     g.beginPath();
-    g.moveTo(t.x1, t.y1);
+    g.moveTo(t.x1 - camX, t.y1);
     if (t.arc) {
-      g.quadraticCurveTo((t.x1 + t.x2) / 2, t.y1 - 14, t.x2, t.y2);
+      g.quadraticCurveTo((t.x1 + t.x2) / 2 - camX, t.y1 - 14, t.x2 - camX, t.y2);
     } else {
-      g.lineTo(t.x2, t.y2);
+      g.lineTo(t.x2 - camX, t.y2);
     }
     g.stroke();
   }
@@ -656,11 +1077,15 @@ function onStep(prev) {
   }
   for (const d of view.layout.drifters) shooters.push({ x: sx(d), y: LANE - 20, reach: 6 });
   for (const hx of hits) {
-    const x = sx(hx);
-    burst(x, LANE - 7, ['#fff2a0', '#ffd040', '#8fbf5a'], 5);
+    // Hit where a zombie on that tile stands (one just killed, if none is left).
+    const hit = sv.zombies.find(z => z.x === hx) || (prev && prev.sv.zombies.find(z => z.x === hx));
+    const depth = hit ? depthOf(hit) : 0;
+    const x = at(sx(hx), depth);
+    const y = LANE - depth - 7;
+    burst(x, y, ['#fff2a0', '#ffd040', '#8fbf5a'], 5, y + 9);
     const from = shooters.filter(s => Math.abs(s.x - x) <= s.reach * TW).sort((a, b) => Math.abs(a.x - x) - Math.abs(b.x - x))[0];
     if (from && Math.abs(from.x - x) > TW) {
-      tracers.push({ x1: from.x, y1: from.y, x2: x, y2: LANE - 7, life: 0.12, color: '#ffe680' });
+      tracer(from.x, from.y, x, y, 0.12, '#ffe680');
       if (from.turret !== undefined) {
         firing.set(from.turret, clock);
       }
@@ -671,7 +1096,8 @@ function onStep(prev) {
     for (const z of prev.sv.zombies) {
       if (z.id !== undefined && !ids.has(z.id) && sv.rebuild === 0) {
         const e = shown.get(`z${z.id}`);
-        burst(e ? e.x : sx(z.x), LANE - 6, ['#86a85e', '#5d7b3f', '#a03030'], z.kind === 'boss' ? 30 : 10);
+        const depth = depthOf(z);
+        burst(onScreen(e ? e.x : z.x * TW, depth), LANE - depth - 6, ['#86a85e', '#5d7b3f', '#a03030'], z.kind === 'boss' ? 30 : 10, LANE - depth + 2);
       }
     }
   }
@@ -707,12 +1133,21 @@ function roomBox(key) {
   return { x: Math.round(x), y: FLOORS[floor], f: FLOORS[floor] + ROOM_H - 3 };
 }
 
+// A room seen like a dollhouse: its ceiling, side walls and floor slant in toward its back wall.
 function roomShell(b, key) {
   rect(b.x - 1, b.y - 1, ROOM_W + 2, ROOM_H + 2, '#1e140c');
   rect(b.x, b.y, ROOM_W, ROOM_H, WALLS[key]);
-  rect(b.x, b.y, ROOM_W, 2, '#2a1e14');
-  rect(b.x, b.f, ROOM_W, 3, '#6b4a30');
-  rect(b.x, b.f, ROOM_W, 1, '#8a6440');
+  const side = mix(WALLS[key], '#000000', 0.3);
+  for (let i = 0; i < 3; i++) {
+    rect(b.x + i, b.y + i, ROOM_W - i * 2, 1, '#2a1e14');
+    rect(b.x + i, b.y + i + 1, 1, b.f - b.y - i * 2 + 1, side);
+    rect(b.x + ROOM_W - 1 - i, b.y + i + 1, 1, b.f - b.y - i * 2 + 1, side);
+    rect(b.x + 2 - i, b.f + i, ROOM_W - 4 + i * 2, 1, ['#6b4a30', '#7a5636', '#8a6440'][i]);
+  }
+  // The floorboards, toward the back wall.
+  for (let k = 1; k < 8; k++) {
+    for (let i = 0; i < 3; i++) rect(b.x + 2 + k * 4.5 - i * (1 - k * 0.25), b.f + i, 1, 1, '#5a3e28');
+  }
   rect(b.x + ROOM_W / 2, b.y + 2, 1, 2, '#3a3a3a');
   rect(b.x + ROOM_W / 2 - 1, b.y + 4, 3, 1, '#ffe08a');
 }
@@ -999,16 +1434,16 @@ function drawLight() {
   }
   if (view.cooking && sv.rebuild === 0) {
     const flick = 22 + Math.sin(clock * 11) * 2;
-    hole(sx(-9), LANE - 4, flick, flick, 0.9);
-    glows.push([sx(-9), LANE - 4, flick, flick, 'rgba(255,140,50,0.16)']);
+    hole(at(sx(-9), 4), LANE - 8, flick, flick, 0.9);
+    glows.push([at(sx(-9), 4), LANE - 8, flick, flick, 'rgba(255,140,50,0.16)']);
   }
   if (sv.rebuild > 0) {
     hole(sx(0), LANE - 6, 22, 22, 0.9);
     glows.push([sx(0), LANE - 6, 22, 22, 'rgba(255,120,40,0.18)']);
   }
   if (sv.lab) {
-    hole(sx(8), LANE - 10, 10, 10, 0.8);
-    glows.push([sx(8), LANE - 10, 10, 10, 'rgba(110,255,150,0.15)']);
+    hole(at(sx(8), 6), LANE - 16, 10, 10, 0.8);
+    glows.push([at(sx(8), 6), LANE - 16, 10, 10, 'rgba(110,255,150,0.15)']);
   }
   for (const t of tracers) {
     hole(t.x2, t.y2, 8, 8, 0.8);
@@ -1041,6 +1476,60 @@ function drawLight() {
 
 // ---------- the frame ----------
 
+// Everything from the camera at camX onto `g`. A dt of 0 moves nothing on: the shelter cam draws the
+// same moment again from another camera (and leaves out the rooms, which it doesn't show).
+function drawWorld(dt) {
+  const sv = view.sv;
+  drawSky();
+  drawLand();
+  const sun = sunAt();
+  sunlight = !view.night && !view.blood && dayness() > 0.05
+    ? { x: sun.x, len: 0.3 + ((sun.y - 20) / 50) * 0.45, alpha: 0.35 * dayness() } : null;
+  const him = hero(dt);
+  const items = [...scenery(sv), him, dog(him, dt), ...sv.zombies.map(z => zombie(z, dt))].filter(Boolean);
+  // The shadows first, all on the ground (none on the earth's cut face below it), then everything
+  // from the back of the lane to the front.
+  g.save();
+  g.beginPath();
+  g.rect(0, 0, W, GROUND);
+  g.clip();
+  for (const item of items) {
+    if (item.shadow) item.shadow();
+  }
+  g.restore();
+  items.sort((a, b) => b.z - a.z);
+  for (const item of items) item.draw();
+  drawTufts();
+  if (dt > 0) {
+    drawInside();
+  }
+  drawEffects(dt);
+  drawLight();
+  return him;
+}
+
+// While he is away down the road, a view of the shelter in the corner, its frame flashing red
+// while zombies are at the walls, and the walls' life under it.
+const CAM = { w: 120, h: 56, top: 96 };
+const camCanvas = canvasOf(W, H);
+const camG = camCanvas.getContext('2d');
+function shelterCam() {
+  const sv = view.sv;
+  const keep = [g, camX];
+  g = camG;
+  camX = 0;
+  drawWorld(0);
+  [g, camX] = keep;
+  const attacked = sv.zombies.some(z => Math.abs(z.x) <= view.layout.wall + (z.kind === 'spitter' ? 3 : 0));
+  const edge = attacked && Math.floor(clock * 4) % 2 ? '#ff5050' : attacked ? '#a03030' : '#e6e3d8';
+  rect(2, 2, CAM.w + 4, CAM.h + 7, '#0d0e14');
+  rect(3, 3, CAM.w + 2, CAM.h + 2, edge);
+  g.drawImage(camCanvas, W / 2 - CAM.w / 2, CAM.top, CAM.w, CAM.h, 4, 4, CAM.w, CAM.h);
+  const life = Math.max(0, Math.min(1, sv.shelter.hp / view.max));
+  rect(4, CAM.h + 6, CAM.w, 2, '#3a0d0d');
+  rect(4, CAM.h + 6, Math.round(CAM.w * life), 2, life < 0.25 ? '#ff5050' : life < 0.5 ? '#ffd040' : '#7ee07e');
+}
+
 let last = performance.now();
 function draw(t) {
   const dt = Math.min(0.1, (t - last) / 1000);
@@ -1051,63 +1540,20 @@ function draw(t) {
     return;
   }
   const sv = view.sv;
-  const target = sv.x !== 0 ? Math.max(-50, Math.min(50, sx(sv.x) + camX - W / 2)) * 0.35 : 0;
+  // The camera leans toward him as he patrols, and follows him down the road on a trip.
+  const target = sv.trip ? sv.x * TW : Math.max(-50, Math.min(50, sv.x * TW)) * 0.35;
   camX += (target - camX) * (1 - Math.exp(-dt * 1.5));
 
-  drawSky();
-  drawLand();
-  for (const s of sv.sites) {
-    if (s.kind === 'building') SITE.building(sx(s.x));
+  const him = drawWorld(dt);
+  if (sv.trip && Math.abs(camX) > W / 2 + 30) {
+    shelterCam();
   }
-  for (const s of sv.sites) {
-    if (s.kind !== 'building') SITE[s.kind](sx(s.x));
-  }
-  for (const d of sv.defenses) {
-    if (d.type !== 'barricade' && sv.rebuild === 0) drawDefense(d, sx(d.x));
-  }
-  drawDecor();
-  if (sv.rebuild === 0) {
-    for (const tile of [-view.layout.wall, view.layout.wall]) {
-      if (sv.shelter.level >= 3 && !view.layout.drifters.includes(tile)) drawWall(sx(tile), sv.shelter.level);
-    }
-  }
-  drawShelter(sx(0), sv.shelter.level);
-  if (sv.rebuild === 0) {
-    const heavy = (sv.blueprints || []).includes('heavy');
-    for (const t of view.layout.turrets) {
-      drawTurret(turretSpot(t, sv.shelter.level), Math.sign(t) || 1, heavy, clock - (firing.get(t) || -9) < 0.12);
-    }
-    for (const d of sv.defenses) {
-      if (d.type === 'barricade') drawDefense(d, sx(d.x));
-    }
-    for (const tile of view.layout.drifters) {
-      if (sv.shelter.level >= 3) drawWall(sx(tile), sv.shelter.level);
-      blit(g, SPRITES.drifter(), sx(tile), LANE - (sv.shelter.level >= 3 ? 9 : 0), tile < 0);
-    }
-    if ((sv.residents || []).some(r => r.role === 'lookout')) {
-      const near = sv.zombies.reduce((a, z) => (!a || Math.abs(z.x) < Math.abs(a.x) ? z : a), null);
-      blit(g, SPRITES.resident(0), sx(0) + 4, LANE - shelterHeight(sv.shelter.level) + 3, near ? near.x < 0 : false);
-    }
-  }
-  for (const c of sv.crates) {
-    const since = landing.has(c.x) ? clock - landing.get(c.x) : 99;
-    const fall = c.kind === 'drop' ? Math.max(0, 120 - since * 60) : 0;
-    (CRATE[c.kind] || CRATE.scrap)(sx(c.x), fall);
-  }
-  const hero = drawHero(dt);
-  drawDog(hero, dt);
-  const order = [...sv.zombies].sort((a, b) => (hash(a.id || 7) % 5) - (hash(b.id || 7) % 5));
-  for (const z of order) drawZombie(z, dt);
-  drawTufts();
-  drawInside();
-  drawEffects(dt);
-  drawLight();
-  if (view.waiting && hero) {
+  if (view.waiting && him) {
     const zt = (clock * 1.2) % 1;
     g.globalAlpha = 1 - zt;
     g.fillStyle = '#e8e8f8';
     g.font = '7px monospace';
-    g.fillText('z', hero.x + 5 + zt * 4, LANE - 15 - zt * 8);
+    g.fillText('z', him.x + 5 + zt * 4, LANE - 15 - zt * 8);
     g.globalAlpha = 1;
   }
   for (const [key, e] of shown) {

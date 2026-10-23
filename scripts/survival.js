@@ -160,7 +160,22 @@ const SITES = {
   lake: { icon: '🌊', name: 'lake', weight: 0.2, meet: 0, book: 0, loot: { wood: [8, 18], scrap: [10, 30], bp: 0.15, gear: 0.25 } },
   shelter: { icon: '⛺', name: 'lost shelter', weight: 0.25, meet: 0.35, book: 0.06, loot: { wood: [8, 15], scrap: [10, 20], food: [3, 6], bp: 0.2, gear: 0 } },
   bunker: { icon: '🚪', name: 'bunker', weight: 0.15, ambush: 1, meet: 0.2, book: 0.15, loot: { scrap: [40, 80], cloth: [5, 10], food: [4, 8], bp: 0.7, gear: 0.4, tier: 1 } },
+  // Further out, down the road, only on trips (`road` is their weight there, `wave` the first wave
+  // they turn up in). Their finds grow with the waves.
+  farm: { icon: '🌾', name: 'farm', weight: 0, road: 0.35, meet: 0.15, book: 0.03, loot: { food: [5, 12], wood: [10, 25], cloth: [2, 5], bp: 0.1, gear: 0.1 } },
+  station: { icon: '🏪', name: 'gas station', weight: 0, road: 0.3, ambush: 0.25, meet: 0.05, book: 0.05, loot: { scrap: [20, 40], food: [4, 10], cloth: [2, 6], bp: 0.15, gear: 0.15 } },
+  town: { icon: '🏬', name: 'town', weight: 0, road: 0.25, ambush: 0.45, meet: 0.25, book: 0.2, loot: { scrap: [30, 60], wood: [15, 30], cloth: [5, 10], food: [3, 8], bp: 0.3, gear: 0.3 } },
+  base: { icon: '🪖', name: 'army base', weight: 0, road: 0.1, wave: 6, ambush: 1, meet: 0.1, book: 0.1, loot: { scrap: [80, 150], cloth: [6, 12], food: [5, 10], bp: 0.8, gear: 0.6, tier: 1 } },
 };
+
+// Trips off the map: by day, when the shelter can look after itself, he follows the road out of
+// one end of the strip to a few places further out (`stops`, each `gap` tiles past the last),
+// searches them and comes home, at most every `every` steps and once he has explored `after`
+// places near the shelter. Zombies idle along the road until he comes near: a group on each stretch
+// of it at the chance `groups`, and more turning up ahead of him as he walks (`zombie` a step, `road`
+// the most out there at once). Meanwhile more of them come for the shelter (`lure` times as many),
+// and once a trip a horde may (`raid`).
+const TRIP = { every: 240, after: 3, stops: [2, 4], gap: [5, 9], groups: 0.7, zombie: 0.06, road: 10, lure: 1.5, raid: 0.5 };
 
 // Every subagent Claude runs sends a drifter to the shelter (the adventure's allies, from the same
 // hook events, two at a time at most). It stands on the walls and shoots the nearest zombie within
@@ -283,11 +298,13 @@ function newSave(now) {
     // understood toward each room, the rooms built, what he did inside on the last step (for the
     // window and the stats row), and the steps of tidying toward the next find.
     books: 0, reading: 0, understood: {}, rooms: [], doing: null, sorted: 0, breakAt: 0, breakLeft: BREAK.steps,
+    // The trip he is on ({ side, stops, home }, see plan()), and the step he may set out on the next.
+    trip: null, tripAt: 0,
     totals: {
       scrapFound: 0, woodFound: 0, falls: 0, brutes: 0, bosses: 0, turretKills: 0, crates: 0, handKills: 0, builds: 0, waves: 0,
       knockouts: 0, rests: 0, retreats: 0, lessons: 0, defenses: 0, trapKills: 0, game: 0, sites: 0, dives: 0, hordes: 0, clothes: 0, meals: 0, bulletsMade: 0, gearFound: 0,
       drifters: 0, allyKills: 0, drops: 0, fetched: 0, runs: 0, samples: 0, fenceKills: 0, bloodMoons: 0,
-      booksFound: 0, reads: 0, roomsBuilt: 0, organized: 0,
+      booksFound: 0, reads: 0, roomsBuilt: 0, organized: 0, trips: 0,
     },
   };
 }
@@ -932,6 +949,7 @@ function fall(sv, now) {
   sv.mode = null;
   sv.hole = 0;
   sv.x = 0;
+  sv.trip = null;
   sv.fx = null;
   say(sv, '🔥 The shelter fell, rebuilding', now);
 }
@@ -1257,6 +1275,99 @@ function canExplore(sv) {
     && !sv.zombies.some(z => Math.abs(z.x) <= WALL + 3 || Math.abs(z.x - sv.x) <= 3);
 }
 
+// He sets out on a trip only by day, rested, with the walls nearly whole, a turret to guard them
+// and nothing near them (no tyrant anywhere).
+function canTrip(sv) {
+  return !sv.night && sv.step >= sv.tripAt && sv.turrets > 0 && sv.totals.sites >= TRIP.after && !sv.boss
+    && sv.hp >= heroMax(sv) * 0.9 && sv.shelter.hp >= shelterMax(sv) * 0.8
+    && !sv.zombies.some(z => z.kind === 'boss' || Math.abs(z.x) <= WALL + 3);
+}
+
+// A trip down the road out of the end of the strip with fewer zombies: a few places, each further
+// out than the last. Scouting adds a stop.
+function plan(sv) {
+  const left = sv.zombies.filter(z => z.x < 0).length;
+  const right = sv.zombies.length - left;
+  const side = left === right ? (Math.random() < 0.5 ? -1 : 1) : left < right ? -1 : 1;
+  const kinds = Object.entries(SITES).filter(([, s]) => s.road && sv.wave >= (s.wave || 0));
+  const total = kinds.reduce((sum, [, s]) => sum + s.road, 0);
+  const count = Math.min(TRIP.stops[1], randInt(...TRIP.stops) + (skillTier(sv, 'scouting') >= 2 ? 1 : 0));
+  const stops = [];
+  let d = RADIUS;
+  for (let i = 0; i < count; i++) {
+    d += randInt(...TRIP.gap);
+    let roll = Math.random() * total;
+    let kind = kinds[0][0];
+    for (const [k, s] of kinds) {
+      roll -= s.road;
+      if (roll < 0) {
+        kind = k;
+        break;
+      }
+    }
+    stops.push({ kind, x: side * d });
+  }
+  // Groups idling on the stretches of road between them.
+  let from = RADIUS + 2;
+  for (const stop of stops) {
+    if (Math.random() < TRIP.groups) {
+      const spot = randInt(from, Math.abs(stop.x) - 1);
+      for (let i = 0; i < randInt(1, 2 + Math.floor(sv.wave / 8)); i++) {
+        stray(sv, side * (spot + (i % 2)));
+      }
+    }
+    from = Math.abs(stop.x) + 2;
+  }
+  return { side, stops, home: false, raided: false };
+}
+
+// A zombie idling out on the road at `x`, until he comes near.
+function stray(sv, x) {
+  const z = makeZombie(sv);
+  z.x = x;
+  z.idle = true;
+  sv.zombies.push(z);
+}
+
+// The trip is over (or cut short): the zombies still idling down the road stay out there.
+function endTrip(sv) {
+  sv.trip = null;
+  sv.tripAt = sv.step + TRIP.every;
+  sv.zombies = sv.zombies.filter(z => !z.idle);
+}
+
+// A step of a trip: on to the next place and its search, or home once they are all searched, or
+// sooner when he is hurt, night falls or the shelter is in trouble.
+function roam(sv, now) {
+  const trip = sv.trip;
+  if (!trip.home) {
+    const why = sv.shelter.hp < shelterMax(sv) / 2 ? '🏃 The shelter is under attack: heading home'
+      : sv.hp < heroMax(sv) / 2 ? '🩹 Hurt: heading home'
+        : sv.night ? '🌙 Night is falling: heading home' : null;
+    if (why) {
+      say(sv, why, now);
+    }
+    trip.home = !!why || !trip.stops.length;
+  }
+  if (trip.home) {
+    sv.x += sign(-sv.x);
+    if (Math.abs(sv.x) <= RADIUS) {
+      endTrip(sv);
+      sv.totals.trips++;
+      say(sv, '🧭 Back from the trip', now);
+    }
+    return;
+  }
+  const stop = trip.stops[0];
+  if (sv.x !== stop.x) {
+    sv.x += sign(stop.x - sv.x);
+    return;
+  }
+  trip.stops.shift();
+  sv.job = { kind: 'explore', left: JOB_STEPS.explore, data: stop };
+  say(sv, `🔍 Searching the ${SITES[stop.kind].name}`, now);
+}
+
 // The lab's Repellent keeps a third of a group away.
 function repelled(sv, count) {
   return researched(sv, 4) ? Math.ceil(count * 2 / 3) : count;
@@ -1265,13 +1376,14 @@ function repelled(sv, count) {
 function ambush(sv, x, count, now) {
   for (let i = 0; i < Math.min(6, repelled(sv, count)); i++) {
     const z = makeZombie(sv);
-    z.x = Math.max(-RADIUS, Math.min(RADIUS, x + (i % 3) - 1));
+    // Out on the road there is no end of the strip to keep them in.
+    z.x = Math.abs(x) > RADIUS ? x + (i % 3) - 1 : Math.max(-RADIUS, Math.min(RADIUS, x + (i % 3) - 1));
     sv.zombies.push(z);
   }
   say(sv, '💥 Ambush!', now);
 }
 
-function horde(sv, now) {
+function horde(sv, now, away) {
   const side = Math.random() < 0.5 ? -1 : 1;
   const count = repelled(sv, Math.min(8, 3 + Math.floor(sv.wave / 4)));
   for (let i = 0; i < count; i++) {
@@ -1280,7 +1392,7 @@ function horde(sv, now) {
     sv.zombies.push(z);
   }
   sv.totals.hordes++;
-  say(sv, `🧟 A horde of ${count} comes from the ${side < 0 ? 'left' : 'right'}`, now);
+  say(sv, `🧟 A horde of ${count} comes ${away ? 'for the shelter while he is away' : `from the ${side < 0 ? 'left' : 'right'}`}`, now);
 }
 
 // What he finds in a place, after the search. Scouting makes the finds bigger.
@@ -1289,7 +1401,7 @@ function explore(sv, site, now) {
   const scout = skillTier(sv, 'scouting');
   const dive = skillTier(sv, 'diving');
   sv.totals.sites++;
-  let bonus = 1 + 0.25 * scout;
+  let bonus = (1 + 0.25 * scout) * (def.road ? 1 + 0.1 * sv.wave : 1);
   if (site.kind === 'lake') {
     sv.totals.dives++;
     // The water hurts, and sometimes it is worse than that.
@@ -1305,8 +1417,9 @@ function explore(sv, site, now) {
     }
     bonus += 0.25 * dive;
   }
+  const guarded = site.kind === 'bunker' || site.kind === 'base';
   if (def.ambush && Math.random() < def.ambush - 0.08 * scout - (sv.dog ? DOG.bark : 0)) {
-    ambush(sv, site.x, site.kind === 'bunker' ? 3 + Math.floor(sv.wave / 5) : 2 + Math.floor(sv.wave / 6), now);
+    ambush(sv, site.x, guarded ? 3 + Math.floor(sv.wave / 5) : 2 + Math.floor(sv.wave / 6), now);
   }
   if (site.kind === 'shelter') {
     sv.hp = heroMax(sv);
@@ -1329,9 +1442,9 @@ function explore(sv, site, now) {
   if (Math.random() < def.loot.gear) {
     dropGear(sv, now, def.loot.tier || 0);
   }
-  if (site.kind === 'bunker' && flying(sv) && Math.random() < SAMPLES.bunker) {
+  if (guarded && flying(sv) && Math.random() < SAMPLES.bunker) {
     addSamples(sv, 1);
-    say(sv, '🧪 A sample of the virus, left in the bunker\'s fridge', now);
+    say(sv, `🧪 A sample of the virus, left in the ${def.name}'s fridge`, now);
   }
   // Last, so the news isn't lost under the finds: a book, someone to move in, or a dog.
   if (Math.random() < def.book) {
@@ -1399,8 +1512,12 @@ function step(sv, now) {
 
   // Zombies arrive from both edges, more of them as the waves go up, and more still at night.
   const dark = sv.night ? (sv.blood ? BLOOD.spawn : NIGHT_SPAWN) : 1;
+  // Only those on the strip count toward the crowd, and while he is away down the road, the shelter
+  // draws more of them.
   const crowd = 3 + Math.floor(sv.wave / 2) + (sv.night ? (sv.blood ? BLOOD.crowd : NIGHT_CROWD) : 0);
-  if (sv.zombies.length < crowd && Math.random() < Math.min(0.55, 0.18 + 0.03 * sv.wave) * dark * (sv.grace > 0 ? 0.5 : 1)) {
+  const away = sv.trip && Math.abs(sv.x) > RADIUS;
+  const strip = sv.zombies.filter(z => Math.abs(z.x) <= RADIUS).length;
+  if (strip < crowd && Math.random() < Math.min(0.55, 0.18 + 0.03 * sv.wave) * dark * (sv.grace > 0 ? 0.5 : 1) * (away ? TRIP.lure : 1)) {
     sv.zombies.push(makeZombie(sv));
   }
   if (sv.boss && !sv.zombies.some(z => z.kind === 'boss')) {
@@ -1416,6 +1533,17 @@ function step(sv, now) {
   }
   if (sv.crates.length < MAX_CRATES && sv.step % CRATE_EVERY === 0) {
     sv.crates.push(newCrate(sv));
+  }
+  // Out on the road, zombies turn up ahead of him now and then, a little past where he can see.
+  // Once he is well away, a horde may come for the shelter.
+  if (away && !sv.trip.home && sv.zombies.length - strip < TRIP.road && Math.random() < TRIP.zombie * dark) {
+    stray(sv, sv.x + sign(sv.x) * randInt(SIGHT + 1, SIGHT + 4));
+  }
+  if (away && !sv.trip.raided && Math.abs(sv.x) > RADIUS + 8) {
+    sv.trip.raided = true;
+    if (Math.random() < TRIP.raid) {
+      horde(sv, now, true);
+    }
   }
 
   // Traps standing out there catch game now and then, as they were made to.
@@ -1514,6 +1642,9 @@ function step(sv, now) {
     }
     sv.mode = fallBack ? 'fallback' : null;
     if (fallBack) {
+      if (sv.trip) {
+        sv.trip.home = true;
+      }
       if (sv.x !== 0) {
         sv.x += sign(-sv.x);
       } else {
@@ -1534,6 +1665,8 @@ function step(sv, now) {
         }
       }
       sv.zombies = sv.zombies.filter(z => z.hp > 0);
+    } else if (sv.trip) {
+      roam(sv, now);
     } else if (build) {
       if (sv.x === 0) {
         startJob(sv, build);
@@ -1559,6 +1692,10 @@ function step(sv, now) {
       if (chase) {
         sv.x += sign(chase.x - sv.x);
         sv.dir = sign(chase.x - sv.x) || sv.dir;
+      } else if (canTrip(sv)) {
+        sv.trip = plan(sv);
+        say(sv, `🧭 Off on a trip down the road: ${sv.trip.stops.map(s => SITES[s.kind].icon).join(' ')}`, now);
+        roam(sv, now);
       } else if (sv.books > 0 && topic(sv)) {
         // Nothing to fight, gather or search: he goes in to read until something turns up.
         if (sv.x !== 0) {
@@ -1602,10 +1739,16 @@ function step(sv, now) {
     if (z.hp <= 0) {
       continue;
     }
-    // A zombie in a trap can't move, or bite.
+    // A zombie in a trap can't move, or bite. One idling down the road stays put until it sees him.
     if (z.held > 0) {
       z.held--;
       continue;
+    }
+    if (z.idle) {
+      if (Math.abs(z.x - sv.x) > SIGHT) {
+        continue;
+      }
+      delete z.idle;
     }
     const def = ZOMBIES[z.kind];
     const dmg = Math.round(def.dmg * (1 + 0.07 * (sv.wave - 1)));
@@ -1644,6 +1787,9 @@ function step(sv, now) {
     sv.x = 0;
     sv.job = null;
     sv.resting = false;
+    if (sv.trip) {
+      endTrip(sv);
+    }
     say(sv, '😵 Knocked out, resting at the shelter', now);
   } else {
     eat(sv, now);
@@ -1772,6 +1918,14 @@ function cutTo(ctx, text, width) {
   return `${out}…`;
 }
 
+// Where his trip takes him next, and how far out he is.
+function tripText(sv) {
+  const trip = sv.trip;
+  const out = Math.abs(sv.x) - RADIUS;
+  const where = trip.home || !trip.stops.length ? 'heading home' : `to the ${SITES[trip.stops[0].kind].name}`;
+  return `🧭 ${where}${out > 0 ? `, ${out} tile${out === 1 ? '' : 's'} out` : ''}`;
+}
+
 // What he does while he rests inside, for the stats row.
 function restText(sv) {
   return sv.doing === 'study' ? `📖 reading ${Math.round((sv.reading / READ_STEPS) * 100)}%`
@@ -1788,6 +1942,7 @@ function statParts(sv, ctx) {
   const barColor = sv.shelter.hp / max < 0.25 ? RED : sv.shelter.hp / max < 0.5 ? GOLD : GREEN;
   const w = weaponInHand(sv);
   const guard = Math.round(armor(sv) * 100);
+  const atWalls = sv.zombies.filter(z => Math.abs(z.x) <= WALL + (ZOMBIES[z.kind].reach || 0)).length;
 
   let status = null;
   if (sv.msg && ctx.now - sv.msg.at < (sv.msg.ms || MSG_MS)) {
@@ -1808,9 +1963,12 @@ function statParts(sv, ctx) {
     [`🧑 ${w.icon} ${w.name}${w.ammo ? ` ${sv.ammo}` : ''}`, 4],
     [stock, 5],
     [sv.job ? `${sv.job.kind === 'explore' ? '🔍' : '🔨'} ${JOB_NAMES[sv.job.kind]} ${sv.job.left}` : sv.mode ? (sv.x === 0 ? '🧱 holed up' : '🏃 falling back')
-      : sv.x === 0 && (sv.resting || sv.doing === 'study') ? restText(sv) : `🎯 ${goalText(sv)}`, 3],
+      : sv.trip && sv.x !== 0 ? tripText(sv)
+        : sv.x === 0 && (sv.resting || sv.doing === 'study') ? restText(sv) : `🎯 ${goalText(sv)}`, 3],
     [`🗼 ${sv.turrets}/${slotsAt(lvl)}`, 4.2],
     [sv.generator ? (fuel > 0 ? `⚡ ${fuel}%` : color('2', '⚡ 0%')) : null, 3.7],
+    // While he is away, the map follows him, so this tells of the zombies at the walls.
+    [sv.trip && atWalls ? color(RED, `🧟 ${atWalls} at the walls`) : null, 5.2],
     [sv.drifters.length ? `🤠 ${sv.drifters.length}` : null, 3.8],
     [sv.residents.length ? `👷 ${sv.residents.length}${sv.dog ? ' 🐕' : ''}` : sv.dog ? '🐕' : null, 3.2],
     [flying(sv) ? `🧪 ${sv.samples}` : null, 3.4],
@@ -1844,9 +2002,22 @@ function statsRow(sv, ctx) {
 const SITE_ICONS = Object.fromEntries(Object.entries(SITES).map(([k, v]) => [k, v.icon]));
 const CRATE_ICONS = { scrap: '📦', wood: '🪵', cloth: '🧵', food: '🥩', blueprint: '📜', drop: '🪂' };
 
-function worldRow(sv, ctx) {
+// The tiles the map shows: around the shelter, or, on a trip, around him once he walks away from it.
+function mapSpan(sv, ctx) {
   const tiles = Math.min(2 * RADIUS + 1, Math.max(10, Math.min(24, Math.floor(ctx.cols / 2))));
-  const left = -Math.floor(tiles / 2);
+  const half = Math.floor(tiles / 2);
+  const left = !sv.trip ? -half : sv.x > 0 ? Math.max(-half, sv.x - half) : Math.min(-half, sv.x - half);
+  return { tiles, left };
+}
+
+// An abandoned car by the road, every so often past the end of the strip (the window draws them too).
+function wreck(x) {
+  return Math.abs(x) > RADIUS + 2 && hash(x + 1777) % 10 === 0;
+}
+
+function worldRow(sv, ctx) {
+  const { tiles, left } = mapSpan(sv, ctx);
+  const stops = sv.trip ? sv.trip.stops : [];
   const fx = ctx.active && sv.fx && sv.fx.step === sv.step ? sv.fx.hits : [];
   // Only the turrets he has built stand on their slots; the one in progress shows a hammer.
   const built = TURRET_SLOTS.slice(0, sv.turrets);
@@ -1880,6 +2051,12 @@ function worldRow(sv, ctx) {
       row += CRATE_ICONS[sv.crates.find(c => c.x === x).kind];
     } else if (sv.sites.some(c => c.x === x)) {
       row += SITE_ICONS[sv.sites.find(c => c.x === x).kind];
+    } else if (stops.some(s => s.x === x)) {
+      row += SITE_ICONS[stops.find(s => s.x === x).kind];
+    } else if (Math.abs(x) === RADIUS + 1) {
+      row += '🪧';
+    } else if (wreck(x)) {
+      row += '🚗';
     } else if (sv.rebuild === 0 && sv.defenses.some(d => d.x === x)) {
       row += DEFENSES[sv.defenses.find(d => d.x === x).type].icon;
     } else if (sv.rebuild === 0 && built.includes(x)) {
@@ -1910,8 +2087,7 @@ const LIT = 3;   // with the generator running, its lights reach this many tiles
 // The ground darkens with the adventure's daylight (ctx.light, shaded by ctx.shade), except where
 // the lights reach, and turns red under a blood moon.
 function floorRow(sv, ctx) {
-  const tiles = Math.min(2 * RADIUS + 1, Math.max(10, Math.min(24, Math.floor(ctx.cols / 2))));
-  const left = -Math.floor(tiles / 2);
+  const { tiles, left } = mapSpan(sv, ctx);
   const light = ctx.light ?? 1;
   const blood = ctx.night && bloodMoon(ctx.now);
   const lamps = light < 1 && powered(sv) && sv.rebuild === 0;
@@ -2101,6 +2277,20 @@ function heldBy(sv) {
   return `${turret}walls Lv ${sv.shelter.level + 1} (${walls} wood, ${walls / 2} scrap; he has ${sv.wood} wood)`;
 }
 
+// The trip he is on, or what the next one waits for.
+function tripLine(sv) {
+  const made = `${sv.totals.trips} made`;
+  if (sv.trip) {
+    const left = sv.trip.stops.length;
+    return `  Trips         ${tripText(sv)} · ${left} place${left === 1 ? '' : 's'} left to search · ${made}`;
+  }
+  const wait = sv.turrets === 0 ? 'once a turret guards the shelter'
+    : sv.totals.sites < TRIP.after ? `once he has explored ${TRIP.after} places near the shelter`
+      : sv.step < sv.tripAt ? `the next in about ${Math.ceil((sv.tripAt - sv.step) / 60)} min of work`
+        : 'the next by day, once he is rested and the walls are whole';
+  return `  Trips         ${wait} · ${made}`;
+}
+
 function shelterReport(now) {
   const sv = load(now);
   const lvl = sv.shelter.level;
@@ -2119,6 +2309,7 @@ function shelterReport(now) {
     `  Pantry        🍲 ${sv.meals} meals${sv.fed ? ` · well fed for ${sv.fed} more steps` : ''}${knows(sv, 'cooking') ? '' : ' (he can\'t cook yet)'}`,
     `  Next          ${building}`,
     `  Last call     ${sv.call ? `${sv.call.n} zombies against his ${sv.call.weapon.toLowerCase()}: ${sv.call.ok ? 'he faced them' : `too risky (it would cost about ${sv.call.taken} life), he fell back`}` : 'nothing big yet'}`,
+    tripLine(sv),
     ...peopleLines(sv),
     ...insideLines(sv),
     ...labLines(sv),
