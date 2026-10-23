@@ -367,7 +367,9 @@ it takes one step per second of Claude's work.
   (waves survived), 🩹 First aid (times he had to rest), 🧵 Tailoring (clothes made), 🍳 Cooking (meals
   cooked), 🔍 Scouting (places explored: fewer ambushes, bigger finds), 🏊 Diving (lake dives: less
   damage, more finds), 🧨 Gunsmithing (bullets made: more a batch, harder hits), 🪤 Trapping (defenses set up), 📖 Studying (books read through: they sink in more often) and 🧠 Tactics (hard lessons).
-- Waves hold at the shelter's pace. If the shelter falls anyway, you lose a quarter of the materials
+- The stats row counts the zombies the wave still needs ("🧟 Wave 10: 12 left"). Waves hold at the
+  shelter's pace: once a wave is done, the next waits until the walls or turrets can take it, and
+  the row says "held" (`/vwc:shelter` says what it waits for). If the shelter falls anyway, you lose a quarter of the materials
   and a wave, the zombies thin out for a few minutes, and it is rebuilt in a few seconds.
   Turrets, blueprints, clothes, skills and levels are never lost.
 - `/vwc:shelter` shows the inside: what is built, what he is saving for, who lives there, the lab,

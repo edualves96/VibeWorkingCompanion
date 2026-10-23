@@ -471,6 +471,22 @@ function waveNeed(wave) {
   return 10 + 5 * wave;
 }
 
+// The waves hold at the shelter's pace (its walls and turrets), so a strong shelter stays ahead:
+// this is the last wave the shelter is ready for.
+function waveCap(sv) {
+  const defense = sv.shelter.level + sv.turrets;
+  return defense + 1 + Math.floor(defense / 5);
+}
+
+// The wave's kills are done, but the shelter isn't ready for the next one.
+function waveHeld(sv) {
+  return sv.waveKills >= waveNeed(sv.wave) && sv.wave >= waveCap(sv);
+}
+
+function waveText(sv) {
+  return waveHeld(sv) ? `🧟 Wave ${sv.wave}: held` : `🧟 Wave ${sv.wave}: ${Math.max(0, waveNeed(sv.wave) - sv.waveKills)} left`;
+}
+
 // ---------- clothes ----------
 
 function gearPower(item) {
@@ -1645,9 +1661,7 @@ function step(sv, now) {
     sv.shelter.hp = Math.min(shelterMax(sv), sv.shelter.hp + mend);
   }
 
-  // The waves hold at the shelter's pace (its walls and turrets), so a strong shelter stays ahead.
-  const defense = sv.shelter.level + sv.turrets;
-  if (sv.waveKills >= waveNeed(sv.wave) && sv.wave < defense + 1 + Math.floor(defense / 5)) {
+  if (sv.waveKills >= waveNeed(sv.wave) && sv.wave < waveCap(sv)) {
     sv.wave++;
     sv.totals.waves++;
     sv.waveKills = 0;
@@ -1803,7 +1817,7 @@ function statParts(sv, ctx) {
     [sv.defenses.length ? `🚧 ${sv.defenses.length}` : null, 3.6],
     [guard ? `🧥 ${guard}%` : null, 3.5],
     [sv.meals || sv.fed ? `🍲 ${sv.meals}${sv.fed ? ' 😋' : ''}` : null, 2.8],
-    [`🧟 Wave ${sv.wave} ${Math.min(sv.waveKills, waveNeed(sv.wave))}/${waveNeed(sv.wave)}`, 4.5],
+    [waveText(sv), 4.5],
     [`💀 ${sv.kills}`, 2],
   ].filter(p => p[0]);
   return { parts, status };
@@ -2080,6 +2094,13 @@ function nightLines(sv, now) {
   ];
 }
 
+// What would let a held wave go on: stronger walls, or another turret while a slot is free.
+function heldBy(sv) {
+  const walls = wallCost(sv.shelter.level);
+  const turret = sv.turrets < slotsAt(sv.shelter.level) && knows(sv, 'turret') ? 'another turret, or ' : '';
+  return `${turret}walls Lv ${sv.shelter.level + 1} (${walls} wood, ${walls / 2} scrap; he has ${sv.wood} wood)`;
+}
+
 function shelterReport(now) {
   const sv = load(now);
   const lvl = sv.shelter.level;
@@ -2112,7 +2133,7 @@ function shelterReport(now) {
     'What the survivor has learned:',
     ...Object.keys(SKILLS).map(k => tierText(sv, k)),
     '',
-    `🧟 Wave ${sv.wave} (${Math.min(sv.waveKills, waveNeed(sv.wave))}/${waveNeed(sv.wave)}) · best wave ${sv.bestWave}`,
+    `🧟 Wave ${sv.wave}: ${waveHeld(sv) ? `held until the shelter is stronger: ${heldBy(sv)}` : `${Math.max(0, waveNeed(sv.wave) - sv.waveKills)} of ${waveNeed(sv.wave)} zombies left`} · best wave ${sv.bestWave}`,
     `  Zombies       ${sv.kills} killed · ${sv.totals.brutes} brutes · ${sv.totals.bosses} tyrants · ${sv.totals.turretKills} by the turrets`,
     `  Gathered      ${sv.totals.scrapFound} scrap · ${sv.totals.woodFound} wood · ${sv.totals.gearFound} pieces of clothing found`,
     `  Made          ${sv.totals.builds} built · ${sv.totals.clothes} clothes · ${sv.totals.meals} meals · ${sv.totals.bulletsMade} bullets`,
