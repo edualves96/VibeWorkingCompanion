@@ -200,6 +200,9 @@ const SEASON_ENEMY = 0.12;
 // last JOURNAL_SHOWN lines of all heroes together.
 const JOURNAL_SIZE = 100;
 const JOURNAL_SHOWN = 50;
+// The one thing the Survival game gives the heroes: reaching wave 30 there earns them this title
+// (the 'shelter-wave-30' achievement), shown on their cards and statistics. It changes no power.
+const SURVIVOR_TITLE = '🧟 Survivor';
 // The Trainer's critters (roster.js). WILD_SHARE of the normal spawns on his map are a wild critter
 // of the biome, alone; the rest are the usual enemies. Evolved forms spawn from zone
 // EVOLVED_FROM[stage] on, night critters by day only NIGHT_BY_DAY as often, and species not caught
@@ -229,6 +232,9 @@ const UPDATE_MSG_MS = 30000;      // the "updated" notice stays longer than othe
 const WHATS_NEW = {
   '1.3.0': 'enemies have life now, and every 5th level summons a boss',
   '1.4.0': `skills are random now, dropped by level bosses: ${COMMAND_PREFIX}skills`,
+  '1.31.0': root => (olderThan(root.seenVersion, '1.25.0')
+    ? `🏠 a second game: survive zombies with a shelter, ${COMMAND_PREFIX}game survival`
+    : `🏠 Survival: 🦹 raiders, a 🐫 trader, new zombies and tyrants, 🏹 more weapons, 🎃 seasons, and 🏅 Shelter achievements (${COMMAND_PREFIX}achievements)`),
   '1.30.0': root => (olderThan(root.seenVersion, '1.25.0')
     ? `🏠 a second game: survive zombies with a shelter, ${COMMAND_PREFIX}game survival`
     : '🧭 Survival: trips down the road to farms, gas stations, towns and army bases, and the window has depth now'),
@@ -385,6 +391,26 @@ const ACHIEVEMENT_GROUPS = {
   Seasons: [
     { id: 'trick-or-treat', name: 'Trick or Treat', what: 'eat 31 pieces of 🍬 candy at Halloween', of: 'candy', goal: 31 },
     { id: 'snowball-fight', name: 'Snowball Fight', what: 'defeat 100 ⛄ snowmen in December', of: 'snowmen', goal: 100 },
+  ],
+  // The Survival game's (survival.js), measured from its own save.
+  Shelter: [
+    { id: 'shelter-wave-10', name: 'Holding the Line', what: 'reach wave 10 in Survival', of: 'svWave', goal: 10 },
+    { id: 'shelter-wave-30', name: 'Survivor', what: `reach wave 30 in Survival (your heroes earn the title ${SURVIVOR_TITLE})`, of: 'svWave', goal: 30 },
+    { id: 'shelter-wave-50', name: 'Last One Standing', what: 'reach wave 50 in Survival', of: 'svWave', goal: 50 },
+    { id: 'shelter-tyrant', name: 'Tyrant Slayer', what: 'kill a tyrant, every 10th wave', of: 'svTyrants', goal: 1 },
+    { id: 'shelter-tyrants', name: 'Every Trick', what: 'kill all four kinds of tyrant', of: 'svTyrantKinds', goal: 4 },
+    { id: 'shelter-blueprints', name: 'Draftsman', what: 'find 15 blueprints', of: 'svBlueprints', goal: 15 },
+    { id: 'shelter-full-house', name: 'Full House', what: 'have 5 people living in the shelter', of: 'svPeople', goal: 5 },
+    { id: 'shelter-cellar', name: 'Down Below', what: 'build all 8 cellar rooms', of: 'svRooms', goal: 8 },
+    { id: 'shelter-helicopter', name: 'Air Support', what: 'craft the 🚁 helicopter', of: 'svHelicopter', goal: 1 },
+    { id: 'shelter-cure', name: 'Patient Zero', what: 'cure the outbreak', of: 'svCures', goal: 1 },
+    { id: 'shelter-raiders', name: 'Raider Hunter', what: 'kill 50 🦹 raiders', of: 'svRaiders', goal: 50 },
+    { id: 'shelter-trade', name: 'Fair Trade', what: 'trade with a passing 🐫 trader', of: 'svTrades', goal: 1 },
+    { id: 'shelter-island', name: 'Island Hopper', what: 'take the boat to an island', of: 'svIslands', goal: 1 },
+    { id: 'shelter-week', name: 'A Week Out There', what: 'go 7 days without a breach', of: 'svSafe', goal: 7 },
+    { id: 'shelter-blood-moon', name: 'Blood Moon', what: 'see a 🌕 blood moon rise over the shelter', of: 'svBloodMoons', goal: 1 },
+    { id: 'shelter-pumpkins', name: 'Pumpkin Smasher', what: 'kill 31 🎃 pumpkin heads in October', of: 'svPumpkins', goal: 31 },
+    { id: 'shelter-ashes', name: 'From the Ashes', what: 'rebuild the shelter after it falls', of: 'svFalls', goal: 1, secret: true },
   ],
   Work: [
     { id: 'clocked-in', name: 'Clocked In', what: 'work for 1 hour', of: 'workHours', goal: 1 },
@@ -1252,7 +1278,7 @@ function onStatusLine(data, now) {
     if (survival.isShown()) {
       root.lastTick = now;
       worked = anyActive(root, now);
-      survival.tick(worked, now, { drifters: fightingAllies(root, now).map(a => a.since), night: isNight(now), tokens: root.stats.tokens });
+      survival.tick(worked, now, { drifters: fightingAllies(root, now).map(a => a.since), night: isNight(now), tokens: root.stats.tokens, season: (season(now) || {}).name || null });
     } else {
       worked = settle(root, now) > 0;
     }
@@ -1555,7 +1581,8 @@ function achievementsReport(now) {
         lines.push(`  ⬜ ${padCols('???', 18)} a secret achievement`);
         continue;
       }
-      const when = got ? [got.at ? localDate(got.at) : '', got.cls && CLASSES[got.cls] ? CLASSES[got.cls].icon : ''].filter(Boolean).join(' ') : progressText(a, facts[a.of]);
+      const by = got && got.cls === 'survival' ? '🏠' : got && got.cls && CLASSES[got.cls] ? CLASSES[got.cls].icon : '';
+      const when = got ? [got.at ? localDate(got.at) : '', by].filter(Boolean).join(' ') : progressText(a, facts[a.of]);
       lines.push(`  ${got ? '✅' : '⬜'} ${padCols(a.name, 18)} ${padCols(a.what, 46)} ${when}`.trimEnd());
     }
   }
@@ -1642,7 +1669,7 @@ function statisticsReport(now) {
   if (root.stats.streak) {
     all.push(`${plural(currentStreak(root, now), 'day')} in a row (best ${root.stats.streak.best})`);
   }
-  lines.push('', `All heroes · ${all.join(' · ')}`, '',
+  lines.push('', `All heroes${titleText(root)} · ${all.join(' · ')}`, '',
     'Work time counts only while Claude works. A turn runs from your message to Claude\'s answer;',
     `${COMMAND_PREFIX} commands and turns stopped with Esc don't count.`);
   if (Object.values(root.heroes).some(h => h.tally.countedFrom)) {
@@ -1656,7 +1683,10 @@ function statisticsReport(now) {
 function cardReport(arg, now) {
   const root = loadSaved(now);
   const word = String(arg || '').trim().toLowerCase();
-  const usage = `Usage: ${COMMAND_PREFIX}card, ${COMMAND_PREFIX}card <${Object.keys(CLASSES).join(' | ')}> or ${COMMAND_PREFIX}card all`;
+  const usage = `Usage: ${COMMAND_PREFIX}card, ${COMMAND_PREFIX}card <${Object.keys(CLASSES).join(' | ')}>, ${COMMAND_PREFIX}card all or ${COMMAND_PREFIX}card survival`;
+  if (['survival', 'shelter'].includes(word)) {
+    return survivalCard(now);
+  }
   if (Object.keys(root.heroes).length === 0) {
     return `No heroes yet. Pick one with ${COMMAND_PREFIX}chooseclass.`;
   }
@@ -1681,7 +1711,7 @@ function heroCard(root, h) {
   const c = classOf(h);
   const t = h.tally;
   const w = weaponOf(h);
-  const title = `${c.icon} ${c.name} · Level ${h.level}`;
+  const title = `${c.icon} ${c.name} · Level ${h.level}${titleText(root)}`;
   const skills = h.skills.map(s => `${s.icon} ${s.name} (${s.rarity})`);
   const bosses = zoneOf(h.heroX) + t.minis + t.elders;
   const fights = [whereText(h), `💀 ${plural(h.kills, 'kill')}`, `🏆 ${plural(bosses, 'boss', 'bosses')}`];
@@ -1708,12 +1738,26 @@ function heroCard(root, h) {
     work.push(`${shortNumber(t.tokens)} tokens`);
   }
   work.push(`🏅 ${earnedCount(root)} of ${ACHIEVEMENTS.length} achievements`);
+  const lines = [[...(h.partner ? [partnerName(h)] : []), `${w.icon} ${weaponName(h)}`, ...skills].join(' · '), fights.join(' · '), gear, work.join(' · ')];
+  return framedCard(title, lines);
+}
+
+// A card's frame: the title on its top rule, the plugin and its link on the bottom one.
+function framedCard(title, lines) {
   const link = String(manifest().homepage || '').replace(/^https?:\/\//, '');
   const footer = ['VibeWorkCompanion', pluginVersion(), link && `· ${link}`].filter(Boolean).join(' ');
-  const lines = [[...(h.partner ? [partnerName(h)] : []), `${w.icon} ${weaponName(h)}`, ...skills].join(' · '), fights.join(' · '), gear, work.join(' · ')];
   const width = Math.max(displayWidth(title), displayWidth(footer)) + 6;
   const rule = text => `─ ${text} ${'─'.repeat(Math.max(3, width - displayWidth(text)))}`;
   return [`╭${rule(title)}`, ...lines.map(l => `│ ${l}`), `╰${rule(footer)}`].join('\n');
+}
+
+// /vwc:card survival: the shelter's card, with the Shelter achievements earned.
+function survivalCard(now) {
+  const root = loadSaved(now);
+  const { title, lines } = survival.cardLines(now);
+  const shelter = ACHIEVEMENT_GROUPS.Shelter;
+  const got = shelter.filter(a => root.achievements && root.achievements[a.id]).length;
+  return framedCard(title, [...lines, `🏅 ${got} of ${shelter.length} Shelter achievements`]);
 }
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -1729,11 +1773,15 @@ function localTime(at) {
 // JOURNAL_SHOWN lines.
 function journalReport(arg, now) {
   const root = loadSaved(now);
+  const words = String(arg || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+  // "survival" (or "shelter") is the Survival game's own journal.
+  if (words.some(w => w === 'survival' || w === 'shelter')) {
+    return survival.journalReport(words.includes('all'), now);
+  }
   if (Object.keys(root.heroes).length === 0) {
     return `No heroes yet. Pick one with ${COMMAND_PREFIX}chooseclass.`;
   }
-  const usage = `Usage: ${COMMAND_PREFIX}journal, ${COMMAND_PREFIX}journal <${Object.keys(CLASSES).join(' | ')}>, ${COMMAND_PREFIX}journal all, or a class and all`;
-  const words = String(arg || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const usage = `Usage: ${COMMAND_PREFIX}journal, ${COMMAND_PREFIX}journal <${Object.keys(CLASSES).join(' | ')}>, ${COMMAND_PREFIX}journal all, or a class and all; ${COMMAND_PREFIX}journal survival for the shelter's`;
   const unknown = words.find(w => w !== 'all' && !classKey(w));
   if (unknown) {
     return `"${unknown}" is not a class or "all". ${usage}`;
@@ -2488,7 +2536,13 @@ function achievementFacts(root, now, worked) {
     longestTurn: root.stats.longestTurn / 60000,
     night: worked && day.getHours() < 5 ? 1 : 0,
     weekend: worked && (day.getDay() === 0 || day.getDay() === 6) ? 1 : 0,
+    ...survival.facts(now),
   };
+}
+
+// The title the heroes earned in the Survival game, with a separator in front, or ''.
+function titleText(root) {
+  return root.achievements && root.achievements['shelter-wave-30'] ? ` · ${SURVIVOR_TITLE}` : '';
 }
 
 // Earns every achievement whose goal was reached and announces it on the stats row. A save from
@@ -2500,11 +2554,15 @@ function checkAchievements(root, now, worked = false) {
   const facts = achievementFacts(root, now, worked);
   const earned = ACHIEVEMENTS.filter(a => !root.achievements[a.id] && facts[a.of] >= a.goal);
   for (const a of earned) {
-    root.achievements[a.id] = quiet ? { at: null, cls: null } : { at: now, cls: root.active };
+    root.achievements[a.id] = quiet ? { at: null, cls: null } : { at: now, cls: a.group === 'Shelter' ? 'survival' : root.active };
   }
   const h = activeHero(root);
   if (quiet || earned.length === 0) {
     return [];
+  }
+  // With the Survival game on display, the news goes on its stats row and into its journal too.
+  if (survival.isShown()) {
+    survival.announce(`🏅 ${earned.length > 1 ? 'Achievements' : 'Achievement'}: ${earned.map(a => a.name).join(', ')}${earned.some(a => a.id === 'shelter-wave-30') ? ` · your heroes are ${SURVIVOR_TITLE}s now` : ''}`, now, MSG_MS, true);
   }
   if (h) {
     news(h, `🏅 ${earned.length > 1 ? 'Achievements' : 'Achievement'}: ${earned.map(a => a.name).join(', ')}`, now);
@@ -3254,8 +3312,8 @@ function color(code, text) {
 
 // Columns a string takes on screen. Every emoji used here is a double-width
 // Emoji_Presentation character, so this simple rule is exact for our output.
-// The ones below U+1F000: ⚡ ✨ ⏳ ⭐ ✅ ⬜ ⛄ ⚪ ⛺.
-const WIDE_BELOW_1F000 = new Set([0x26a1, 0x2728, 0x23f3, 0x2b50, 0x2705, 0x2b1c, 0x26c4, 0x26aa, 0x26fa]);
+// The ones below U+1F000: ⚡ ✨ ⏳ ⭐ ✅ ⬜ ⛄ ⚪ ⛺ ⛽.
+const WIDE_BELOW_1F000 = new Set([0x26a1, 0x2728, 0x23f3, 0x2b50, 0x2705, 0x2b1c, 0x26c4, 0x26aa, 0x26fa, 0x26fd]);
 
 function displayWidth(str) {
   let w = 0;

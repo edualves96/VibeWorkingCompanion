@@ -53,8 +53,8 @@ rest, drinks its potions and gets back up on its own.
   rank adding 2% damage, with no end.
 - **Work streaks:** days in a row with work count toward three achievements (5, 20 and 100 days).
   Missing a day just starts a new streak; nothing is taken away.
-- **75 achievements** for kills, groups, bosses, survival, levels, skills, gear, allies, catches, seasons and
-  hours of work, plus a couple of secret ones. 🏅 pops up on the stats row when you earn one.
+- **92 achievements** for kills, groups, bosses, survival, levels, skills, gear, allies, catches, seasons,
+  hours of work and the Survival game's shelter, plus a few secret ones. 🏅 pops up on the stats row when you earn one.
 - **Ten biomes,** each with its own floor, enemies and a boss every ~17 minutes of work:
   🌼 Meadow, 🌲 Dark Forest, 💎 Caves, 🌴 Coast, 🌵 Desert, 🪦 Graveyard, 🌋 Volcano, 🐸 Swamp,
   🧊 Tundra, 🌈 Sky Islands. After the Sky Islands the world loops back to the Meadow, "II", with
@@ -159,8 +159,8 @@ any other hero active, older windows work as before.
 | `/vwc:gear` | What every hero wears in each of the six gear slots, with each piece's rarity, power and stats, and what they add up to. |
 | `/vwc:achievements` | Every achievement: the ones you earned (with the date and the hero), and how close you are to the rest. |
 | `/vwc:statistics` | Each hero's work time, tokens, Claude turns (how many, the longest, shortest and average), XP, kills, bosses, finds and more, plus the totals of all heroes. See [Statistics](#statistics). |
-| `/vwc:card [class\|all]` | A short card of your hero (or another class's, or all of them) to paste in Slack or a pull request. See [Card](#card). |
-| `/vwc:journal [class] [all]` | What happened while you worked: level ups, new weapons and biomes, bosses, skills, gear, reforges, knockouts and achievements, by day and time. A class shows only that hero's, and `all` everything kept instead of the last 50 lines. See [Journal](#journal). |
+| `/vwc:card [class\|all\|survival]` | A short card of your hero (or another class's, or all of them, or the Survival game's shelter) to paste in Slack or a pull request. See [Card](#card). |
+| `/vwc:journal [class] [all]` | What happened while you worked: level ups, new weapons and biomes, bosses, skills, gear, reforges, knockouts and achievements, by day and time. A class shows only that hero's, `survival` the Survival game's shelter, and `all` everything kept instead of the last 50 lines. See [Journal](#journal). |
 | `/vwc:dex [all]` | The 🧢 Trainer's dex: how many of the 151 critters he has caught, by biome, at night and legendary, his partner, and the last ones new in the dex. `all` lists all 151: caught (and when), seen, or not met yet. |
 | `/vwc:stats <above\|below>` | Put the hero's stats row (level, XP, weapon, zone, kills) above the map, where it starts, or below it. With no argument it switches to the other place. The choice is remembered across restarts. |
 | `/vwc:showprogress <on\|off>` | `off` hides the hero's progress (the stats row with name, level, XP, weapon, zone and kills, and the 💗 life bar) so only the map is shown; `on` brings it back. With no argument it switches. Level-ups, loot and other news are shown on the stats row, so you won't see them while it's hidden. The choice is remembered across restarts. |
@@ -265,9 +265,27 @@ it takes one step per second of Claude's work.
   the shelter's tile means going inside, where nothing can reach him: when he is badly hurt he goes
   home and rests until he is better. The shelter grows with its walls (🏠 → 🏡 → 🏰 → 🏯) and gets
   a 🔥 cooking fire, a ⚡ generator, a 🚩 flag and a 🧪 lab as it develops.
-- **Zombies:** 🧟 walkers, 👹 brutes (from wave 2), 🐺 runners (wave 4), 🦠 spitters that attack the
-  walls from a distance (wave 8), and a 👺 tyrant every 10th wave, who drops better clothes. From
-  wave 3 a whole group may arrive at once ("a horde of 5 comes from the left").
+- **Zombies:** 🧟 walkers, 👹 brutes (from wave 2), 🐺 runners (wave 4), 😱 screamers (wave 6) that
+  call runners the first time they see him (so he and the turrets shoot them first), 🤮 bloaters
+  (wave 7) that burst when they die and hurt everything around them, zombies included, 🦠 spitters
+  that attack the walls from a distance (wave 8), and 🦏 juggernauts (wave 12) that break a
+  barricade in one blow. From wave 3 a whole group may arrive at once ("a horde of 5 comes from the
+  left"), or a swarm of 🐀 rats, many and weak.
+- **Tyrants.** Every 10th wave a tyrant comes, who drops better clothes, and they take turns, each
+  with its own trick: the 👺 tyrant, the 👸 screamer queen (calls runners in as she comes), the 🦣
+  behemoth (walks through barricades) and the 🐛 brood (splits into walkers when it dies).
+- **🦹 Raiders.** From wave 5, now and then a band of raiders comes instead of zombies. They shoot
+  from 3 tiles (at him and at the walls) and step around traps and spikes, but they drop bullets,
+  now and then a gun (the pistol or rifle blueprint, if he still needs it) and, rarely, Tactical
+  gear. They never take anything.
+- **🐫 A passing trader.** Every so often, by day, a trader stops on the strip for a few minutes.
+  When the survivor reaches the trader, a share of what he has most of is swapped for what he is
+  shortest of (wood for the walls, gas for the vehicles…), at fair rates and on its own. No shop,
+  no choices.
+- **🎃 Seasons.** The adventure's seasons reach the strip: in October 🎃 pumpkin-headed zombies
+  (good eating) and 🤡 clowns come, and pumpkins stand among the trees; in December ⛄ snow covers
+  the ground, the zombies wade through it a step slower, and the lakes freeze, so he fishes through
+  the ice (safe, and food) instead of diving.
 - **🌙 Nights.** Night follows the same clock as the adventure's (20:00 to 06:00): the ground
   darkens, more zombies come (runners from wave 2), and the turrets, drifters and lookout only see 5
   tiles unless the generator lights the strip. On the night of the full moon, worked out from the
@@ -293,21 +311,27 @@ it takes one step per second of Claude's work.
 - **He is an ordinary man.** He can nail boards together for the walls, but he has to find a 📜
   blueprint before he can build, craft or cook anything else. They turn up in crates and when he
   explores, once their time has come, and every find without one makes the next likelier to bring
-  one. There are sixteen: 🗼 Turrets, 🧵 Sewing, 🍳 Cooking, 🪓 Axe, 🔫 Pistol, 🧨 Bullets, 🧥 Leather,
-  🚧 Barricades, 🪤 Traps, 📌 Spikes, 🧰 Heavy turrets, ⚡ Generator, 🔭 Rifle, 🦺 Kevlar and, late on,
-  🚜 Tank and 🚁 Helicopter. Until he finds the
+  one. There are twenty-three: 🗼 Turrets, 🧵 Sewing, 🍳 Cooking, 🏏 Bat, 🪓 Axe, 🔪 Machete, 🏹 Bow,
+  🔫 Pistol, 🧨 Bullets, 🍾 Molotovs, 💣 Grenades, 🧥 Leather, 🚧 Barricades, 🪤 Traps, 📌 Spikes,
+  🧰 Heavy turrets, ⚡ Generator, 🔭 Rifle, 🦺 Kevlar, 🪚 Chainsaw and, late on, 🛻 Pickup, 🚜 Tank and
+  🚁 Helicopter. A weapon's blueprint turns up once he holds the rung below it. Until he finds the
   turret blueprint, the waves hold back and he fights with his fists.
 - **He explores.** Places turn up along the strip, and when he is healthy, the walls hold and
   nothing is near, he goes to look, at his own risk: a 🏢 abandoned building may hide an ambush, a
   🌊 lake can hurt him (or nearly drown him) but may hold finds, a ⛺ lost shelter is a safe stop
-  that heals him, and a 🚪 bunker is always guarded but holds the best loot, often a blueprint.
+  that heals him, a 🚪 bunker is always guarded but holds the best loot, often a blueprint, a 🏥
+  hospital has 💊 medkits (each cuts a rest short), a 🛒 supermarket food and cloth, a ⛽ gas station
+  gas and bottles, and 🗻 caves are rich in scrap but full of 🦇 bats, and now and then a passage
+  leads to a hidden bunker.
   The search takes a few seconds (🔍) and a bad one can leave him hurt, so he may rest after.
 - **🧭 Trips.** Once he has explored a few places and a turret guards the shelter, he sets out
   down the road past one end of the strip (🪧), by day, rested, with the walls nearly whole and
   nothing near them, at most every 4 minutes of work. He searches 2 to 4 places, each further out
-  than the last: a 🌾 farm (food and wood), a 🏪 gas station, a 🏬 town (people and books, and
-  ambushes) and, from wave 6, a 🪖 army base, guarded like a bunker but with the best finds. Their
-  finds grow with the waves. Zombies wait along the road and come at him once he is near, and
+  than the last: a 🌾 farm (food and wood), a ⛽ gas station (gas and bottles), a 🏬 town (people and
+  books, and ambushes), a 🚢 harbor (fish, and the first time a 🚤 boat that takes every trip on to a
+  🌴 island with rich finds) and, from wave 6, a 🪖 army base, guarded like a bunker but with the
+  best finds. Their finds grow with the waves, and on the way he siphons the gas left in the 🚗
+  cars by the road. Zombies wait along the road and come at him once he is near, and
   while he is away more of them come for the shelter, sometimes a whole horde, so the turrets have
   to hold on their own. He heads home once the places are searched, or sooner if he is hurt, night
   falls, a fight is too big, or the walls drop under half. While he is out, the map follows him past
@@ -324,11 +348,19 @@ it takes one step per second of Claude's work.
   game now and then, for food) and 📌 spikes beyond (every zombie that crosses them is hurt). He
   replaces what gets destroyed, with a pause between jobs. The 🪤 Trapping skill makes them last
   and hit harder. A fallen shelter loses its defenses.
-- **Weapons:** 👊 fists, a 🪓 axe (shelter level 3), a 🔫 pistol (level 5, reach 4 tiles), a 🔭
-  rifle (level 9, reach 6) and, near the endgame, a 🚜 tank (level 14, reach 8) and a 🚁 helicopter
-  (level 20, reach 10) that he rides on the map and whose shots hit the zombies around the target
-  too. Each needs its own blueprint. Guns need 🧨 bullets, which he makes from scrap (a vehicle uses
-  3 or 5 a shot); when they run out he goes back to the next weapon down until he has made more.
+- **Weapons:** 👊 fists, a 🏏 bat (shelter level 2), a 🪓 axe (3), a 🔪 machete (4), a 🏹 bow (5,
+  reach 3 tiles, shooting arrows he cuts from wood), a 🔫 pistol (6, reach 4), a 🔭 rifle (9, reach
+  6), a 🪚 chainsaw (12, for when the guns run dry) and, near the endgame, vehicles he rides on the
+  map: a 🛻 pickup (15) that rams the zombies and knocks them back, a 🚜 tank (19, reach 8) and a 🚁
+  helicopter (26, reach 10), whose shots hit the zombies around the target too. Each needs its own
+  blueprint. Guns need 🧨 bullets, which he makes from scrap (a vehicle uses 3 or 5 a shot), and
+  vehicles burn ⛽ gas, found at gas stations, in the cars by the road and in supply drops; when
+  something runs out he takes the next weapon down until he has more. A weapon that a save from
+  before 1.31.0 already had above its new level (a helicopter at shelter level 21, say) stays his,
+  parked until the shelter reaches its level.
+- **🍾 Molotovs and 💣 grenades.** With their blueprints he makes them (a bottle, some gas and a rag;
+  or scrap) and throws them on his own at groups of three or more: a molotov sets the ground on fire
+  for a few seconds, a grenade blasts everything within 2 tiles.
 - **Clothes:** four slots (🪖 helmet, 🦺 vest, 🧤 gloves, 🥾 boots). Zombies and the places he
   searches sometimes give a piece (better ones deeper into the waves), and with a sewing blueprint
   he makes his own from cloth and scrap: Cloth, then Leather and Kevlar with their blueprints. A
@@ -364,8 +396,10 @@ it takes one step per second of Claude's work.
   📖 Studying skill helps); otherwise he reads it again. What sinks in teaches him to build the
   rooms of a cellar, dug at shelter level 5: a 🌱 Greenhouse (1 book: food), a 🩺 Infirmary (2:
   faster rests, shorter knockouts), a 💣 Armory (3: half again as many bullets a batch), a 📻 Radio
-  room (3: a supply drop every 2 hours of work) and a 💪 Training room (4: he hits 10% harder), in
-  that order. He builds each one when he has the materials.
+  room (3: a supply drop every 2 hours of work), a 💪 Training room (4: he hits 10% harder), a 📚
+  Library (2: books sink in more often), a 💧 Water still (2: meals heal half again as much) and a
+  🚘 Garage (4: vehicles use a third fewer bullets and a quarter less gas), in that order. He builds
+  each one when he has the materials.
 - **🧪 The cure.** Once he flies the helicopter, brutes and spitters now and then carry a sample of
   the virus, a tyrant several, and a bunker may hold one. He builds a lab at the shelter, and it
   studies the samples one stage at a time, each one for good: 🧫 Antibodies (bites hurt him 15%
@@ -385,6 +419,11 @@ it takes one step per second of Claude's work.
   Turrets, blueprints, clothes, skills and levels are never lost.
 - `/vwc:shelter` shows the inside: what is built, what he is saving for, who lives there, the lab,
   what he wears, his blueprints and what he has learned. The save is its own file, `survival.json`.
+- **Journal, card and achievements.** `/vwc:journal survival` lists the shelter's moments by day
+  (blueprints, tyrants, falls and rebuilds, weapons, rooms, people, the cure and achievements),
+  `/vwc:card survival` shows the shelter as a card to share, and `/vwc:achievements` has a Shelter
+  group. Reaching wave 30 gives your adventure heroes the title 🧟 Survivor on their cards and
+  statistics; it changes nothing else.
 
 ### Survival window
 
@@ -683,7 +722,7 @@ update.
 
 ## Achievements
 
-75 achievements, shared by all your heroes. When you earn one, the stats row says
+92 achievements, shared by all your heroes. When you earn one, the stats row says
 `🏅 Achievement: Dragonslayer`. `/vwc:achievements` lists them all, with how close you are:
 
 ```
@@ -705,6 +744,7 @@ Combat
 | Gear | find a piece; fill all 6 slots; find an epic, and a legendary; salvage 100 pieces; reforge a piece, and 50 times; catch a treasure goblin, and 10 |
 | Collection | as the Trainer: catch a critter; have 25, 75 and 150 in the dex, and all 151 (a secret); see a catch evolve; catch a legendary; catch all 14 night critters; have 5 different partners |
 | Seasons | eat 31 pieces of Halloween candy; defeat 100 snowmen in December |
+| Shelter | in the Survival game: reach waves 10, 30 (your heroes earn the title 🧟 Survivor) and 50; kill a tyrant, and all four kinds; find 15 blueprints; 5 people living there; all 8 cellar rooms; craft the helicopter; cure the outbreak; kill 50 raiders; trade with a trader; reach an island; 7 days without a breach; see a blood moon; kill 31 pumpkin heads; a secret |
 | Work | 1, 8 and 40 hours of work; 1 million and 10 million tokens; one turn of 30 minutes; come back to a full hour of rested XP; make camp 10 times; work 5, 20 and 100 days in a row; two secrets |
 
 Kills, hours and other totals add up all your heroes, including ones replaced by
@@ -778,12 +818,15 @@ Friday 2026-10-02
 - **One hero, or everything:** `/vwc:journal archer` shows only that hero's moments, and
   `/vwc:journal all` everything kept instead of the last 50 lines. They go together too:
   `/vwc:journal archer all`.
+- **The shelter's:** `/vwc:journal survival` is the Survival game's own journal, kept the same
+  way: blueprints, tyrants, falls and rebuilds, weapons, rooms, people, the cure and the Shelter
+  achievements.
 
 ## Card
 
 `/vwc:card` shows the hero you're playing as a short card, ready to copy into Slack, a pull
-request or anywhere else. `/vwc:card mage` shows another class's hero, and `/vwc:card all` every
-hero you have:
+request or anywhere else. `/vwc:card mage` shows another class's hero, `/vwc:card all` every
+hero you have, and `/vwc:card survival` the Survival game's shelter:
 
 ```
 ╭─ 🧝 Archer · Level 22 ───────────────────────────────────────────────────────

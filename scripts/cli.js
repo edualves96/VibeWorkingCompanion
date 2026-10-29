@@ -11,8 +11,8 @@
 //   node cli.js --data <dir> gear                          every hero's gear, slot by slot
 //   node cli.js --data <dir> achievements                  every achievement, earned or with its progress
 //   node cli.js --data <dir> statistics                    every hero's work time, tokens, turns, kills and more
-//   node cli.js --data <dir> journal [class] [all]         notable moments by day: one hero's, or everything kept
-//   node cli.js --data <dir> card [class|all]              a card of a hero to paste in a chat or a PR
+//   node cli.js --data <dir> journal [class|survival] [all] notable moments by day: one hero's, the shelter's, or everything kept
+//   node cli.js --data <dir> card [class|all|survival]     a card of a hero (or the shelter) to paste in a chat or a PR
 //   node cli.js --data <dir> dex [all]                     the trainer's critters: by biome, the partner, the last ones; all 151
 //   node cli.js --data <dir> game [adventure|survival]     switch the game on display (no choice: switch)
 //   node cli.js --data <dir> shelter                       the survival game's shelter, inside
@@ -50,8 +50,8 @@ const COMMANDS = [
   ['gear', 'what your heroes wear in each of the 6 gear slots'],
   ['achievements', 'every achievement: the ones you earned, and how close you are to the rest'],
   ['statistics', 'each hero\'s work time, tokens, turns (longest, shortest, average), kills and more'],
-  ['journal [class] [all]', 'what happened while you worked; a class for one hero, all for everything kept'],
-  ['card [class|all]', 'a card of your hero to paste in Slack or a PR'],
+  ['journal [class] [all]', 'what happened while you worked; a class for one hero, survival for the shelter, all for everything kept'],
+  ['card [class|all]', 'a card of your hero (or survival, the shelter) to paste in Slack or a PR'],
   ['dex [all]', 'the trainer\'s critters: by biome, his partner and the last catches; all lists all 151'],
   ['game <adventure|survival>', 'switch the game on display; only that one advances (no choice: switch)'],
   ['shelter', "the survival game: the shelter's walls, turrets, scrap, weapon and waves"],
