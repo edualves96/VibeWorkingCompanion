@@ -21,6 +21,11 @@
 // much of for what he lacks. The adventure's seasons reach the strip, every tyrant has its own
 // trick, and the shelter keeps a journal (/vwc:journal survival) and a card (/vwc:card survival).
 //
+// Once the shelter is well established he puts what piles up to use: woodcutters cut wood for
+// food, steel plates let scrap stand in for wood in the walls, a trading post brings bigger
+// traders, and whatever is spare beyond the next walls goes to a workbench, patches for his
+// clothes, hired guards, feasts and, one building at a time, a town around the shelter.
+//
 // It has its own save (survival.json) and is chosen by a small `game` file, so it never touches
 // the heroes' save. Companion.js passes in the helpers it needs.
 
@@ -81,6 +86,7 @@ const BLUEPRINTS = {
   rifle: { icon: '🔭', name: 'Rifle', chance: 0.012, after: sv => sv.weapon >= 5 },
   kevlar: { icon: '🦺', name: 'Kevlar', chance: 0.012, after: sv => sv.blueprints.includes('leather') && sv.shelter.level >= 8 },
   generator: { icon: '⚡', name: 'Generator', chance: 0.02, after: sv => sv.turrets >= 2 && sv.shelter.level >= 4 },
+  steel: { icon: '🔩', name: 'Steel plates', chance: 0.015, after: sv => sv.shelter.level >= SURPLUS_LEVEL },
   chainsaw: { icon: '🪚', name: 'Chainsaw', chance: 0.012, after: sv => sv.weapon >= 6 && sv.shelter.level >= 11 },
   // The endgame: vehicles, found only once the shelter is well established and the rifle is in hand.
   pickup: { icon: '🛻', name: 'Pickup', chance: 0.008, after: sv => sv.weapon >= 7 && sv.shelter.level >= 14 },
@@ -196,7 +202,8 @@ const RAIDERS = { wave: 5, share: 0.2, size: [3, 5], ammo: [3, 8], gun: 0.1, tac
 const SWARM = { share: 0.2, size: [5, 8] };
 // A trader passes by every so often, by day: he stands on the strip for TRADER.stays steps, and
 // when the survivor reaches him swaps a share of what he has most of for what he lacks most, at
-// the VALUE of each (fair rates), up to TRADER.cap worth (more as the waves go on).
+// the VALUE of each (fair rates), up to TRADER.cap worth (more as the waves go on, and more with a
+// trading post, see POST).
 const TRADER = { every: 900, chance: 0.6, stays: 240, share: 0.25, cap: [60, 20] };
 const VALUE = { scrap: 1, wood: 1.5, cloth: 4, food: 3, gas: 6 };
 
@@ -218,8 +225,10 @@ const SKILLS = {
   studying: { icon: '📖', name: 'Studying', counter: 'reads', unit: 'books read through', tiers: [3, 10, 25], text: 'books sink in more often' },
 };
 
-const JOB_STEPS = { turret: 8, walls: 10, weapon: 6, ammo: 3, arrows: 2, molotov: 3, grenade: 3, clothes: 6, cook: 4, explore: 5, defense: 5, lab: 20, research: 12, generator: 10, room: 15 };
-const JOB_NAMES = { turret: 'turret', walls: 'walls', weapon: 'crafting', ammo: 'bullets', arrows: 'arrows', molotov: 'a molotov', grenade: 'a grenade', clothes: 'sewing', cook: 'cooking', explore: 'searching', defense: 'defenses', lab: 'the lab', research: 'research', generator: 'generator', room: 'a room' };
+const JOB_STEPS = { turret: 8, walls: 10, weapon: 6, ammo: 3, arrows: 2, molotov: 3, grenade: 3, clothes: 6, cook: 4, explore: 5, defense: 5, lab: 20, research: 12, generator: 10, room: 15,
+  lumber: 15, post: 15, town: 10, mod: 6, patch: 6, hire: 4, feast: 8 };
+const JOB_NAMES = { turret: 'turret', walls: 'walls', weapon: 'crafting', ammo: 'bullets', arrows: 'arrows', molotov: 'a molotov', grenade: 'a grenade', clothes: 'sewing', cook: 'cooking', explore: 'searching', defense: 'defenses', lab: 'the lab', research: 'research', generator: 'generator', room: 'a room',
+  lumber: 'the lumber camp', post: 'the trading post', town: 'the town', mod: 'the workbench', patch: 'patching', hire: 'hiring', feast: 'a feast' };
 
 // Places to explore. He goes when he is healthy and the shelter is quiet, and takes his chances:
 // a building may hide an ambush, a lake may nearly drown him, a bunker is always guarded but holds
@@ -365,6 +374,45 @@ const RADIO_EVERY = 7200;
 const BULLETS = { scrap: 10, made: 40, low: 10 };   // 10 scrap make 40 bullets, made when under 10 are left
 const MEAL = { food: 3, heal: 0.4, fed: 60, bonus: 0.15, below: 0.5 };   // 3 food make a meal
 
+// What piles up, put to use from SURPLUS_LEVEL. A lumber camp, built once, sends woodcutters out
+// every LUMBER.every steps while the walls want wood, paid `pay` food for each level of the shelter
+// (the crew grows with it), and they come back with `wood` for each food. Steel plates (a
+// blueprint) let scrap stand in for up to STEEL.share of the walls' wood, STEEL.rate scrap for
+// each, but only scrap he can spare once the town's next building is kept back. A trading post,
+// built once he has traded, brings the traders POST.often times as often, for as much longer, with
+// POST.cap times as much to swap.
+const SURPLUS_LEVEL = 15;
+const LUMBER = { scrap: 500, food: 100, every: 60, pay: 2, wood: 1.2 };
+const STEEL = { share: 0.5, rate: 3 };
+const POST = { scrap: 2000, cloth: 300, often: 2, cap: 2 };
+// The rest he only spends out of what is spare: what is left once the next walls, the next weapon,
+// the lab, the town's next building and KEEP are kept back (see reserve()). He spends it on the
+// cheapest of: a mod at the workbench for his weapons or the turrets (each MODS.step harder, and
+// MODS.grow times dearer than the last), a patch for his clothes once nothing better can be sewn
+// (PATCH.power more protection, up to PATCH.max), and another hired guard (up to GUARDS.max), who
+// shoots from the walls like a drifter as long as they are all paid GUARDS.pay food each every
+// GUARDS.every steps. When he can cook, a feast now and then: FEAST.food (more as the waves go
+// on) for FEAST.steps of everyone fighting FEAST.bonus harder.
+const KEEP = { scrap: 200, cloth: 50, food: 100 };
+const MODS = { scrap: 1000, grow: 1.5, step: 0.05 };
+const PATCH = { cloth: 150, grow: 1.3, power: 4, max: 0.65 };
+const GUARDS = { max: 2, fee: { food: 150, cloth: 40 }, pay: 4, every: 120 };
+const FEAST = { food: [200, 10], steps: 1800, bonus: 0.1 };
+// From TOWN_LEVEL he rebuilds the town around the shelter, one building at a time and in this
+// order: paid up front out of what is spare (the next one is kept back from everything else), then
+// raised by the settlers over `steps` while he goes on as before. Each helps for good, and the last
+// makes the shelter a haven.
+const TOWN_LEVEL = 20;
+const TOWN = [
+  { key: 'houses', icon: '🛖', name: 'Houses', scrap: 8000, cloth: 3000, food: 5000, steps: 1800, text: 'settlers join the woodcutters: half again as much wood' },
+  { key: 'factory', icon: '🏭', name: 'Factory', scrap: 15000, cloth: 4000, food: 6000, steps: 2700, text: 'the turrets hit 20% harder' },
+  { key: 'inn', icon: '🏨', name: 'Inn', scrap: 20000, cloth: 5000, food: 7000, steps: 3600, text: 'room for two more guards' },
+  { key: 'mast', icon: '📡', name: 'Radio mast', scrap: 25000, cloth: 6000, food: 8000, steps: 4500, text: 'a supply drop every hour' },
+  { key: 'fountain', icon: '⛲', name: 'Fountain', scrap: 40000, cloth: 8000, food: 10000, steps: 5400, text: 'clean water: he heals twice as fast' },
+  { key: 'fair', icon: '🎪', name: 'Fairground', scrap: 60000, cloth: 12000, food: 15000, steps: 7200, text: 'the town is alive again: everyone fights 10% harder' },
+];
+const MAST_EVERY = 3600;
+
 const ESC = '\x1b[';
 const RESET = `${ESC}0m`;
 const GOLD = '38;2;250;204;21';
@@ -401,6 +449,10 @@ function newSave(now) {
     // The season on the strip (the adventure's, see tick), and the shelter's journal of notable
     // moments ({ at, text }, the last JOURNAL_SIZE).
     season: null, journal: [],
+    // What the surplus built: the lumber camp and the trading post, the workbench's mods and the
+    // patches on his clothes, the guards hired (and whether they were paid last), the feast's steps
+    // left, the town's buildings paid for and the steps left on the last of them.
+    lumber: false, post: false, mods: { weapon: 0, turret: 0, patch: 0 }, guards: 0, paid: true, feast: 0, town: 0, townLeft: 0,
     totals: {
       scrapFound: 0, woodFound: 0, falls: 0, brutes: 0, bosses: 0, turretKills: 0, crates: 0, handKills: 0, builds: 0, waves: 0,
       knockouts: 0, rests: 0, retreats: 0, lessons: 0, defenses: 0, trapKills: 0, game: 0, sites: 0, dives: 0, hordes: 0, clothes: 0, meals: 0, bulletsMade: 0, gearFound: 0,
@@ -409,6 +461,7 @@ function newSave(now) {
       // Each kind of tyrant killed (`bosses` counts them all), and the rest since 1.31.0.
       tyrants: 0, queens: 0, behemoths: 0, broods: 0, screams: 0, bursts: 0, juggernauts: 0, rats: 0, raids: 0, raiders: 0,
       trades: 0, thrown: 0, thrownKills: 0, medkits: 0, gasFound: 0, fish: 0, pumpkins: 0, clowns: 0, swarms: 0, islands: 0,
+      woodCut: 0, feasts: 0,
     },
   };
 }
@@ -452,8 +505,10 @@ function researched(sv, n) {
   return sv.cures > 0 || sv.stage >= n;
 }
 
+// What makes everyone hit harder (him, the turrets, the drifters, the guards and the fence): the
+// cure and the Weak spot, a feast while it lasts, and the town's fairground.
 function strength(sv) {
-  return cureBonus(sv) * (researched(sv, 2) ? 1.15 : 1);
+  return cureBonus(sv) * (researched(sv, 2) ? 1.15 : 1) * (sv.feast > 0 ? 1 + FEAST.bonus : 1) * (townHas(sv, 'fair') ? 1.1 : 1);
 }
 
 // Samples only turn up once he flies the helicopter.
@@ -481,6 +536,20 @@ function beds(sv) {
 
 function hasRoom(sv, key) {
   return sv.rooms.includes(key);
+}
+
+// The town's buildings standing: those paid for, less the one the settlers are still raising.
+function townBuilt(sv) {
+  return sv.town - (sv.townLeft > 0 ? 1 : 0);
+}
+
+function townHas(sv, key) {
+  return TOWN.findIndex(b => b.key === key) < townBuilt(sv);
+}
+
+// The town's next building to pay for, once the town is open, or null.
+function nextTown(sv) {
+  return sv.shelter.level >= TOWN_LEVEL && sv.town < TOWN.length ? TOWN[sv.town] : null;
 }
 
 // The room he studies for now: the first in ROOMS he hasn't understood all the books for, or null.
@@ -528,7 +597,8 @@ function slotsAt(level) {
 
 function turretDamage(sv) {
   const heavy = knows(sv, 'heavy') ? 1.5 : 1;
-  return Math.round((2 + Math.floor(sv.shelter.level * 0.4)) * (1 + 0.2 * skillTier(sv, 'engineering')) * heavy * strength(sv));
+  const modded = (1 + MODS.step * sv.mods.turret) * (townHas(sv, 'factory') ? 1.2 : 1);
+  return Math.round((2 + Math.floor(sv.shelter.level * 0.4)) * (1 + 0.2 * skillTier(sv, 'engineering')) * heavy * modded * strength(sv));
 }
 
 // The bullets a shot of `w` takes: a vehicle's are fewer with the garage.
@@ -583,7 +653,8 @@ function heroDamage(sv, w = weaponInHand(sv)) {
   const gun = w.ammo ? 1 + 0.1 * skillTier(sv, 'gunsmithing') : 1;
   const fed = sv.fed > 0 ? 1 + MEAL.bonus : 1;
   const trained = hasRoom(sv, 'training') ? 1.1 : 1;
-  return Math.round((w.damage + Math.floor(sv.shelter.level * 0.8)) * (1 + 0.2 * skillTier(sv, 'combat')) * gun * fed * trained * strength(sv));
+  const modded = 1 + MODS.step * sv.mods.weapon;
+  return Math.round((w.damage + Math.floor(sv.shelter.level * 0.8)) * (1 + 0.2 * skillTier(sv, 'combat')) * gun * fed * trained * modded * strength(sv));
 }
 
 function turretCost(built) {
@@ -626,6 +697,17 @@ function wallCost(level) {
   return Math.round(20 * level ** 2);   // wood, and half as much scrap
 }
 
+// What the next walls take of wood and scrap. With steel plates, scrap stands in for the wood he
+// lacks, up to STEEL.share of it.
+function wallBill(sv) {
+  const wood = wallCost(sv.shelter.level);
+  if (!knows(sv, 'steel')) {
+    return { wood, scrap: wood / 2 };
+  }
+  const used = Math.max(Math.ceil(wood * (1 - STEEL.share)), Math.min(wood, sv.wood));
+  return { wood: used, scrap: wood / 2 + STEEL.rate * (wood - used) };
+}
+
 function heroMax(sv) {
   return HERO_LIFE[0] + HERO_LIFE[1] * sv.shelter.level;
 }
@@ -661,10 +743,10 @@ function gearName(item) {
   return `${GEAR_TIERS[item.tier]} ${slot.name}`;
 }
 
-// The share of each bite his clothes stop.
+// The share of each bite his clothes stop. Patches add to it, and let it go past the usual most.
 function armor(sv) {
-  const power = GEAR_SLOTS.reduce((sum, s) => sum + gearPower(sv.gear[s.key]), 0);
-  return Math.min(ARMOR_MAX, power / (power + ARMOR_SCALE));
+  const power = GEAR_SLOTS.reduce((sum, s) => sum + gearPower(sv.gear[s.key]), 0) + PATCH.power * sv.mods.patch;
+  return Math.min(sv.mods.patch ? PATCH.max : ARMOR_MAX, power / (power + ARMOR_SCALE));
 }
 
 // The share of each bite that still hurts him: what his clothes let through, less the lab's
@@ -746,6 +828,13 @@ function nextBuild(sv) {
   if (clothes && sv.cloth >= clothes.cloth && sv.scrap >= clothes.scrap) {
     return { ...none, kind: 'clothes', cloth: clothes.cloth, scrap: clothes.scrap, data: clothes };
   }
+  // The lumber camp and the trading post are cheap, and built as soon as he can pay for them.
+  if (sv.shelter.level >= SURPLUS_LEVEL && !sv.lumber && sv.scrap >= LUMBER.scrap && sv.food >= LUMBER.food) {
+    return { ...none, kind: 'lumber', scrap: LUMBER.scrap, food: LUMBER.food };
+  }
+  if (sv.shelter.level >= SURPLUS_LEVEL && !sv.post && sv.totals.trades > 0 && sv.scrap >= POST.scrap && sv.cloth >= POST.cloth) {
+    return { ...none, kind: 'post', scrap: POST.scrap, cloth: POST.cloth };
+  }
   if (sv.turrets < slotsAt(sv.shelter.level) && knows(sv, 'turret')) {
     return sv.scrap >= turretCost(sv.turrets) ? { ...none, kind: 'turret', scrap: turretCost(sv.turrets) } : null;
   }
@@ -772,8 +861,109 @@ function nextBuild(sv) {
   if (stage && sv.samples >= stage.samples) {
     return sv.scrap >= stage.scrap ? { ...none, kind: 'research', scrap: stage.scrap } : null;
   }
+  // Walls of wood come first; with steel plates in them, they wait for the surplus (see surplus()).
   const walls = wallCost(sv.shelter.level);
-  return sv.wood >= walls && sv.scrap >= walls / 2 ? { ...none, kind: 'walls', scrap: walls / 2, wood: walls } : null;
+  if (sv.wood >= walls && sv.scrap >= walls / 2) {
+    return { ...none, kind: 'walls', scrap: walls / 2, wood: walls };
+  }
+  return surplus(sv);
+}
+
+// ---------- the surplus ----------
+
+function lumberPay(sv) {
+  return LUMBER.pay * sv.shelter.level;
+}
+
+function lumberWood(sv) {
+  return Math.round(lumberPay(sv) * LUMBER.wood * (townHas(sv, 'houses') ? 1.5 : 1));
+}
+
+function modCost(n) {
+  return Math.round(MODS.scrap * MODS.grow ** n);
+}
+
+function patchCost(n) {
+  return Math.round(PATCH.cloth * PATCH.grow ** n);
+}
+
+function feastCost(sv) {
+  return FEAST.food[0] + FEAST.food[1] * sv.wave;
+}
+
+function guardMax(sv) {
+  return GUARDS.max + (townHas(sv, 'inn') ? 2 : 0);
+}
+
+function guardsOnDuty(sv) {
+  return sv.paid ? sv.guards : 0;
+}
+
+// He patches his clothes once he sews, wears something in every slot and can't sew anything better.
+function canPatch(sv) {
+  return knows(sv, 'sewing') && GEAR_SLOTS.every(s => sv.gear[s.key]) && !nextClothes(sv);
+}
+
+// What he keeps back from the surplus: what the next walls take, the next weapon once he can craft
+// it, the lab and its research when they are due, the town's next building, and KEEP.
+function reserve(sv) {
+  const walls = wallBill(sv);
+  const keep = { scrap: walls.scrap + KEEP.scrap, cloth: KEEP.cloth, food: KEEP.food };
+  const w = WEAPONS[sv.weapon + 1];
+  if (w && sv.shelter.level >= w.level && knows(sv, w.blueprint)) {
+    keep.scrap += w.cost;
+  }
+  if (flying(sv) && !sv.lab) {
+    keep.scrap += LAB.scrap;
+  } else if (sv.lab && sv.samples >= nextStage(sv).samples) {
+    keep.scrap += nextStage(sv).scrap;
+  }
+  const town = nextTown(sv);
+  if (town) {
+    for (const key of ['scrap', 'cloth', 'food']) {
+      keep[key] += town[key];
+    }
+  }
+  return keep;
+}
+
+// What is spare of each material, beyond reserve().
+function spare(sv) {
+  const keep = reserve(sv);
+  return Object.fromEntries(['scrap', 'cloth', 'food'].map(k => [k, sv[k] - keep[k]]));
+}
+
+// What he spends the surplus on, in this order: the town's next building (there is no starting it
+// while the settlers raise the last), walls with steel plates in them, a feast when there is none,
+// or else the cheapest of the workbench's mods, a patch and another guard.
+function surplus(sv) {
+  if (sv.shelter.level < SURPLUS_LEVEL) {
+    return null;
+  }
+  const none = { scrap: 0, wood: 0, cloth: 0, food: 0 };
+  const left = spare(sv);
+  const town = nextTown(sv);
+  const walls = wallBill(sv);
+  // What is kept back already holds the town's building and the walls' plates, so the building can
+  // take the plates' scrap, and the plated walls can be built once nothing more is spare.
+  const plates = walls.scrap - wallCost(sv.shelter.level) / 2;
+  if (town && sv.townLeft === 0 && left.scrap + plates >= 0 && left.cloth >= 0 && left.food >= 0) {
+    return { ...none, kind: 'town', scrap: town.scrap, cloth: town.cloth, food: town.food };
+  }
+  if (plates > 0 && sv.wood >= walls.wood && left.scrap >= 0) {
+    return { ...none, kind: 'walls', scrap: walls.scrap, wood: walls.wood };
+  }
+  if (knows(sv, 'cooking') && sv.feast <= 0 && left.food >= feastCost(sv)) {
+    return { ...none, kind: 'feast', food: feastCost(sv) };
+  }
+  const options = [
+    { ...none, kind: 'mod', scrap: modCost(sv.mods.weapon), data: { track: 'weapon' } },
+    sv.turrets ? { ...none, kind: 'mod', scrap: modCost(sv.mods.turret), data: { track: 'turret' } } : null,
+    canPatch(sv) ? { ...none, kind: 'patch', cloth: patchCost(sv.mods.patch) } : null,
+    sv.guards < guardMax(sv) && sv.paid ? { ...none, kind: 'hire', ...GUARDS.fee } : null,
+  ].filter(o => o && ['scrap', 'cloth', 'food'].every(k => o[k] <= left[k]));
+  const worth = o => o.scrap * VALUE.scrap + o.cloth * VALUE.cloth + o.food * VALUE.food;
+  return options.reduce((a, b) => (!a || worth(b) < worth(a) ? b : a), null);
 }
 
 // What he is saving up for, for the stats and the shelter report.
@@ -805,7 +995,8 @@ function goalText(sv) {
     return `${nextStage(sv).icon} ${nextStage(sv).name} ${nextStage(sv).scrap} 🔩`;
   }
   const waiting = parked(sv);
-  return `🧱 walls ${wallCost(sv.shelter.level)} 🪵 + ${wallCost(sv.shelter.level) / 2} 🔩${waiting ? ` (${waiting.icon} at Lv ${waiting.level})` : ''}`;
+  const walls = wallBill(sv);
+  return `🧱 walls ${walls.wood} 🪵 + ${walls.scrap} 🔩${waiting ? ` (${waiting.icon} at Lv ${waiting.level})` : ''}`;
 }
 
 // ---------- which game is on display, and the save ----------
@@ -863,6 +1054,7 @@ function load(now) {
     }
   }
   sv.gear = { ...sv.gear };
+  sv.mods = { ...fresh.mods, ...sv.mods };
   sv.understood = { ...sv.understood };
   sv.learned = { ...sv.learned };
   for (const key of Object.keys(SKILLS)) {
@@ -1134,10 +1326,36 @@ function finishJob(sv, now) {
     explore(sv, data, now);
     return;
   }
-  if (kind === 'turret' || kind === 'walls' || kind === 'weapon' || kind === 'lab' || kind === 'generator' || kind === 'room') {
+  if (['turret', 'walls', 'weapon', 'lab', 'generator', 'room', 'lumber', 'post', 'town', 'mod'].includes(kind)) {
     sv.totals.builds++;
   }
-  if (kind === 'room') {
+  if (kind === 'lumber') {
+    sv.lumber = true;
+    news(sv, '🪓 A lumber camp is built: woodcutters cut wood for food', now);
+  } else if (kind === 'post') {
+    sv.post = true;
+    news(sv, '🏪 A trading post is built: traders come twice as often, with twice as much to swap', now);
+  } else if (kind === 'town') {
+    const b = TOWN[sv.town];
+    sv.town++;
+    sv.townLeft = b.steps;
+    news(sv, `${b.icon} The settlers start on the ${b.name.toLowerCase()}`, now);
+  } else if (kind === 'mod') {
+    const n = ++sv.mods[data.track];
+    say(sv, data.track === 'weapon' ? `🪛 Workbench: his weapons +${n}, ${Math.round(MODS.step * 100 * n)}% harder`
+      : `🪛 Workbench: the turrets are Mk ${n}, ${Math.round(MODS.step * 100 * n)}% harder`, now);
+  } else if (kind === 'patch') {
+    sv.mods.patch++;
+    say(sv, `🪡 Patched his clothes: they stop ${Math.round(armor(sv) * 100)}% of every bite`, now);
+  } else if (kind === 'hire') {
+    sv.guards++;
+    sv.paid = true;
+    news(sv, `💂 A guard is hired for the walls (${sv.guards}/${guardMax(sv)}), paid in food`, now);
+  } else if (kind === 'feast') {
+    sv.feast = FEAST.steps;
+    sv.totals.feasts++;
+    say(sv, `🍗 A feast at the shelter: everyone fights ${Math.round(FEAST.bonus * 100)}% harder for ${FEAST.steps / 60} min`, now);
+  } else if (kind === 'room') {
     const r = ROOMS[data.key];
     sv.rooms.push(data.key);
     sv.totals.roomsBuilt++;
@@ -1324,10 +1542,15 @@ function addGas(sv, n) {
 }
 
 // What he has of a material against what he wants of it: the next walls' wood and scrap, some
-// cloth and food, and gas once he drives.
+// cloth and food (more food once woodcutters work for it), the cloth and food the town's next
+// building takes, and gas once he drives.
 function wants(sv) {
   const walls = wallCost(sv.shelter.level);
-  return { scrap: walls / 2, wood: walls, cloth: 40, food: 30, ...(driving(sv) ? { gas: 60 } : {}) };
+  const town = nextTown(sv) || { cloth: 0, food: 0 };
+  return {
+    scrap: walls / 2, wood: walls, cloth: 40 + town.cloth, food: 30 + (sv.lumber ? 10 * lumberPay(sv) : 0) + town.food,
+    ...(driving(sv) ? { gas: 60 } : {}),
+  };
 }
 
 // The trader swaps a share of what the survivor has most of (against what he wants of it) for
@@ -1338,7 +1561,7 @@ function trade(sv, now) {
   const share = k => sv[k] / want[k];
   const give = keys.reduce((a, b) => (share(b) > share(a) ? b : a));
   const get = keys.reduce((a, b) => (share(b) < share(a) ? b : a));
-  const cap = TRADER.cap[0] + TRADER.cap[1] * sv.wave;
+  const cap = (TRADER.cap[0] + TRADER.cap[1] * sv.wave) * (sv.post ? POST.cap : 1);
   const worth = Math.min(sv[give] * TRADER.share * VALUE[give], cap, Math.max(0, want[get] - sv[get]) * VALUE[get]);
   const paid = Math.ceil(worth / VALUE[give]);
   const got = Math.floor(worth / VALUE[get]);
@@ -1559,9 +1782,9 @@ function fightEstimate(sv, group, from) {
   return { ok: taken * bias < sv.hp * RISK, hold, taken: Math.round(taken), weapon: first, steps };
 }
 
-// What the shelter shoots every step: the turrets, the drifters on the walls and the lookout.
+// What the shelter shoots every step: the turrets, the drifters and guards on the walls and the lookout.
 function shelterFire(sv) {
-  return sv.turrets * turretDamage(sv) + sv.drifters.length * drifterDamage(sv) + (hasRole(sv, 'lookout') ? turretDamage(sv) : 0);
+  return sv.turrets * turretDamage(sv) + (sv.drifters.length + guardsOnDuty(sv)) * drifterDamage(sv) + (hasRole(sv, 'lookout') ? turretDamage(sv) : 0);
 }
 
 function startJob(sv, build) {
@@ -2005,6 +2228,9 @@ function step(sv, now) {
   if (sv.fed > 0) {
     sv.fed--;
   }
+  if (sv.feast > 0) {
+    sv.feast--;
+  }
   if (sv.grace > 0) {
     sv.grace--;
   }
@@ -2041,12 +2267,14 @@ function step(sv, now) {
   if (sv.crates.filter(c => c.kind !== 'trader').length < MAX_CRATES && sv.step % CRATE_EVERY === 0) {
     sv.crates.push(newCrate(sv));
   }
-  // A trader comes by now and then, by day, and moves on if the survivor doesn't reach him.
+  // A trader comes by now and then, by day, and moves on if the survivor doesn't reach him. With
+  // a trading post they come more often and stay longer.
   if (sv.step >= sv.traderAt) {
-    sv.traderAt = sv.step + TRADER.every;
+    const often = sv.post ? POST.often : 1;
+    sv.traderAt = sv.step + TRADER.every / often;
     if (!sv.night && Math.random() < TRADER.chance) {
       const side = Math.random() < 0.5 ? -1 : 1;
-      sv.crates.push({ x: side * randInt(3, RADIUS - 1), kind: 'trader', until: sv.step + TRADER.stays });
+      sv.crates.push({ x: side * randInt(3, RADIUS - 1), kind: 'trader', until: sv.step + TRADER.stays * often });
       say(sv, '🐫 A trader comes down the road', now);
     }
   }
@@ -2083,24 +2311,56 @@ function step(sv, now) {
   if (hasRole(sv, 'scavenger') && sv.step % RUN_EVERY === 0) {
     scavengerRun(sv, now);
   }
-  // And so do the rooms in the cellar.
+  // And so do the rooms in the cellar, and the radio mast.
   if (hasRoom(sv, 'greenhouse') && sv.step % GREENHOUSE.every === 0) {
     sv.food += GREENHOUSE.food;
   }
-  if (hasRoom(sv, 'radio') && sv.step % RADIO_EVERY === 0) {
+  if (townHas(sv, 'mast') ? sv.step % MAST_EVERY === 0 : hasRoom(sv, 'radio') && sv.step % RADIO_EVERY === 0) {
     landDrop(sv);
-    say(sv, '📻 The radio calls in a supply drop', now);
+    say(sv, townHas(sv, 'mast') ? '📡 The radio mast calls in a supply drop' : '📻 The radio calls in a supply drop', now);
+  }
+  // The woodcutters go out from their camp while the walls want wood, if there is food to pay them
+  // and still some left in the pantry after.
+  if (sv.lumber && sv.step % LUMBER.every === 0 && sv.wood < wallCost(sv.shelter.level) && sv.food >= lumberPay(sv) + KEEP.food) {
+    const pay = lumberPay(sv);
+    const wood = lumberWood(sv);
+    sv.food -= pay;
+    sv.wood += wood;
+    sv.totals.woodFound += wood;
+    sv.totals.woodCut += wood;
+    say(sv, `🪓 The woodcutters bring ${wood} wood, for ${pay} food`, now);
+  }
+  // The guards are paid now and then; without the food for all of them, they stay home until there is.
+  if (sv.guards && sv.step % GUARDS.every === 0) {
+    const pay = GUARDS.pay * sv.guards;
+    const paid = sv.food >= pay;
+    if (paid) {
+      sv.food -= pay;
+    }
+    if (paid !== sv.paid) {
+      say(sv, paid ? '💂 The guards are paid and back on the walls' : '💂 No food to pay the guards: they stay home', now);
+    }
+    sv.paid = paid;
+  }
+  // The settlers raise the town's next building, while he goes on as before.
+  if (sv.townLeft > 0) {
+    sv.townLeft--;
+    if (sv.townLeft === 0) {
+      const b = TOWN[sv.town - 1];
+      news(sv, sv.town === TOWN.length ? `${b.icon} The ${b.name.toLowerCase()} opens: the town is alive again, and the shelter is a haven`
+        : `${b.icon} The ${b.name.toLowerCase()} ${b.key === 'houses' ? 'are' : 'is'} built: ${b.text}`, now);
+    }
   }
 
-  // The turrets he has built guard the shelter on their own, and so do the drifters on the walls
-  // and the lookout on the roof (in the dark, only as far as the lights let them see).
+  // The turrets he has built guard the shelter on their own, and so do the drifters and the guards
+  // on the walls and the lookout on the roof (in the dark, only as far as the lights let them see).
   for (let t = 0; t < sv.turrets; t++) {
     const z = target(sv, 0, sees(sv, TURRET_RANGE));
     if (z) {
       hitZombie(sv, z, turretDamage(sv), 'turret', hits, now);
     }
   }
-  for (let d = 0; d < sv.drifters.length; d++) {
+  for (let d = 0; d < sv.drifters.length + guardsOnDuty(sv); d++) {
     const z = nearest(sv.zombies, 0, sees(sv, DRIFTER_RANGE));
     if (z) {
       hitZombie(sv, z, drifterDamage(sv), 'ally', hits, now);
@@ -2133,7 +2393,7 @@ function step(sv, now) {
       sv.doing = 'rest';
       say(sv, '💊 Patched up with a medkit: the rest is cut short', now);
     } else {
-      sv.hp = Math.min(heroMax(sv), sv.hp + (hasRole(sv, 'medic') ? 6 : 3) + (hasRoom(sv, 'infirmary') ? 2 : 0));
+      sv.hp = Math.min(heroMax(sv), sv.hp + ((hasRole(sv, 'medic') ? 6 : 3) + (hasRoom(sv, 'infirmary') ? 2 : 0)) * (townHas(sv, 'fountain') ? 2 : 1));
       sv.doing = 'rest';
       indoor(sv, now);
     }
@@ -2332,7 +2592,7 @@ function step(sv, now) {
   } else {
     eat(sv, now);
     if (sv.step % Math.max(1, HERO_REGEN_EVERY - (aid >= 2 ? 1 : 0)) === 0) {
-      sv.hp = Math.min(heroMax(sv), sv.hp + 1 + (aid >= 1 ? 1 : 0) + (aid >= 3 ? 1 : 0));
+      sv.hp = Math.min(heroMax(sv), sv.hp + (1 + (aid >= 1 ? 1 : 0) + (aid >= 3 ? 1 : 0)) * (townHas(sv, 'fountain') ? 2 : 1));
     }
   }
   if (sv.shelter.hp <= 0) {
@@ -2469,6 +2729,16 @@ function tripText(sv) {
   return `🧭 ${where}${out > 0 ? `, ${out} tile${out === 1 ? '' : 's'} out` : ''}`;
 }
 
+// The town on the stats row: the building going up and how far along it is, or how many stand.
+function townText(sv) {
+  const built = townBuilt(sv);
+  if (sv.townLeft > 0) {
+    const b = TOWN[sv.town - 1];
+    return `${b.icon} ${Math.floor((1 - sv.townLeft / b.steps) * 100)}%`;
+  }
+  return built === TOWN.length ? '🌆 haven' : built ? `🌆 ${built}/${TOWN.length}` : null;
+}
+
 // What he does while he rests inside, for the stats row.
 function restText(sv) {
   return sv.doing === 'study' ? `📖 reading ${Math.round((sv.reading / READ_STEPS) * 100)}%`
@@ -2507,23 +2777,26 @@ function statParts(sv, ctx) {
     [days, 4.4],
     [ctx.night ? (bloodMoon(ctx.now) ? color(RED, '🌕 blood moon') : '🌙 night') : null, 3.9],
     [sv.season === 'Halloween' ? '🎃' : sv.season === 'Winter' ? '⛄' : null, 2.1],
-    [`🧑 ${w.icon} ${w.name}${load ? ` ${load}` : ''}`, 4],
+    [`🧑 ${w.icon} ${w.name}${sv.mods.weapon ? ` +${sv.mods.weapon}` : ''}${load ? ` ${load}` : ''}`, 4],
     [throws || null, 2.9],
     [sv.medkits ? `💊 ${sv.medkits}` : null, 2.7],
     [stock, 5],
     [sv.job ? `${sv.job.kind === 'explore' ? '🔍' : '🔨'} ${JOB_NAMES[sv.job.kind]} ${sv.job.left}` : sv.mode ? (sv.x === 0 ? '🧱 holed up' : '🏃 falling back')
       : sv.trip && sv.x !== 0 ? tripText(sv)
         : sv.x === 0 && (sv.resting || sv.doing === 'study') ? restText(sv) : `🎯 ${goalText(sv)}`, 3],
-    [`🗼 ${sv.turrets}/${slotsAt(lvl)}`, 4.2],
+    [`🗼 ${sv.turrets}/${slotsAt(lvl)}${sv.mods.turret ? ` Mk ${sv.mods.turret}` : ''}`, 4.2],
+    [townText(sv), 3.3],
     [sv.generator ? (fuel > 0 ? `⚡ ${fuel}%` : color('2', '⚡ 0%')) : null, 3.7],
     // While he is away, the map follows him, so this tells of the zombies at the walls.
     [sv.trip && atWalls ? color(RED, `🧟 ${atWalls} at the walls`) : null, 5.2],
     [sv.drifters.length ? `🤠 ${sv.drifters.length}` : null, 3.8],
+    [sv.guards ? (sv.paid ? `💂 ${sv.guards}` : color('2', `💂 ${sv.guards}`)) : null, 3.75],
     [sv.residents.length ? `👷 ${sv.residents.length}${sv.dog ? ' 🐕' : ''}` : sv.dog ? '🐕' : null, 3.2],
     [flying(sv) || sv.lab ? `🧪 ${sv.samples}` : null, 3.4],
     [sv.defenses.length ? `🚧 ${sv.defenses.length}` : null, 3.6],
     [guard ? `🧥 ${guard}%` : null, 3.5],
     [sv.meals || sv.fed ? `🍲 ${sv.meals}${sv.fed ? ' 😋' : ''}` : null, 2.8],
+    [sv.feast > 0 ? `🍗 ${Math.ceil(sv.feast / 60)} min` : null, 2.6],
     [waveText(sv), 4.5],
     [`💀 ${sv.kills}`, 2],
   ].filter(p => p[0]);
@@ -2715,6 +2988,14 @@ function windowView(sv, ctx) {
       reading: sv.reading / READ_STEPS,
       books: sv.books,
     },
+    // What the surplus built around the shelter: the town's buildings standing, the one going up
+    // and how far along it is, and the guards on the walls.
+    town: {
+      built: TOWN.slice(0, townBuilt(sv)).map(b => b.key),
+      building: sv.townLeft > 0 ? TOWN[sv.town - 1].key : null,
+      progress: sv.townLeft > 0 ? 1 - sv.townLeft / TOWN[sv.town - 1].steps : 1,
+    },
+    guards: guardsOnDuty(sv),
   };
 }
 
@@ -2804,6 +3085,49 @@ function labLines(sv) {
   ];
 }
 
+// What he does with what piles up: the woodcutters, the steel plates, the trading post, and what
+// he spends the surplus on.
+function surplusLines(sv) {
+  if (sv.shelter.level < SURPLUS_LEVEL) {
+    return [`  Surplus       from shelter Lv ${SURPLUS_LEVEL} he puts what piles up to use: woodcutters, steel plates, a trading post, a workbench, patches, guards and feasts, and from Lv ${TOWN_LEVEL} a town`];
+  }
+  const left = spare(sv);
+  const m = sv.mods;
+  const pct = n => `${Math.round(MODS.step * 100 * n)}%`;
+  const cheaper = sv.turrets && m.turret < m.weapon ? m.turret : m.weapon;
+  return [
+    `  Woodcutters   ${sv.lumber ? `🪓 every ${LUMBER.every / 60} min of work, ${lumberWood(sv)} wood for ${lumberPay(sv)} food, while the walls want wood · ${sv.totals.woodCut} cut`
+      : `🪓 a lumber camp (${LUMBER.scrap} scrap, ${LUMBER.food} food) puts woodcutters to work for food`}`,
+    `  Steel plates  ${knows(sv, 'steel') ? `🔩 scrap stands in for up to ${Math.round(STEEL.share * 100)}% of the walls' wood, ${STEEL.rate} for each, once the town's next building is kept back`
+      : '📜 a blueprint for them would let scrap stand in for wood in the walls'}`,
+    `  Trading post  ${sv.post ? '🏪 traders come twice as often, stay twice as long and bring twice as much to swap'
+      : sv.totals.trades ? `🏪 to build for ${POST.scrap} scrap, ${POST.cloth} cloth` : '🏪 once he has traded with a passing 🐫 trader'} · ${sv.totals.trades} trades`,
+    `  Spare         🔩 ${Math.max(0, left.scrap)} scrap · 🧵 ${Math.max(0, left.cloth)} cloth · 🥩 ${Math.max(0, left.food)} food: what is left once the next walls${nextTown(sv) ? ', the town\'s next building' : ''} and a little of everything are kept back`,
+    `  Workbench     🪛 his weapons +${m.weapon} (${pct(m.weapon)} harder) · 🗼 turrets Mk ${m.turret} (${pct(m.turret)} harder) · the next mod for ${modCost(cheaper)} spare scrap`,
+    `  Patches       🪡 ${m.patch ? `${m.patch} on his clothes (+${PATCH.power * m.patch} power, up to ${Math.round(PATCH.max * 100)}% protection)` : 'none yet'} · ${canPatch(sv) ? `the next for ${patchCost(m.patch)} spare cloth` : 'once nothing better can be sewn'}`,
+    `  Guards        💂 ${sv.guards}/${guardMax(sv)} hired${sv.guards ? (sv.paid ? ', on the walls' : ', at home until there is food to pay them') : ''} · each shoots like a drifter (${drifterDamage(sv)} damage) for ${GUARDS.pay} food every ${GUARDS.every / 60} min · hired for ${GUARDS.fee.food} food and ${GUARDS.fee.cloth} cloth`,
+    `  Feasts        🍗 ${!knows(sv, 'cooking') ? 'once he can cook' : sv.feast > 0 ? `feasting for ${Math.ceil(sv.feast / 60)} more min: everyone fights ${Math.round(FEAST.bonus * 100)}% harder`
+      : `the next for ${feastCost(sv)} spare food: everyone fights ${Math.round(FEAST.bonus * 100)}% harder for ${FEAST.steps / 60} min`} · ${sv.totals.feasts} held`,
+    ...townLines(sv),
+  ];
+}
+
+function townLines(sv) {
+  if (sv.shelter.level < TOWN_LEVEL && !sv.town) {
+    return [`  Town          🌆 from shelter Lv ${TOWN_LEVEL} he rebuilds the town around the shelter, one building at a time`];
+  }
+  const built = townBuilt(sv);
+  const raising = sv.townLeft > 0 ? TOWN[sv.town - 1] : null;
+  const next = nextTown(sv);
+  const head = built === TOWN.length ? '🌆 the town is alive again: the shelter is a haven'
+    : `🌆 ${built}/${TOWN.length} built${raising ? ` · the settlers are raising the ${raising.name.toLowerCase()}: ${Math.floor((1 - sv.townLeft / raising.steps) * 100)}%, ${Math.ceil(sv.townLeft / 60)} min of work left` : ''}`
+      + (next ? ` · next: ${next.icon} ${next.name} for ${next.scrap} scrap, ${next.cloth} cloth, ${next.food} food` : '');
+  return [
+    `  Town          ${head}`,
+    ...TOWN.map((b, i) => `    ${b.icon} ${b.name}: ${b.text} (${i < built ? 'built' : i < sv.town ? 'going up' : `${Math.round(b.steps / 60)} min to raise`})`),
+  ];
+}
+
 // When the next blood moon rises: 'now', 'tonight', 'tomorrow night' or a date.
 function nextBloodMoon(sv, now) {
   if (sv.night && sv.blood) {
@@ -2836,9 +3160,9 @@ function nightLines(sv, now) {
 
 // What would let a held wave go on: stronger walls, or another turret while a slot is free.
 function heldBy(sv) {
-  const walls = wallCost(sv.shelter.level);
+  const walls = wallBill(sv);
   const turret = sv.turrets < slotsAt(sv.shelter.level) && knows(sv, 'turret') ? 'another turret, or ' : '';
-  return `${turret}walls Lv ${sv.shelter.level + 1} (${walls} wood, ${walls / 2} scrap; he has ${sv.wood} wood)`;
+  return `${turret}walls Lv ${sv.shelter.level + 1} (${walls.wood} wood, ${walls.scrap} scrap${knows(sv, 'steel') ? ' with steel plates' : ''}; he has ${sv.wood} wood)`;
 }
 
 // The trip he is on, or what the next one waits for.
@@ -2878,6 +3202,7 @@ function shelterReport(now) {
     ...peopleLines(sv),
     ...insideLines(sv),
     ...labLines(sv),
+    ...surplusLines(sv),
     '',
     `  Survivor      🧑 ${w.icon} ${w.name}${w.ammo ? ` (${sv.ammo} bullets)` : ''}${w.arrows ? ` (${sv.arrows} arrows)` : ''} · ${heroDamage(sv)} damage · reach ${w.range} · life ${sv.hp}/${heroMax(sv)}`,
     `  Next weapon   ${parked(sv) ? `${parked(sv).icon} ${parked(sv).name}: his, but parked until shelter Lv ${parked(sv).level}`
@@ -2926,6 +3251,8 @@ function facts(now) {
     svFalls: sv.totals.falls,
     svPumpkins: sv.totals.pumpkins,
     svIslands: sv.totals.islands,
+    svTown: townBuilt(sv),
+    svWoodCut: sv.totals.woodCut,
   };
 }
 
@@ -2945,7 +3272,7 @@ function localTime(at) {
 // shows everything kept instead of the last JOURNAL_SHOWN.
 function journalReport(all, now) {
   const sv = load(now);
-  const what = 'Blueprints, tyrants, falls and rebuilds, weapons, rooms, people, the cure and achievements';
+  const what = 'Blueprints, tyrants, falls and rebuilds, weapons, rooms, people, the town, the cure and achievements';
   if (!sv.journal.length) {
     return `📜 Journal · 🏠 Survival · nothing written yet\n\n${what} are written down as they happen.`;
   }
@@ -2972,7 +3299,9 @@ function cardLines(now) {
   const sv = load(now);
   const w = weaponInHand(sv);
   const n = x => x.toLocaleString('en-US');
-  const people = [sv.residents.length ? `👷 ${sv.residents.length} living there` : null, sv.dog ? `🐕 ${sv.dog.name}` : null, `🗼 ${sv.turrets} turrets`, sv.rooms.length ? `🪜 ${sv.rooms.length}/${Object.keys(ROOMS).length} cellar rooms` : null];
+  const built = townBuilt(sv);
+  const people = [sv.residents.length ? `👷 ${sv.residents.length} living there` : null, sv.dog ? `🐕 ${sv.dog.name}` : null, `🗼 ${sv.turrets} turrets`, sv.rooms.length ? `🪜 ${sv.rooms.length}/${Object.keys(ROOMS).length} cellar rooms` : null,
+    built === TOWN.length ? '🌆 a haven' : built ? `🌆 ${built}/${TOWN.length} of the town` : null];
   return {
     title: `${shelterIcon(sv.shelter.level)} Shelter · Lv ${sv.shelter.level} · 🧟 Wave ${sv.wave}`,
     lines: [
@@ -2989,4 +3318,5 @@ module.exports = {
   windowLine, windowView, facts, journalReport, cardLines,
   BLUEPRINTS, shelterMax, slotsAt, turretDamage, turretCost, wallCost, heroMax, waveNeed, skillTier, armor,
   WEAPONS, ZOMBIES, SKILLS, GEAR_SLOTS, RADIUS, fightEstimate, ROLES, CURE, ROOMS, TYRANTS, weaponInHand,
+  TOWN,
 };

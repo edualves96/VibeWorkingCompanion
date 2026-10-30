@@ -14,7 +14,10 @@ hospital, caves, a supermarket, a harbor with a boat and an island), raiders, a 
 screamers, bloaters, juggernauts and rat swarms, four tyrants that take turns, three more cellar
 rooms, more rungs on the ladder (bat, machete, bow, chainsaw, pickup) with gas for the vehicles,
 molotovs and grenades, the Shelter achievements, `/vwc:journal survival`, `/vwc:card survival`
-and the 🧟 Survivor title for the heroes at wave 30.
+and the 🧟 Survivor title for the heroes at wave 30. 1.32.0 put the late game's surplus to use, all
+of it spent on its own: woodcutters paid in food, steel plates (scrap for wood in the walls), a
+trading post, the workbench's mods, patches for his clothes, hired guards, feasts and a town of six
+buildings rebuilt around the shelter.
 
 ## Rules every idea has to follow
 

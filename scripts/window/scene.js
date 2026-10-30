@@ -746,7 +746,169 @@ const DECOR = {
     rect(x - 1, LANE - 17, 2, 4, '#7dff9a');
     rect(x - 2, LANE - 14, 4, 1, '#7dff9a');
   },
+  // The woodcutters' camp: a lean-to, a stack of logs and the block they split them on.
+  lumber: x => {
+    rect(x - 13, LANE - 9, 9, 9, '#5a3a1a');
+    for (let row = 0; row < 4; row++) rect(x - 14 + row, LANE - 10 - row, 11 - row, 1, '#6b4423');
+    rect(x - 12, LANE - 7, 7, 7, '#2e2116');
+    for (const [dx, dy] of [[-2, -3], [1, -3], [4, -3], [-1, -6], [2, -6], [1, -9]]) {
+      rect(x + dx, LANE + dy, 3, 3, '#8b5a2b');
+      rect(x + dx + 1, LANE + dy + 1, 1, 1, '#c8a070');
+    }
+    rect(x + 9, LANE - 3, 4, 3, '#734a22');
+    rect(x + 9, LANE - 4, 4, 1, '#c8a070');
+    rect(x + 11, LANE - 9, 1, 5, '#6b4423');
+    rect(x + 10, LANE - 9, 3, 2, '#9a9aa2');
+  },
+  // The trading post: a stall under a striped awning, with goods on the counter and a crate by it.
+  post: x => {
+    rect(x - 11, LANE - 17, 1, 17, '#6b4423');
+    rect(x + 10, LANE - 17, 1, 17, '#6b4423');
+    for (let i = 0; i < 24; i += 4) rect(x - 12 + i, LANE - 19, 4, 3, i % 8 ? '#e8e2d0' : '#c0392b');
+    for (let i = 0; i < 24; i += 4) rect(x - 11 + i, LANE - 16, 2, 1, i % 8 ? '#e8e2d0' : '#c0392b');
+    rect(x - 10, LANE - 6, 20, 6, '#9a6a3c');
+    rect(x - 10, LANE - 6, 20, 1, '#b8844f');
+    rect(x - 8, LANE - 8, 3, 2, '#c0504d');
+    rect(x - 3, LANE - 8, 4, 2, '#6a5acd');
+    rect(x + 3, LANE - 9, 3, 3, '#6e6e74');
+    rect(x + 12, LANE - 4, 5, 4, '#9a6a3c');
+    rect(x + 12, LANE - 4, 5, 1, '#b8844f');
+  },
 };
+
+// The town he rebuilds behind the strip (survival.js's TOWN), each at its tile, TOWN_Z rows back
+// and `depth` deep. What moves on them (smoke, water, a light, the wheel) is in TOWN_LIFE.
+const TOWN_Z = 19;
+const TOWN_SPOTS = { houses: [-4.5, 6], factory: [5.5, 6], inn: [-10, 6], mast: [3.5, 2], fountain: [-7, 4], fair: [9, 3] };
+const TOWN_ART = {
+  houses: x => {
+    for (const [dx, h] of [[-11, 8], [11, 7], [0, 10]]) {
+      rect(x + dx - 5, LANE - h, 11, h, '#a07850');
+      for (let i = 0; i < 11; i += 3) rect(x + dx - 5 + i, LANE - h, 1, h, '#8a6440');
+      for (let row = 0; row < 5; row++) rect(x + dx - 7 + row, LANE - h - 1 - row, 15 - row * 2, 1, row % 2 ? '#c8a050' : '#a8843a');
+      rect(x + dx - 1, LANE - 5, 3, 5, '#4a3020');
+    }
+  },
+  factory: x => {
+    rect(x - 14, LANE - 15, 28, 15, '#8a4a3a');
+    for (let y = 3; y < 15; y += 4) rect(x - 14, LANE - 15 + y, 28, 1, '#7a3e30');
+    for (let i = 0; i < 3; i++) {
+      for (let row = 0; row < 5; row++) rect(x - 14 + i * 9 + row, LANE - 20 + row, 9 - row, 1, row ? '#7d7d84' : '#9a9aa2');
+    }
+    rect(x + 7, LANE - 30, 4, 15, '#7a3e30');
+    rect(x + 6, LANE - 31, 6, 1, '#5a2e24');
+    for (const wx of [-11, -5]) rect(x + wx, LANE - 11, 4, 4, '#e8c060');
+    rect(x + 2, LANE - 9, 7, 9, '#4a3a2a');
+  },
+  inn: x => {
+    rect(x - 12, LANE - 21, 24, 21, '#d8c8a0');
+    rect(x - 12, LANE - 11, 24, 1, '#5a3a1a');
+    for (const vx of [-12, -4, 3, 11]) rect(x + vx, LANE - 21, 1, 21, '#5a3a1a');
+    for (let row = 0; row < 7; row++) rect(x - 14 + row, LANE - 22 - row, 28 - row * 2, 1, row % 3 ? '#8c3b2b' : '#7a3224');
+    for (const [wx, wy] of [[-9, -18], [-1, -18], [6, -18], [-9, -8], [6, -8]]) rect(x + wx, LANE + wy, 3, 4, '#e8c060');
+    rect(x - 2, LANE - 8, 4, 8, '#4a2e16');
+    rect(x + 12, LANE - 16, 5, 1, '#5a3a1a');
+    rect(x + 13, LANE - 15, 4, 4, '#c0392b');
+    rect(x + 14, LANE - 14, 2, 2, '#ffd23f');
+  },
+  mast: x => {
+    for (let row = 0; row < 40; row++) {
+      const half = Math.max(1, Math.round(5 - row / 9));
+      rect(x - half, LANE - 1 - row, 1, 1, '#9a9aa2');
+      rect(x + half, LANE - 1 - row, 1, 1, '#9a9aa2');
+      if (row % 5 === 0) rect(x - half, LANE - 1 - row, half * 2 + 1, 1, '#85858d');
+    }
+    rect(x - 5, LANE - 30, 3, 4, '#e8e8e0');
+    rect(x - 4, LANE - 29, 1, 2, '#c8c8c0');
+    rect(x - 13, LANE - 7, 7, 7, '#6e6a66');
+    rect(x - 11, LANE - 4, 2, 4, '#2a2a30');
+  },
+  fountain: x => {
+    rect(x - 11, LANE - 5, 22, 5, '#a8a8b0');
+    rect(x - 11, LANE - 6, 22, 1, '#c8c8d0');
+    rect(x - 9, LANE - 5, 18, 1, '#4f8ac0');
+    rect(x - 1, LANE - 13, 3, 8, '#b8b8c0');
+    rect(x - 5, LANE - 14, 11, 2, '#c8c8d0');
+    rect(x - 3, LANE - 14, 7, 1, '#4f8ac0');
+  },
+  // A striped tent, and the big wheel's legs and hub (the wheel itself turns, see TOWN_LIFE).
+  fair: x => {
+    for (let row = 0; row < 10; row++) {
+      const half = Math.round(row * 0.9);
+      for (let i = -half; i <= half; i++) rect(x - 12 + i, LANE - 11 + row, 1, 1, Math.floor((i + 20) / 2) % 2 ? '#e8e2d0' : '#c0392b');
+    }
+    rect(x - 12, LANE - 14, 1, 3, '#5a3a1a');
+    rect(x - 11, LANE - 14, 3, 2, '#ffd23f');
+    rect(x - 13, LANE - 4, 3, 4, '#3a2614');
+    for (let i = 0; i < 20; i++) {
+      rect(x + 4 - Math.round(i / 3), LANE - 20 + i, 1, 1, '#7d8590');
+      rect(x + 4 + Math.round(i / 3), LANE - 20 + i, 1, 1, '#7d8590');
+    }
+    rect(x + 3, LANE - 21, 3, 3, '#5d646e');
+  },
+};
+
+// What moves on the town's buildings, drawn over each with its base's middle at (x, y).
+const TOWN_LIFE = {
+  factory: (x, y) => smoke(x + 8, y - 32),
+  // A red light blinking on top of the mast.
+  mast: (x, y) => {
+    if (Math.sin(clock * 3) > 0) {
+      rect(x, y - 41, 1, 1, '#ff4040');
+      g.globalAlpha = 0.35;
+      rect(x - 1, y - 42, 3, 3, '#ff4040');
+      g.globalAlpha = 1;
+    }
+  },
+  // Water arcing out of the top bowl into the basin; in December it is frozen.
+  fountain: (x, y) => {
+    if (winter()) {
+      return;
+    }
+    for (let i = 0; i < 8; i++) {
+      const t = (clock * 0.8 + i / 8) % 1;
+      const side = i % 2 ? 1 : -1;
+      rect(x + side * (2 + t * 7), y - 15 - Math.sin(t * Math.PI) * 3 + t * 9, 1, 1, '#9fd3e6');
+    }
+  },
+  // The big wheel, slowly turning, its cars in four colours.
+  fair: (x, y) => {
+    const cx = x + 4;
+    const cy = y - 20;
+    const r = 13;
+    for (let a = 0; a < 6.28; a += 0.1) rect(cx + Math.cos(a) * r, cy + Math.sin(a) * r, 1, 1, '#c8c8d0');
+    const turn = clock * 0.25;
+    for (let k = 0; k < 8; k++) {
+      const a = turn + (k * Math.PI) / 4;
+      for (let d = 2; d < r; d += 2) rect(cx + Math.cos(a) * d, cy + Math.sin(a) * d, 1, 1, '#9a9aa2');
+      rect(cx + Math.cos(a) * r - 1, cy + Math.sin(a) * r, 3, 2, ['#c0392b', '#2f6fbf', '#ffd23f', '#4f8a3e'][k % 4]);
+    }
+  },
+};
+
+// Scaffolding around a town building going up: `up` of its `h` rows are built so far.
+function scaffolding(x, y, h, up) {
+  const top = Math.min(h + 2, up + 5);
+  for (const dx of [-15, -5, 5, 15]) rect(x + dx, y - top, 1, top, '#8b5a2b');
+  for (let row = 5; row <= top; row += 6) rect(x - 15, y - row, 31, 1, '#a8743d');
+  sparks(x + Math.round(Math.sin(clock) * 8), y - up);
+}
+
+// While a feast lasts, a string of little flags hangs between the walls, over the shelter's door.
+function bunting(x1, x2, y) {
+  const colors = ['#c0392b', '#ffd23f', '#2f6fbf', '#4f8a3e'];
+  for (let x = Math.round(x1); x <= x2; x++) {
+    const t = (x - x1) / (x2 - x1);
+    const sag = Math.round(Math.sin(t * Math.PI) * 5);
+    rect(x, y + sag, 1, 1, '#5a3a1a');
+    const i = Math.round(x - x1);
+    if (i % 5 === 2) {
+      const c = colors[Math.floor(i / 5) % colors.length];
+      rect(x - 1, y + sag + 1, 3, 1, c);
+      rect(x, y + sag + 2, 1, 1, c);
+    }
+  }
+}
 
 function campfire(x, y) {
   rect(x - 3, y - 1, 7, 1, '#5a3a1a');
@@ -942,6 +1104,42 @@ function scenery(sv) {
     const side = sv.trip ? sv.trip.side : 1;
     flat(BACK, () => boat(at(sx(side * (radius + 2)), BACK), LANE - BACK + 1));
   }
+  // What the surplus built: the woodcutters' camp and the trading post by the ends of the strip,
+  // and further back the town, its building going up rising out of scaffolding (a server from
+  // before 1.32.0 sends no town).
+  if (sv.lumber) {
+    block('lumber', DECOR.lumber, sx(-radius - 1.5), 13, 4);
+  }
+  if (sv.post) {
+    block('post', DECOR.post, sx(radius + 1.5), 13, 4);
+  }
+  const town = view.town || { built: [], building: null };
+  for (const key of [...town.built, town.building]) {
+    if (!TOWN_ART[key]) {
+      continue;
+    }
+    const [tile, depth] = TOWN_SPOTS[key];
+    if (key !== town.building) {
+      block(`town:${key}`, TOWN_ART[key], sx(tile), TOWN_Z, depth, TOWN_LIFE[key]);
+      continue;
+    }
+    const s = solid(`town:${key}`, TOWN_ART[key]);
+    const bx = at(sx(tile), TOWN_Z);
+    const by = LANE - TOWN_Z;
+    const up = Math.max(2, Math.round(s.h * town.progress));
+    items.push({
+      z: TOWN_Z + depth,
+      draw: () => {
+        g.save();
+        g.beginPath();
+        g.rect(bx - SW / 2 - depth, by - up - depth, SW + 2 * depth, up + depth + 1);
+        g.clip();
+        extrude(s, bx, by, depth);
+        g.restore();
+        scaffolding(bx, by, s.h, up);
+      },
+    });
+  }
   // The patches still burning where a molotov landed.
   for (const f of sv.fires || []) {
     flat(0.5, () => {
@@ -999,10 +1197,23 @@ function scenery(sv) {
     }
     if (level >= 3) {
       for (const tile of [-view.layout.wall, view.layout.wall]) {
-        // The walls run across the lane, with the drifters standing on their front ends.
+        // The walls run across the lane, with the drifters standing on their front ends and the
+        // hired guards, taking turns between the two walls, further back along their tops.
         const drifter = view.layout.drifters.includes(tile);
+        const guards = Array.from({ length: view.guards || 0 }, (_, i) => i).filter(i => (i % 2 ? -1 : 1) * view.layout.wall === tile).length;
         block(`wall:${level >= 7}`, x0 => paintWall(x0, level), sx(tile), -2, 6,
-          drifter ? (x, y) => blit(g, SPRITES.drifter(), x, y - 9, tile < 0) : null);
+          drifter || guards ? (x, y) => {
+            for (let n = guards - 1; n >= 0; n--) {
+              const back = 3 + 2 * n;
+              blit(g, SPRITES.guard(), x + Math.round((W / 2 - x) * LEAN * back) + (tile < 0 ? -2 : 2) * n, y - 12 - back, tile < 0);
+            }
+            if (drifter) {
+              blit(g, SPRITES.drifter(), x, y - 9, tile < 0);
+            }
+          } : null);
+      }
+      if (sv.feast > 0) {
+        flat(-2.5, () => bunting(at(sx(-view.layout.wall), -2), at(sx(view.layout.wall), -2), LANE - 12));
       }
     }
   }
@@ -1718,7 +1929,7 @@ function scaffold(b) {
 // The room for what he is doing inside (one this window knows how to draw).
 function roomFor(doing, inside) {
   const has = key => inside.rooms.includes(key) || inside.built.includes(key);
-  if ((doing === 'cook' || doing === 'eat') && has('kitchen')) return 'kitchen';
+  if ((doing === 'cook' || doing === 'eat' || doing === 'feast') && has('kitchen')) return 'kitchen';
   if (doing === 'study' && has('library')) return 'library';
   if (doing === 'study' && has('study')) return 'study';
   if (doing === 'organize') return 'storage';

@@ -232,6 +232,9 @@ const UPDATE_MSG_MS = 30000;      // the "updated" notice stays longer than othe
 const WHATS_NEW = {
   '1.3.0': 'enemies have life now, and every 5th level summons a boss',
   '1.4.0': `skills are random now, dropped by level bosses: ${COMMAND_PREFIX}skills`,
+  '1.32.0': root => (olderThan(root.seenVersion, '1.25.0')
+    ? `🏠 a second game: survive zombies with a shelter, ${COMMAND_PREFIX}game survival`
+    : `🏠 Survival puts what piles up to use: 🪓 woodcutters, 🔩 steel plates, a 🏪 trading post, a 🪛 workbench, 💂 guards, 🍗 feasts and a 🌆 town to rebuild (${COMMAND_PREFIX}shelter)`),
   '1.31.0': root => (olderThan(root.seenVersion, '1.25.0')
     ? `🏠 a second game: survive zombies with a shelter, ${COMMAND_PREFIX}game survival`
     : `🏠 Survival: 🦹 raiders, a 🐫 trader, new zombies and tyrants, 🏹 more weapons, 🎃 seasons, and 🏅 Shelter achievements (${COMMAND_PREFIX}achievements)`),
@@ -407,6 +410,8 @@ const ACHIEVEMENT_GROUPS = {
     { id: 'shelter-raiders', name: 'Raider Hunter', what: 'kill 50 🦹 raiders', of: 'svRaiders', goal: 50 },
     { id: 'shelter-trade', name: 'Fair Trade', what: 'trade with a passing 🐫 trader', of: 'svTrades', goal: 1 },
     { id: 'shelter-island', name: 'Island Hopper', what: 'take the boat to an island', of: 'svIslands', goal: 1 },
+    { id: 'shelter-timber', name: 'Timber!', what: 'have the 🪓 woodcutters cut 10,000 wood', of: 'svWoodCut', goal: 10000 },
+    { id: 'shelter-haven', name: 'Haven', what: 'rebuild all 6 buildings of the 🌆 town', of: 'svTown', goal: 6 },
     { id: 'shelter-week', name: 'A Week Out There', what: 'go 7 days without a breach', of: 'svSafe', goal: 7 },
     { id: 'shelter-blood-moon', name: 'Blood Moon', what: 'see a 🌕 blood moon rise over the shelter', of: 'svBloodMoons', goal: 1 },
     { id: 'shelter-pumpkins', name: 'Pumpkin Smasher', what: 'kill 31 🎃 pumpkin heads in October', of: 'svPumpkins', goal: 31 },
@@ -3313,7 +3318,7 @@ function color(code, text) {
 // Columns a string takes on screen. Every emoji used here is a double-width
 // Emoji_Presentation character, so this simple rule is exact for our output.
 // The ones below U+1F000: ⚡ ✨ ⏳ ⭐ ✅ ⬜ ⛄ ⚪ ⛺ ⛽.
-const WIDE_BELOW_1F000 = new Set([0x26a1, 0x2728, 0x23f3, 0x2b50, 0x2705, 0x2b1c, 0x26c4, 0x26aa, 0x26fa, 0x26fd]);
+const WIDE_BELOW_1F000 = new Set([0x26a1, 0x2728, 0x23f3, 0x2b50, 0x2705, 0x2b1c, 0x26c4, 0x26aa, 0x26fa, 0x26fd, 0x26f2]);
 
 function displayWidth(str) {
   let w = 0;

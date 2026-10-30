@@ -1,6 +1,6 @@
 ---
 name: shelter
-description: Show the inside of the Survival game's shelter in VibeWorkCompanion (days, generator, walls, turrets, scrap, weapon, people, lab, waves).
+description: Show the inside of the Survival game's shelter in VibeWorkCompanion (days, generator, walls, turrets, scrap, weapon, people, lab, surplus, town, waves).
 disable-model-invocation: true
 model: haiku
 effort: low

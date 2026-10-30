@@ -53,7 +53,7 @@ rest, drinks its potions and gets back up on its own.
   rank adding 2% damage, with no end.
 - **Work streaks:** days in a row with work count toward three achievements (5, 20 and 100 days).
   Missing a day just starts a new streak; nothing is taken away.
-- **92 achievements** for kills, groups, bosses, survival, levels, skills, gear, allies, catches, seasons,
+- **94 achievements** for kills, groups, bosses, survival, levels, skills, gear, allies, catches, seasons,
   hours of work and the Survival game's shelter, plus a few secret ones. 🏅 pops up on the stats row when you earn one.
 - **Ten biomes,** each with its own floor, enemies and a boss every ~17 minutes of work:
   🌼 Meadow, 🌲 Dark Forest, 💎 Caves, 🌴 Coast, 🌵 Desert, 🪦 Graveyard, 🌋 Volcano, 🐸 Swamp,
@@ -165,7 +165,7 @@ any other hero active, older windows work as before.
 | `/vwc:stats <above\|below>` | Put the hero's stats row (level, XP, weapon, zone, kills) above the map, where it starts, or below it. With no argument it switches to the other place. The choice is remembered across restarts. |
 | `/vwc:showprogress <on\|off>` | `off` hides the hero's progress (the stats row with name, level, XP, weapon, zone and kills, and the 💗 life bar) so only the map is shown; `on` brings it back. With no argument it switches. Level-ups, loot and other news are shown on the stats row, so you won't see them while it's hidden. The choice is remembered across restarts. |
 | `/vwc:game <adventure\|survival>` | Switch the game on display. Only the one on display advances, so the other waits where it was. With no argument it switches. See [Survival](#survival). |
-| `/vwc:shelter` | The inside of the Survival game's shelter: the day count, the next blood moon, the generator, walls, turrets, scrap, weapon, the people living there, the rooms and books, the lab, waves and totals. |
+| `/vwc:shelter` | The inside of the Survival game's shelter: the day count, the next blood moon, the generator, walls, turrets, scrap, weapon, the people living there, the rooms and books, the lab, what he does with his surplus, the town, waves and totals. |
 | `/vwc:window <true\|false>` | `true` opens the Survival game in a pixel-art window of its own, and the status line shows a single line; `false` brings it back to the status line. With no argument it switches. See [Survival window](#survival-window). |
 | `/vwc:commands` | List every command, your heroes, how many achievements you have, and what is currently shown or hidden. |
 
@@ -311,10 +311,10 @@ it takes one step per second of Claude's work.
 - **He is an ordinary man.** He can nail boards together for the walls, but he has to find a 📜
   blueprint before he can build, craft or cook anything else. They turn up in crates and when he
   explores, once their time has come, and every find without one makes the next likelier to bring
-  one. There are twenty-three: 🗼 Turrets, 🧵 Sewing, 🍳 Cooking, 🏏 Bat, 🪓 Axe, 🔪 Machete, 🏹 Bow,
+  one. There are twenty-four: 🗼 Turrets, 🧵 Sewing, 🍳 Cooking, 🏏 Bat, 🪓 Axe, 🔪 Machete, 🏹 Bow,
   🔫 Pistol, 🧨 Bullets, 🍾 Molotovs, 💣 Grenades, 🧥 Leather, 🚧 Barricades, 🪤 Traps, 📌 Spikes,
-  🧰 Heavy turrets, ⚡ Generator, 🔭 Rifle, 🦺 Kevlar, 🪚 Chainsaw and, late on, 🛻 Pickup, 🚜 Tank and
-  🚁 Helicopter. A weapon's blueprint turns up once he holds the rung below it. Until he finds the
+  🧰 Heavy turrets, ⚡ Generator, 🔭 Rifle, 🦺 Kevlar, 🪚 Chainsaw and, late on, 🔩 Steel plates, 🛻
+  Pickup, 🚜 Tank and 🚁 Helicopter. A weapon's blueprint turns up once he holds the rung below it. Until he finds the
   turret blueprint, the waves hold back and he fights with his fists.
 - **He explores.** Places turn up along the strip, and when he is healthy, the walls hold and
   nothing is near, he goes to look, at his own risk: a 🏢 abandoned building may hide an ambush, a
@@ -407,6 +407,26 @@ it takes one step per second of Claude's work.
   10% less life), 🧴 Repellent (hordes and ambushes a third smaller) and 💉 the cure itself. The cure
   puts a ✨ on the shelter, worth 10% more damage and walls, and a new strain follows: every cure
   after that takes more samples and adds another ✨.
+- **🪓 What piles up gets used.** From shelter level 15 he puts his surplus to work, on his own:
+  - a 🪓 **lumber camp**, whose woodcutters go out every minute of work while the walls want wood,
+    paid in food (more as the shelter grows), and come back with wood;
+  - 🔩 **steel plates** (a blueprint): scrap stands in for up to half the walls' wood, 3 scrap for
+    each;
+  - a 🏪 **trading post**, once he has traded: traders come twice as often, stay twice as long and
+    swap twice as much;
+  - and whatever is spare once the next walls (and the town's next building) are kept back goes to
+    the cheapest of: the 🪛 **workbench** (his weapons, or the turrets, 5% harder each time, every
+    mod dearer than the last: "🚜 Tank +3", "🗼 6/6 Mk 2"), 🪡 **patches** for his clothes once
+    nothing better can be sewn (up to 65% protection), and 💂 **guards**, hired for food and cloth,
+    who shoot from the walls like drifters as long as they are paid in food. When he can cook and
+    food is spare, he throws a 🍗 **feast**: everyone fights 10% harder for half an hour.
+- **🌆 The town.** From shelter level 20 he rebuilds the town around the shelter, one building at a
+  time. He pays for each up front, out of what is spare, and the settlers raise it over half an hour
+  to two hours of work while he goes on as before: 🛖 Houses (settlers join the woodcutters: half
+  again as much wood), 🏭 a Factory (the turrets hit 20% harder), 🏨 an Inn (two more guards), 📡 a
+  Radio mast (a supply drop every hour of work), ⛲ a Fountain (he heals twice as fast) and 🎪 a
+  Fairground (everyone fights 10% harder, and the shelter is a haven). The stats row shows the one
+  going up ("🏭 40%"), then how many stand ("🌆 3/6").
 - **He learns by doing.** Each skill has three tiers, earned from what he has done: 🎒 Scavenging
   (crates gathered), 🥊 Combat (zombies killed by hand), 🔧 Engineering (things built), 🧱 Fortifying
   (waves survived), 🩹 First aid (times he had to rest), 🧵 Tailoring (clothes made), 🍳 Cooking (meals
@@ -418,9 +438,10 @@ it takes one step per second of Claude's work.
   and a wave, the zombies thin out for a few minutes, and it is rebuilt in a few seconds.
   Turrets, blueprints, clothes, skills and levels are never lost.
 - `/vwc:shelter` shows the inside: what is built, what he is saving for, who lives there, the lab,
-  what he wears, his blueprints and what he has learned. The save is its own file, `survival.json`.
+  what he does with his surplus and what is spare, the town, what he wears, his blueprints and what
+  he has learned. The save is its own file, `survival.json`.
 - **Journal, card and achievements.** `/vwc:journal survival` lists the shelter's moments by day
-  (blueprints, tyrants, falls and rebuilds, weapons, rooms, people, the cure and achievements),
+  (blueprints, tyrants, falls and rebuilds, weapons, rooms, people, the town, the cure and achievements),
   `/vwc:card survival` shows the shelter as a card to share, and `/vwc:achievements` has a Shelter
   group. Reaching wave 30 gives your adventure heroes the title 🧟 Survivor on their cards and
   statistics; it changes nothing else.
@@ -429,7 +450,9 @@ it takes one step per second of Claude's work.
 
 `/vwc:window true` opens the Survival game in a window of its own, drawn as a pixel-art diorama: the
 shelter and its towers, the people and zombies, hills that drift as the camera follows him, the sky
-by the hour (and the blood moon), the generator's lights and the campfire glowing at night. Under
+by the hour (and the blood moon), the generator's lights and the campfire glowing at night, the
+lumber camp and the trading post by the ends of the road, guards on the walls, flags strung up for
+a feast, and further back the town he rebuilds, with a turning big wheel at the end. Under
 the ground, the shelter's rooms are cut open, and he is seen in the one he is at: crafting at the
 workbench, cooking, reading at the desk, tidying the shelves, asleep in a bunk, with the people who
 moved in at work in theirs. The stats row sits above it, and the news under it.
@@ -722,7 +745,7 @@ update.
 
 ## Achievements
 
-92 achievements, shared by all your heroes. When you earn one, the stats row says
+94 achievements, shared by all your heroes. When you earn one, the stats row says
 `🏅 Achievement: Dragonslayer`. `/vwc:achievements` lists them all, with how close you are:
 
 ```
@@ -744,7 +767,7 @@ Combat
 | Gear | find a piece; fill all 6 slots; find an epic, and a legendary; salvage 100 pieces; reforge a piece, and 50 times; catch a treasure goblin, and 10 |
 | Collection | as the Trainer: catch a critter; have 25, 75 and 150 in the dex, and all 151 (a secret); see a catch evolve; catch a legendary; catch all 14 night critters; have 5 different partners |
 | Seasons | eat 31 pieces of Halloween candy; defeat 100 snowmen in December |
-| Shelter | in the Survival game: reach waves 10, 30 (your heroes earn the title 🧟 Survivor) and 50; kill a tyrant, and all four kinds; find 15 blueprints; 5 people living there; all 8 cellar rooms; craft the helicopter; cure the outbreak; kill 50 raiders; trade with a trader; reach an island; 7 days without a breach; see a blood moon; kill 31 pumpkin heads; a secret |
+| Shelter | in the Survival game: reach waves 10, 30 (your heroes earn the title 🧟 Survivor) and 50; kill a tyrant, and all four kinds; find 15 blueprints; 5 people living there; all 8 cellar rooms; craft the helicopter; cure the outbreak; kill 50 raiders; trade with a trader; reach an island; have the woodcutters cut 10,000 wood; rebuild all 6 buildings of the town; 7 days without a breach; see a blood moon; kill 31 pumpkin heads; a secret |
 | Work | 1, 8 and 40 hours of work; 1 million and 10 million tokens; one turn of 30 minutes; come back to a full hour of rested XP; make camp 10 times; work 5, 20 and 100 days in a row; two secrets |
 
 Kills, hours and other totals add up all your heroes, including ones replaced by

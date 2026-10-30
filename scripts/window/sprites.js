@@ -378,6 +378,8 @@ const SPRITES = {
   down: () => build('down', MAPS.down, { ...PAL, c: JACKETS[1][0], C: JACKETS[1][1] }),
   // A resident is drawn like him, in an orange jacket.
   resident: frame => build(`resident${frame}`, [...MAPS.survivor, ...MAPS.legs[frame]], { ...PAL, c: '#d9822b', C: '#a85f1a' }),
+  // A hired guard, in a blue uniform and helmet.
+  guard: () => build('guard', [...MAPS.survivor, ...MAPS.legs[0]], { ...PAL, h: '#2c4466', c: '#3e5a86', C: '#2c4466' }),
   walker: frame => build(`walker${frame}`, [...MAPS.walker, ...MAPS.zlegs[frame]], PAL),
   brute: frame => build(`brute${frame}`, [...MAPS.brute, ...MAPS.blegs[frame]], { ...PAL, g: '#6f8a55', G: '#4d6438', t: '#5a4a3e' }),
   runner: frame => build(`runner${frame}`, [...MAPS.runner, ...MAPS.rlegs[frame]], PAL),
